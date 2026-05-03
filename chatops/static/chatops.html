@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>ChatOps Console</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Inter, Arial, sans-serif; background: #f0f2f5; color: #111; height: 100vh; display: flex; flex-direction: column; }
+
+    /* ── Header ── */
+    header { background: #1e3a8a; color: #fff; padding: 12px 20px; display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+    .header-brand { display: flex; flex-direction: column; gap: 2px; }
+    header h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: .02em; line-height: 1; }
+    .header-hint { font-size: .7rem; color: rgba(255,255,255,.6); letter-spacing: .01em; }
+    nav { display: flex; gap: 4px; margin-left: auto; }
+    nav button {
+      background: transparent; border: 1px solid rgba(255,255,255,.35); color: #fff;
+      padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: .85rem;
+      display: flex; align-items: center; gap: 6px; transition: background .15s;
+    }
+    nav button:hover { background: rgba(255,255,255,.15); }
+    nav button.active { background: rgba(255,255,255,.25); border-color: #fff; font-weight: 600; }
+    .badge {
+      background: #ef4444; color: #fff; border-radius: 9px;
+      font-size: .7rem; font-weight: 700; padding: 1px 6px; min-width: 18px; text-align: center;
+    }
+    .badge:empty { display: none; }
+
+    /* ── Tabs ── */
+    .tab-content { display: none; flex: 1; overflow: hidden; }
+    .tab-content.active { display: flex; flex-direction: column; }
+
+    /* ── Chat tab ── */
+    #tab-chat { padding: 16px; gap: 12px; }
+    #chat-window {
+      flex: 1; background: #fff; border-radius: 12px; border: 1px solid #e5e7eb;
+      overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px;
+    }
+    .bubble {
+      max-width: 72%; padding: 10px 14px; border-radius: 16px; font-size: .88rem;
+      line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+    }
+    .bubble.user { align-self: flex-end; background: #1e90ff; color: #fff; border-bottom-right-radius: 4px; }
+    .bubble.bot  { align-self: flex-start; background: #f3f4f6; color: #111; border-bottom-left-radius: 4px; }
+    .bubble.bot.critical { background: #fee2e2; }
+    .bubble.bot.warning  { background: #fef9c3; }
+    #chat-input-row { display: flex; gap: 8px; }
+    #chat-input { flex: 1; padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 8px; font-size: .9rem; }
+    #chat-send { padding: 10px 20px; background: #1e3a8a; color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; }
+    #chat-send:hover { background: #1e40af; }
+    #chat-clear { padding: 10px 14px; background: #fff; color: #6b7280; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: .85rem; }
+    #chat-clear:hover { background: #f9fafb; }
+    #upload-label { padding: 10px 14px; background: #fff; color: #6b7280; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: .85rem; user-select: none; white-space: nowrap; }
+    #upload-label:hover { background: #f9fafb; }
+    .bubble.pending { color: #9ca3af; font-style: italic; }
+
+    /* ── Alerts tab ── */
+    #tab-alerts { padding: 16px; gap: 12px; }
+    .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; }
+    .filter-bar button {
+      padding: 5px 12px; border-radius: 20px; border: 1px solid #d1d5db;
+      background: #fff; cursor: pointer; font-size: .82rem; color: #374151;
+    }
+    .filter-bar button.active { background: #1e3a8a; color: #fff; border-color: #1e3a8a; }
+    #alerts-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+    .alert-card {
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+      padding: 12px 16px; display: flex; align-items: center; gap: 12px;
+    }
+    .alert-card.critical { border-left: 4px solid #ef4444; }
+    .alert-card.warning  { border-left: 4px solid #f59e0b; }
+    .alert-card.info     { border-left: 4px solid #3b82f6; }
+    .sev-badge {
+      font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 4px; white-space: nowrap;
+    }
+    .sev-badge.critical { background: #fee2e2; color: #b91c1c; }
+    .sev-badge.warning  { background: #fef3c7; color: #92400e; }
+    .sev-badge.info     { background: #dbeafe; color: #1d4ed8; }
+    .alert-msg  { flex: 1; font-size: .88rem; }
+    .alert-time { font-size: .75rem; color: #9ca3af; white-space: nowrap; }
+    .ack-btn {
+      padding: 4px 10px; border-radius: 6px; border: 1px solid #d1d5db;
+      background: #fff; cursor: pointer; font-size: .78rem; color: #374151;
+    }
+    .ack-btn:hover { background: #f3f4f6; }
+    .acked-tag { font-size: .75rem; color: #10b981; font-weight: 600; }
+    .empty-state { color: #9ca3af; text-align: center; padding: 40px; font-size: .9rem; }
+
+    /* ── Metrics tab ── */
+    #tab-metrics { padding: 16px; gap: 16px; overflow-y: auto; }
+    .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+    .chart-card {
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px;
+    }
+    .chart-card h3 { font-size: .9rem; color: #374151; margin-bottom: 10px; }
+    .chart-card canvas { width: 100% !important; height: 180px !important; }
+    .metric-summary { display: flex; gap: 12px; flex-wrap: wrap; }
+    .metric-tile {
+      flex: 1; min-width: 140px; background: #fff; border: 1px solid #e5e7eb;
+      border-radius: 12px; padding: 16px; text-align: center;
+    }
+    .metric-tile .label { font-size: .78rem; color: #6b7280; margin-bottom: 4px; }
+    .metric-tile .value { font-size: 1.6rem; font-weight: 700; }
+    .metric-tile .status { font-size: .75rem; font-weight: 600; margin-top: 4px; }
+    .metric-tile .status.ok       { color: #10b981; }
+    .metric-tile .status.warning  { color: #f59e0b; }
+    .metric-tile .status.critical { color: #ef4444; }
+    #metrics-refresh { align-self: flex-start; padding: 7px 16px; background: #1e3a8a; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: .85rem; }
+    #metrics-refresh:hover { background: #1e40af; }
+
+    /* ── Config tab ── */
+    #tab-config { padding: 24px; overflow-y: auto; }
+    .config-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; max-width: 560px; }
+    .config-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 18px; color: #111; }
+    .config-group { margin-bottom: 20px; }
+    .config-group label { display: block; font-size: .82rem; color: #6b7280; margin-bottom: 6px; font-weight: 500; }
+    .config-row { display: flex; gap: 12px; }
+    .config-row > div { flex: 1; }
+    .config-row > div span { font-size: .75rem; color: #9ca3af; }
+    .config-row input[type=number] {
+      width: 100%; padding: 7px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: .9rem;
+    }
+    .config-row input[type=number]:focus { outline: 2px solid #1e3a8a; border-color: transparent; }
+    .config-save {
+      padding: 10px 24px; background: #1e3a8a; color: #fff; border: none;
+      border-radius: 8px; font-weight: 600; cursor: pointer; font-size: .9rem; margin-top: 8px;
+    }
+    .config-save:hover { background: #1e40af; }
+    #config-msg { margin-top: 10px; font-size: .85rem; color: #10b981; height: 18px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-brand">
+    <h1>ChatOps Console</h1>
+    <span class="header-hint">disk · memory · cpu · health · ports · type <b style="font-weight:600;color:rgba(255,255,255,.85)">help</b> for all commands</span>
+  </div>
+  <nav>
+    <button class="active" data-tab="chat" onclick="switchTab('chat', this)">Chat</button>
+    <button data-tab="alerts" onclick="switchTab('alerts', this)">
+      Alerts <span id="alert-badge" class="badge"></span>
+    </button>
+    <button data-tab="metrics" onclick="switchTab('metrics', this)">Metrics</button>
+    <button data-tab="config" onclick="switchTab('config', this)">Config</button>
+  </nav>
+</header>
+
+<!-- ── CHAT ── -->
+<div id="tab-chat" class="tab-content active">
+  <div id="chat-window"></div>
+  <div id="chat-input-row">
+    <input id="chat-input" type="text" placeholder="Type help for the list of commands…" />
+    <button id="chat-clear" onclick="clearHistory()" title="Clear history">Clear</button>
+    <label id="upload-label" title="Upload a log file for analysis">
+      <span id="upload-label-text">&#128206; Upload Log</span>
+      <input id="file-input" type="file" accept=".log,.txt,.out,.csv" hidden />
+    </label>
+    <button id="chat-send" onclick="sendMessage()">Send</button>
+  </div>
+</div>
+
+<!-- ── ALERTS ── -->
+<div id="tab-alerts" class="tab-content">
+  <div class="filter-bar">
+    <button class="active" onclick="filterAlerts('all', this)">All</button>
+    <button onclick="filterAlerts('unacked', this)">Unacknowledged</button>
+    <button onclick="filterAlerts('CRITICAL', this)">Critical</button>
+    <button onclick="filterAlerts('WARNING', this)">Warning</button>
+  </div>
+  <div id="alerts-list"></div>
+</div>
+
+<!-- ── METRICS ── -->
+<div id="tab-metrics" class="tab-content">
+  <div class="metric-summary" id="metric-summary"></div>
+  <button id="metrics-refresh" onclick="loadMetrics()">Refresh</button>
+  <div class="charts-grid">
+    <div class="chart-card"><h3>Disk Usage %</h3><canvas id="chart-disk"></canvas></div>
+    <div class="chart-card"><h3>Memory Usage %</h3><canvas id="chart-memory"></canvas></div>
+    <div class="chart-card"><h3>CPU Usage %</h3><canvas id="chart-cpu"></canvas></div>
+  </div>
+</div>
+
+<!-- ── CONFIG ── -->
+<div id="tab-config" class="tab-content">
+  <div class="config-card">
+    <h3>Alert Thresholds</h3>
+    <div class="config-group">
+      <label>Disk (%)</label>
+      <div class="config-row">
+        <div><span>Warning</span><input type="number" id="cfg-disk-warning" min="0" max="100" /></div>
+        <div><span>Critical</span><input type="number" id="cfg-disk-critical" min="0" max="100" /></div>
+      </div>
+    </div>
+    <div class="config-group">
+      <label>Memory (%)</label>
+      <div class="config-row">
+        <div><span>Warning</span><input type="number" id="cfg-memory-warning" min="0" max="100" /></div>
+        <div><span>Critical</span><input type="number" id="cfg-memory-critical" min="0" max="100" /></div>
+      </div>
+    </div>
+    <div class="config-group">
+      <label>CPU (%)</label>
+      <div class="config-row">
+        <div><span>Warning</span><input type="number" id="cfg-cpu-warning" min="0" max="100" /></div>
+        <div><span>Critical</span><input type="number" id="cfg-cpu-critical" min="0" max="100" /></div>
+      </div>
+    </div>
+    <div class="config-group">
+      <label>Health Check Interval (seconds)</label>
+      <div class="config-row">
+        <div><input type="number" id="cfg-interval" min="10" max="3600" /></div>
+      </div>
+    </div>
+    <button class="config-save" onclick="saveConfig()">Save Settings</button>
+    <div id="config-msg"></div>
+  </div>
+</div>
+
+<script>
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'alerts') loadAlerts();
+  if (name === 'metrics') loadMetrics();
+  if (name === 'config') loadConfig();
+}
+
+// ── Chat ──────────────────────────────────────────────────────────────────────
+const chatWin = document.getElementById('chat-window');
+
+function addBubble(text, sender, scroll = true) {
+  const el = document.createElement('div');
+  el.className = 'bubble ' + sender;
+  if (sender === 'bot') {
+    if (text.includes('CRITICAL')) el.classList.add('critical');
+    else if (text.includes('WARNING')) el.classList.add('warning');
+    // Trusted HTML from the backend (e.g. colored help output)
+    if (text.includes('<span')) {
+      el.innerHTML = text;
+    } else {
+      el.textContent = text;
+    }
+  } else {
+    el.textContent = text;
+  }
+  chatWin.appendChild(el);
+  if (scroll) chatWin.scrollTop = chatWin.scrollHeight;
+}
+
+async function sendMessage() {
+  const input = document.getElementById('chat-input');
+  const sendBtn = document.getElementById('chat-send');
+  const text = input.value.trim();
+  if (!text) return;
+  addBubble(text, 'user');
+  input.value = '';
+
+  const isRunbook = /^confirm\s+\S+/i.test(text);
+  const pendingEl = document.createElement('div');
+  pendingEl.className = 'bubble bot pending';
+  pendingEl.textContent = isRunbook ? 'Executing runbook…' : 'Working…';
+  chatWin.appendChild(pendingEl);
+  chatWin.scrollTop = chatWin.scrollHeight;
+  sendBtn.disabled = true;
+
+  try {
+    const res = await fetch('/chatops/message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text }),
+    });
+    const data = await res.json();
+    pendingEl.remove();
+    addBubble(data?.response || 'No response', 'bot');
+  } catch (e) {
+    pendingEl.remove();
+    addBubble('Error reaching server.', 'bot');
+  } finally {
+    sendBtn.disabled = false;
+  }
+}
+
+document.getElementById('file-input').addEventListener('change', async function () {
+  const file = this.files[0];
+  if (!file) return;
+  this.value = '';  // reset so the same file can be re-uploaded
+  addBubble(`📎 ${file.name}`, 'user');
+  const labelText = document.getElementById('upload-label-text');
+  labelText.textContent = 'Analysing…';
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch('/chatops/upload-log', { method: 'POST', body: formData });
+    const data = await res.json();
+    addBubble(data?.response || 'No response', 'bot');
+  } catch (e) {
+    addBubble('Error uploading file.', 'bot');
+  } finally {
+    labelText.innerHTML = '&#128206; Upload Log';
+  }
+});
+
+document.getElementById('chat-input').addEventListener('keypress', e => {
+  if (e.key === 'Enter') sendMessage();
+});
+
+async function clearHistory() {
+  await fetch('/chatops/history', { method: 'DELETE' });
+  chatWin.innerHTML = '';
+  addBubble('Chat history cleared.', 'bot');
+}
+
+async function loadChatHistory() {
+  try {
+    const res = await fetch('/chatops/history?limit=30');
+    const data = await res.json();
+    if (data.history && data.history.length > 0) {
+      const sep = document.createElement('div');
+      sep.style.cssText = 'text-align:center;color:#9ca3af;font-size:.74rem;padding:6px 0;';
+      sep.textContent = '— previous session —';
+      chatWin.appendChild(sep);
+      data.history.forEach(m => addBubble(m.message, m.role === 'user' ? 'user' : 'bot', false));
+    }
+  } catch (_) {}
+  chatWin.scrollTop = chatWin.scrollHeight;
+}
+
+// ── Alerts ────────────────────────────────────────────────────────────────────
+let _alertFilter = 'all';
+let _alertsData = [];
+
+async function loadAlerts() {
+  try {
+    const res = await fetch('/chatops/alerts?limit=50');
+    const data = await res.json();
+    _alertsData = data.alerts || [];
+    const count = data.unacked_count || 0;
+    document.getElementById('alert-badge').textContent = count > 0 ? count : '';
+    renderAlerts();
+  } catch (_) {}
+}
+
+function filterAlerts(filter, btn) {
+  _alertFilter = filter;
+  document.querySelectorAll('.filter-bar button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderAlerts();
+}
+
+function renderAlerts() {
+  const list = document.getElementById('alerts-list');
+  let filtered = _alertsData;
+  if (_alertFilter === 'unacked') filtered = filtered.filter(a => !a.acked);
+  else if (_alertFilter === 'CRITICAL' || _alertFilter === 'WARNING')
+    filtered = filtered.filter(a => a.severity === _alertFilter);
+
+  if (!filtered.length) {
+    list.innerHTML = '<div class="empty-state">No alerts to show.</div>';
+    return;
+  }
+  list.innerHTML = filtered.map(a => {
+    const sev = (a.severity || 'INFO').toLowerCase();
+    const ts = (a.timestamp || '').slice(0, 16).replace('T', ' ');
+    return `
+      <div class="alert-card ${sev}">
+        <span class="sev-badge ${sev}">${a.severity}</span>
+        <span class="alert-msg">${escHtml(a.message)}</span>
+        <span class="alert-time">${ts}</span>
+        ${!a.acked
+          ? `<button class="ack-btn" onclick="ackAlert(${a.id})">Ack</button>`
+          : `<span class="acked-tag">✓ Acked</span>`}
+      </div>`;
+  }).join('');
+}
+
+async function ackAlert(id) {
+  await fetch(`/chatops/alerts/${id}/ack`, { method: 'POST' });
+  await loadAlerts();
+}
+
+function escHtml(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Metrics ───────────────────────────────────────────────────────────────────
+const _charts = {};
+const METRIC_COLORS = { disk: '#1e90ff', memory: '#f97316', cpu: '#10b981' };
+
+async function loadMetrics() {
+  await loadMetricSummary();
+  for (const metric of ['disk', 'memory', 'cpu']) {
+    try {
+      const res = await fetch(`/chatops/metrics/history?metric=${metric}&limit=60`);
+      const data = await res.json();
+      renderChart(metric, data.data || []);
+    } catch (_) {}
+  }
+}
+
+async function loadMetricSummary() {
+  const summary = document.getElementById('metric-summary');
+  const metrics = ['disk', 'memory', 'cpu'];
+  const labels = { disk: 'Disk', memory: 'Memory', cpu: 'CPU' };
+  let html = '';
+  for (const m of metrics) {
+    try {
+      const res = await fetch(`/chatops/metrics/history?metric=${m}&limit=1`);
+      const data = await res.json();
+      const latest = data.data?.[0];
+      const val = latest ? latest.value.toFixed(1) : '—';
+      const statusClass = latest
+        ? (latest.value >= 90 ? 'critical' : latest.value >= 80 ? 'warning' : 'ok')
+        : 'ok';
+      const statusText = latest
+        ? (latest.value >= 90 ? 'CRITICAL' : latest.value >= 80 ? 'WARNING' : 'OK')
+        : '—';
+      html += `
+        <div class="metric-tile">
+          <div class="label">${labels[m]}</div>
+          <div class="value" style="color:${METRIC_COLORS[m]}">${val}%</div>
+          <div class="status ${statusClass}">${statusText}</div>
+        </div>`;
+    } catch (_) {}
+  }
+  summary.innerHTML = html;
+}
+
+function renderChart(metric, dataPoints) {
+  const canvas = document.getElementById(`chart-${metric}`);
+  const labels = dataPoints.map(d => (d.timestamp || '').slice(11, 16));
+  const values = dataPoints.map(d => d.value);
+
+  if (_charts[metric]) {
+    _charts[metric].data.labels = labels;
+    _charts[metric].data.datasets[0].data = values;
+    _charts[metric].update();
+    return;
+  }
+
+  _charts[metric] = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: metric,
+        data: values,
+        borderColor: METRIC_COLORS[metric],
+        backgroundColor: METRIC_COLORS[metric] + '22',
+        borderWidth: 2,
+        pointRadius: dataPoints.length > 20 ? 0 : 3,
+        tension: 0.3,
+        fill: true,
+      }],
+    },
+    options: {
+      animation: false,
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          min: 0, max: 100,
+          ticks: { callback: v => v + '%' },
+          title: { display: true, text: 'Usage (%)', color: '#9ca3af', font: { size: 11 } },
+        },
+        x: {
+          ticks: { maxTicksLimit: 8, maxRotation: 0 },
+          title: { display: true, text: 'Time (HH:MM)', color: '#9ca3af', font: { size: 11 } },
+        },
+      },
+      plugins: { legend: { display: false } },
+    },
+  });
+}
+
+// ── Config ────────────────────────────────────────────────────────────────────
+async function loadConfig() {
+  try {
+    const res = await fetch('/chatops/config');
+    const cfg = await res.json();
+    document.getElementById('cfg-disk-warning').value    = cfg.disk_warning;
+    document.getElementById('cfg-disk-critical').value   = cfg.disk_critical;
+    document.getElementById('cfg-memory-warning').value  = cfg.memory_warning;
+    document.getElementById('cfg-memory-critical').value = cfg.memory_critical;
+    document.getElementById('cfg-cpu-warning').value     = cfg.cpu_warning;
+    document.getElementById('cfg-cpu-critical').value    = cfg.cpu_critical;
+    document.getElementById('cfg-interval').value        = cfg.health_check_interval;
+  } catch (_) {}
+}
+
+async function saveConfig() {
+  const updates = {
+    disk_warning:           parseFloat(document.getElementById('cfg-disk-warning').value),
+    disk_critical:          parseFloat(document.getElementById('cfg-disk-critical').value),
+    memory_warning:         parseFloat(document.getElementById('cfg-memory-warning').value),
+    memory_critical:        parseFloat(document.getElementById('cfg-memory-critical').value),
+    cpu_warning:            parseFloat(document.getElementById('cfg-cpu-warning').value),
+    cpu_critical:           parseFloat(document.getElementById('cfg-cpu-critical').value),
+    health_check_interval:  parseInt(document.getElementById('cfg-interval').value),
+  };
+  try {
+    await fetch('/chatops/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    const msg = document.getElementById('config-msg');
+    msg.textContent = 'Settings saved.';
+    setTimeout(() => { msg.textContent = ''; }, 3000);
+  } catch (_) {
+    document.getElementById('config-msg').textContent = 'Save failed.';
+  }
+}
+
+// ── Polling ───────────────────────────────────────────────────────────────────
+function pollAlertBadge() {
+  fetch('/chatops/alerts?limit=1')
+    .then(r => r.json())
+    .then(d => {
+      const count = d.unacked_count || 0;
+      document.getElementById('alert-badge').textContent = count > 0 ? count : '';
+    })
+    .catch(() => {});
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadChatHistory();
+pollAlertBadge();
+setInterval(pollAlertBadge, 30000);
+</script>
+</body>
+</html>
