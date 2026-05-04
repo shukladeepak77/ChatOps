@@ -11,8 +11,8 @@
     "thresholds": {
       "disk_warning": 70.0,
       "disk_critical": 90.0,
-      "memory_warning": 80.0,
-      "memory_critical": 90.0,
+      "memory_warning": 70.0,
+      "memory_critical": 85.0,
       "cpu_warning": 70.0,
       "cpu_critical": 85.0
     }

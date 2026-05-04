@@ -12,7 +12,7 @@ REMOTE_CMDS = {
     "routes":      "ip route",
     "network":     "ip -s link",
     "connections": "ss -tn state established 2>/dev/null | tail -n +2 | wc -l | xargs -I{} echo 'Established connections: {}'",
-    "health":      "d=`df / | awk 'NR==2{printf \"%.1f\", $3*100/$2}'`; m=`free -k | awk 'NR==2{printf \"%.1f\", $3*100/$2}'`; l=`awk '{print $1}' /proc/loadavg`; u=`uptime -p`; printf 'Disk: %s%%\\nMemory: %s%%\\nLoad (1m): %s\\nUptime: %s' $d $m $l \"$u\"",
+    "health":      "d=`df / | awk 'NR==2{printf \"%.1f\", $3*100/$2}'`; m=`free -k | awk 'NR==2{printf \"%.1f\", $3*100/$2}'`; n=`nproc`; c=`awk -v n=$n '{printf \"%.1f\", $1/n*100}' /proc/loadavg`; u=`uptime -p`; printf 'Disk: %s%%\\nMemory: %s%%\\nCPU: %s%%\\nUptime: %s' $d $m $c \"$u\"",
 }
 
 

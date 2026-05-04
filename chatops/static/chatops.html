@@ -49,10 +49,10 @@
     #chat-input { flex: 1; padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 8px; font-size: .9rem; }
     #chat-send { padding: 10px 20px; background: #1e3a8a; color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; }
     #chat-send:hover { background: #1e40af; }
-    #chat-clear { padding: 10px 14px; background: #fff; color: #6b7280; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: .85rem; }
-    #chat-clear:hover { background: #f9fafb; }
-    #upload-label { padding: 10px 14px; background: #fff; color: #6b7280; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: .85rem; user-select: none; white-space: nowrap; }
-    #upload-label:hover { background: #f9fafb; }
+    #chat-clear { padding: 10px 14px; background: #dcfce7; color: #15803d; border: 1px solid #86efac; border-radius: 8px; cursor: pointer; font-size: .85rem; font-weight: 500; }
+    #chat-clear:hover { background: #bbf7d0; border-color: #4ade80; }
+    #upload-label { padding: 10px 14px; background: #eff6ff; color: #1d4ed8; border: 1px solid #93c5fd; border-radius: 8px; cursor: pointer; font-size: .85rem; font-weight: 500; user-select: none; white-space: nowrap; }
+    #upload-label:hover { background: #dbeafe; border-color: #60a5fa; }
     .bubble.pending { color: #9ca3af; font-style: italic; }
 
     /* ── Alerts tab ── */
@@ -124,6 +124,7 @@
 
     /* ── Config tab ── */
     #tab-config { padding: 24px; overflow-y: auto; }
+    #tab-help { overflow-y: auto; }
     .config-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; max-width: 560px; }
     .config-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 18px; color: #111; }
     .config-group { margin-bottom: 20px; }
@@ -157,6 +158,7 @@
     </button>
     <button data-tab="metrics" onclick="switchTab('metrics', this)">Metrics</button>
     <button data-tab="config" onclick="switchTab('config', this)">Config</button>
+    <button data-tab="help" onclick="switchTab('help', this)">Help</button>
   </nav>
 </header>
 
@@ -304,7 +306,138 @@
       </div>
       <button class="config-save" onclick="saveNodeConfig()">Save Node Thresholds</button>
       <div id="node-config-msg" style="margin-top:10px;font-size:.85rem;color:#10b981;height:18px;"></div>
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid #f3f4f6;">
+        <h3 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:#111">Slack Alerts</h3>
+        <p style="font-size:.83rem;color:#6b7280;margin-bottom:8px">A single global webhook is used for all nodes. Configure it under <strong>ChatOps Server</strong>.</p>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:.82rem;color:#374151;white-space:nowrap">Webhook:</span>
+          <span id="node-slack-webhook-display" style="font-size:.8rem;color:#6b7280;font-family:monospace;word-break:break-all">—</span>
+        </div>
+      </div>
       <p style="margin-top:12px;font-size:.78rem;color:#9ca3af">Manage nodes via chat: <code>add node</code> · <code>remove node</code> · <code>copy ssh key</code></p>
+    </div>
+  </div>
+</div>
+
+<!-- ── HELP ── -->
+<div id="tab-help" class="tab-content">
+  <div style="max-width:860px;margin:0 auto;padding:24px 16px;font-family:inherit">
+
+    <h2 style="font-size:1.3rem;font-weight:700;color:#1e3a8a;margin-bottom:4px">&#128218; Command Reference</h2>
+    <p style="color:#6b7280;font-size:.85rem;margin-bottom:28px">Type any command in the Chat tab. Commands are case-insensitive. Use <code>help</code> in chat for a quick summary.</p>
+
+    <!-- System Checks -->
+    <div style="margin-bottom:24px">
+      <div style="font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#1d4ed8;margin-bottom:10px;padding-bottom:4px;border-bottom:2px solid #dbeafe">System Checks</div>
+      <table style="width:100%;border-collapse:collapse;font-size:.84rem">
+        <thead><tr style="color:#6b7280;font-size:.76rem;background:#f8fafc"><th style="text-align:left;padding:5px 8px;font-weight:600">Command</th><th style="text-align:left;padding:5px 8px;font-weight:600">What it does</th><th style="text-align:left;padding:5px 8px;font-weight:600">Example / Notes</th></tr></thead>
+        <tbody>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px">check disk</code></td><td style="padding:7px 8px;color:#374151">Shows disk usage — total, used, free GB and % used. Status badge: OK / WARNING / CRITICAL based on configured thresholds.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check disk</code><br>Also: <code>check disk on newnode</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px">check memory</code></td><td style="padding:7px 8px;color:#374151">Shows RAM usage in MB with total, used, and % used. Status badge included.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check memory</code><br>Also: <code>check memory on all</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px">check cpu</code></td><td style="padding:7px 8px;color:#374151">Shows current CPU usage % and logical core count. Status badge included.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check cpu</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px">check uptime</code></td><td style="padding:7px 8px;color:#374151">Shows how long the server has been running in days, hours, minutes.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check uptime</code><br>Also: <code>check uptime on newnode</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px">check ports</code></td><td style="padding:7px 8px;color:#374151">Lists all open listening TCP/UDP ports on the server.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check ports</code><br>Also: <code>check ports on newnode</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px">top processes</code></td><td style="padding:7px 8px;color:#374151">Lists top 5 processes sorted by CPU usage, showing PID, name, CPU%, and memory%.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>top processes</code><br>Also: <code>top processes on newnode</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px">system health</code></td><td style="padding:7px 8px;color:#374151">Full health summary — disk, memory, CPU, and uptime all in one response. Each metric shows OK / WARNING / CRITICAL. Use to get a quick overall picture of any node.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>system health</code><br><code>system health on newnode</code><br><code>system health on all</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px">check failed services</code></td><td style="padding:7px 8px;color:#374151">Lists systemd services currently in a failed state. Useful for spotting crashed daemons.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check failed services</code><br>Also: <code>check failed services on newnode</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Network -->
+    <div style="margin-bottom:24px">
+      <div style="font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#0891b2;margin-bottom:10px;padding-bottom:4px;border-bottom:2px solid #cffafe">Network</div>
+      <table style="width:100%;border-collapse:collapse;font-size:.84rem">
+        <thead><tr style="color:#6b7280;font-size:.76rem;background:#f8fafc"><th style="text-align:left;padding:5px 8px;font-weight:600">Command</th><th style="text-align:left;padding:5px 8px;font-weight:600">What it does</th><th style="text-align:left;padding:5px 8px;font-weight:600">Example / Notes</th></tr></thead>
+        <tbody>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#ecfeff;color:#0e7490;padding:2px 6px;border-radius:4px">check ip</code></td><td style="padding:7px 8px;color:#374151">Shows all network interfaces with their assigned IP addresses (IPv4 and IPv6).</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check ip</code><br>Also: <code>check ip on newnode</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#ecfeff;color:#0e7490;padding:2px 6px;border-radius:4px">check routes</code></td><td style="padding:7px 8px;color:#374151">Displays the routing table with columns: destination, gateway, interface, protocol, source, metric.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check routes</code><br>Also: <code>check routes on newnode</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#ecfeff;color:#0e7490;padding:2px 6px;border-radius:4px">check network</code></td><td style="padding:7px 8px;color:#374151">Shows per-interface network statistics: bytes sent, bytes received, packets.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check network</code><br>Also: <code>check network on newnode</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#ecfeff;color:#0e7490;padding:2px 6px;border-radius:4px">check dns</code></td><td style="padding:7px 8px;color:#374151">Tests DNS resolution for google.com, cloudflare.com, and github.com. Reports resolved IP or failure for each.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check dns</code><br>Also: <code>check dns on newnode</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#ecfeff;color:#0e7490;padding:2px 6px;border-radius:4px">check connections</code></td><td style="padding:7px 8px;color:#374151">Shows the count of currently established TCP connections.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check connections</code><br>Also: <code>check connections on newnode</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Services -->
+    <div style="margin-bottom:24px">
+      <div style="font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#d97706;margin-bottom:10px;padding-bottom:4px;border-bottom:2px solid #fef3c7">Services</div>
+      <table style="width:100%;border-collapse:collapse;font-size:.84rem">
+        <thead><tr style="color:#6b7280;font-size:.76rem;background:#f8fafc"><th style="text-align:left;padding:5px 8px;font-weight:600">Command</th><th style="text-align:left;padding:5px 8px;font-weight:600">What it does</th><th style="text-align:left;padding:5px 8px;font-weight:600">Example / Notes</th></tr></thead>
+        <tbody>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fffbeb;color:#b45309;padding:2px 6px;border-radius:4px">service status &lt;name&gt;</code></td><td style="padding:7px 8px;color:#374151">Checks if a systemd service is active, inactive, or failed. Replace <em>&lt;name&gt;</em> with the service name.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>service status nginx</code><br><code>service status ssh</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fffbeb;color:#b45309;padding:2px 6px;border-radius:4px">restart &lt;name&gt;</code></td><td style="padding:7px 8px;color:#374151">Initiates a service restart — always requires confirmation first. Shows a safety warning if restarting SSH/sshd (will drop your session).</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>restart nginx</code><br>Then: <code>confirm restart nginx</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fffbeb;color:#b45309;padding:2px 6px;border-radius:4px">confirm restart &lt;name&gt;</code></td><td style="padding:7px 8px;color:#374151">Confirms and executes the pending service restart. Must match the service name used in the <code>restart</code> command.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>confirm restart nginx</code><br>Use <code>cancel</code> to abort.</td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fffbeb;color:#b45309;padding:2px 6px;border-radius:4px">check failed services</code></td><td style="padding:7px 8px;color:#374151">Lists all systemd services currently in a failed state using <code>systemctl --failed</code>.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check failed services</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Multi-node -->
+    <div style="margin-bottom:24px">
+      <div style="font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#db2777;margin-bottom:10px;padding-bottom:4px;border-bottom:2px solid #fce7f3">Multi-Node</div>
+      <table style="width:100%;border-collapse:collapse;font-size:.84rem">
+        <thead><tr style="color:#6b7280;font-size:.76rem;background:#f8fafc"><th style="text-align:left;padding:5px 8px;font-weight:600">Command</th><th style="text-align:left;padding:5px 8px;font-weight:600">What it does</th><th style="text-align:left;padding:5px 8px;font-weight:600">Example / Notes</th></tr></thead>
+        <tbody>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fdf2f8;color:#9d174d;padding:2px 6px;border-radius:4px">add node &lt;name&gt; &lt;user&gt;@&lt;host&gt;</code></td><td style="padding:7px 8px;color:#374151">Registers a new remote node. The name is a short alias you'll use in commands. Requires SSH key access already set up on the remote host.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>add node prod ubuntu@10.0.0.5</code><br><code>add node newnode user@1.2.3.4</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fdf2f8;color:#9d174d;padding:2px 6px;border-radius:4px">list nodes</code></td><td style="padding:7px 8px;color:#374151">Shows all registered nodes — name, host, SSH user, and key path. The local ChatOps server is always listed first.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>list nodes</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fdf2f8;color:#9d174d;padding:2px 6px;border-radius:4px">remove node &lt;name&gt;</code></td><td style="padding:7px 8px;color:#374151">Removes a node from the registry. Existing metric history for that node is kept in the database.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>remove node prod</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fdf2f8;color:#9d174d;padding:2px 6px;border-radius:4px">copy ssh key &lt;user&gt;@&lt;host&gt;</code></td><td style="padding:7px 8px;color:#374151">Copies the ChatOps server's public SSH key to the remote host so passwordless SSH works. Auto-generates an SSH key pair if one doesn't exist yet. Requires confirmation.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>copy ssh key ubuntu@10.0.0.5</code><br>Then: <code>confirm copy ssh key</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fdf2f8;color:#9d174d;padding:2px 6px;border-radius:4px">confirm copy ssh key</code></td><td style="padding:7px 8px;color:#374151">Confirms and executes the pending SSH key copy. The remote host must allow password authentication for the initial key copy.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>confirm copy ssh key</code><br>Use <code>cancel</code> to abort.</td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fdf2f8;color:#9d174d;padding:2px 6px;border-radius:4px">&lt;command&gt; on &lt;node&gt;</code></td><td style="padding:7px 8px;color:#374151">Runs any supported command on a specific registered node via SSH. The node name must match one registered with <code>add node</code>.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check disk on newnode</code><br><code>system health on prod</code><br><code>check ports on newnode</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fdf2f8;color:#9d174d;padding:2px 6px;border-radius:4px">&lt;command&gt; on all</code></td><td style="padding:7px 8px;color:#374151">Runs the command across all registered nodes simultaneously and returns results for each. The local server is included automatically.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>system health on all</code><br><code>check disk on all</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Logs & Runbooks -->
+    <div style="margin-bottom:24px">
+      <div style="font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#ea580c;margin-bottom:10px;padding-bottom:4px;border-bottom:2px solid #ffedd5">Logs, Alerts &amp; Runbooks</div>
+      <table style="width:100%;border-collapse:collapse;font-size:.84rem">
+        <thead><tr style="color:#6b7280;font-size:.76rem;background:#f8fafc"><th style="text-align:left;padding:5px 8px;font-weight:600">Command</th><th style="text-align:left;padding:5px 8px;font-weight:600">What it does</th><th style="text-align:left;padding:5px 8px;font-weight:600">Example / Notes</th></tr></thead>
+        <tbody>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fff7ed;color:#c2410c;padding:2px 6px;border-radius:4px">analyze logs: &lt;content&gt;</code></td><td style="padding:7px 8px;color:#374151">Paste log content after the colon to get an instant analysis: severity level, root cause, impact, and suggested actions. Alternatively, use the Upload Log button to analyze a file.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>analyze logs: ERROR db connection refused...</code><br>Or click <strong>Upload Log</strong> button.</td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fff7ed;color:#c2410c;padding:2px 6px;border-radius:4px">show alerts</code></td><td style="padding:7px 8px;color:#374151">Shows the 5 most recent alerts from all nodes. Filter by node to see only that node's alerts. Acknowledged alerts can be managed in the Alerts tab.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>show alerts</code><br><code>show alerts on newnode</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fff7ed;color:#c2410c;padding:2px 6px;border-radius:4px">list runbooks</code></td><td style="padding:7px 8px;color:#374151">Lists all available runbooks — pre-defined automated remediation scripts stored on the server.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>list runbooks</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fff7ed;color:#c2410c;padding:2px 6px;border-radius:4px">run &lt;runbook&gt;</code></td><td style="padding:7px 8px;color:#374151">Initiates a runbook execution — always asks for confirmation before running. Use the exact name shown in <code>list runbooks</code>.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>run disk-cleanup</code><br>Then: <code>confirm disk-cleanup</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fff7ed;color:#c2410c;padding:2px 6px;border-radius:4px">confirm &lt;runbook&gt;</code></td><td style="padding:7px 8px;color:#374151">Confirms and executes the pending runbook. Must be run within a short window after the <code>run</code> command.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>confirm disk-cleanup</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fff7ed;color:#c2410c;padding:2px 6px;border-radius:4px">cancel</code></td><td style="padding:7px 8px;color:#374151">Cancels any pending confirmation — works for service restarts, runbooks, and SSH key copies.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>cancel</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Slack & Reports -->
+    <div style="margin-bottom:24px">
+      <div style="font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7c3aed;margin-bottom:10px;padding-bottom:4px;border-bottom:2px solid #ede9fe">Slack &amp; Reports</div>
+      <table style="width:100%;border-collapse:collapse;font-size:.84rem">
+        <thead><tr style="color:#6b7280;font-size:.76rem;background:#f8fafc"><th style="text-align:left;padding:5px 8px;font-weight:600">Command</th><th style="text-align:left;padding:5px 8px;font-weight:600">What it does</th><th style="text-align:left;padding:5px 8px;font-weight:600">Example / Notes</th></tr></thead>
+        <tbody>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#f5f3ff;color:#6d28d9;padding:2px 6px;border-radius:4px">config set slack_webhook &lt;url&gt;</code></td><td style="padding:7px 8px;color:#374151">Sets the Slack incoming webhook URL. One webhook applies to all nodes — CRITICAL alerts from any node are sent to this URL. The URL is case-sensitive.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>config set slack_webhook https://hooks.slack.com/services/...</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#f5f3ff;color:#6d28d9;padding:2px 6px;border-radius:4px">test slack</code></td><td style="padding:7px 8px;color:#374151">Sends a test alert to the configured Slack webhook to verify the integration is working. Reports the actual HTTP error if it fails.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>test slack</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#f5f3ff;color:#6d28d9;padding:2px 6px;border-radius:4px">config set alert suppress &lt;minutes&gt;</code></td><td style="padding:7px 8px;color:#374151">Sets the alert suppression window. If a metric stays CRITICAL, Slack is only notified once per window (per node per metric). Default is 10 minutes.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>config set alert suppress 30</code><br>Prevents Slack spam during ongoing incidents.</td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#f5f3ff;color:#6d28d9;padding:2px 6px;border-radius:4px">config set report on</code></td><td style="padding:7px 8px;color:#374151">Enables the daily automated Slack report. The report covers all nodes and posts at the configured hour.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>config set report on</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#f5f3ff;color:#6d28d9;padding:2px 6px;border-radius:4px">config set report off</code></td><td style="padding:7px 8px;color:#374151">Disables the daily automated Slack report.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>config set report off</code></td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#f5f3ff;color:#6d28d9;padding:2px 6px;border-radius:4px">config set report hour &lt;0–23&gt;</code></td><td style="padding:7px 8px;color:#374151">Sets the hour (24h, server time) at which the daily report posts to Slack. Also enables the report automatically.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>config set report hour 9</code> → 9:00 AM<br><code>config set report hour 18</code> → 6:00 PM</td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#f5f3ff;color:#6d28d9;padding:2px 6px;border-radius:4px">show report</code></td><td style="padding:7px 8px;color:#374151">Generates and displays the last 24h health report for all nodes immediately in the chat — avg, min, max per metric and alert counts per node.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>show report</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- General -->
+    <div style="margin-bottom:24px">
+      <div style="font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#4b5563;margin-bottom:10px;padding-bottom:4px;border-bottom:2px solid #e5e7eb">General</div>
+      <table style="width:100%;border-collapse:collapse;font-size:.84rem">
+        <thead><tr style="color:#6b7280;font-size:.76rem;background:#f8fafc"><th style="text-align:left;padding:5px 8px;font-weight:600">Command</th><th style="text-align:left;padding:5px 8px;font-weight:600">What it does</th><th style="text-align:left;padding:5px 8px;font-weight:600">Example / Notes</th></tr></thead>
+        <tbody>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#f9fafb;color:#374151;padding:2px 6px;border-radius:4px">show system config</code></td><td style="padding:7px 8px;color:#374151">Shows the full system configuration — all thresholds (disk, memory, CPU), health check interval, Slack webhook, alert suppression window, and daily report settings.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>show system config</code><br>Also: <code>config</code><br>Change thresholds via the Config tab in UI.</td></tr>
+          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#f9fafb;color:#374151;padding:2px 6px;border-radius:4px">help</code></td><td style="padding:7px 8px;color:#374151">Shows a compact command reference in the chat window. For full details and examples, use this Help tab.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>help</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:12px 16px;margin-top:8px">
+      <span style="color:#6d28d9;font-weight:700;font-size:.85rem">&#9432; UI-only settings</span>
+      <p style="color:#374151;font-size:.83rem;margin:4px 0 0">Alert thresholds (disk / memory / cpu — warning &amp; critical levels) and per-node thresholds are configured in the <strong>Config tab</strong>. They cannot be changed via chat commands.</p>
     </div>
   </div>
 </div>
@@ -637,8 +770,12 @@ async function onConfigNodeChange() {
     <div class="node-info-row"><span class="node-info-label">Key</span><span class="node-info-value">${escHtml(info.key_path || '—')}</span></div>
   `;
   try {
-    const res = await fetch(`/chatops/nodes/${encodeURIComponent(node)}/config`);
-    const data = await res.json();
+    const [cfgRes, nodeRes] = await Promise.all([
+      fetch(`/chatops/nodes/${encodeURIComponent(node)}/config`),
+      fetch('/chatops/config'),
+    ]);
+    const data = await cfgRes.json();
+    const globalCfg = await nodeRes.json();
     const t = data.thresholds || {};
     document.getElementById('ncfg-disk-warning').value    = t.disk_warning    ?? 75;
     document.getElementById('ncfg-disk-critical').value   = t.disk_critical   ?? 90;
@@ -647,6 +784,8 @@ async function onConfigNodeChange() {
     document.getElementById('ncfg-cpu-warning').value     = t.cpu_warning     ?? 70;
     document.getElementById('ncfg-cpu-critical').value    = t.cpu_critical    ?? 85;
     document.getElementById('node-cfg-badge').textContent = data.is_default ? '(using global defaults)' : '(node-specific)';
+    const wh = globalCfg.slack_webhook || '';
+    document.getElementById('node-slack-webhook-display').textContent = wh || 'Not configured';
   } catch (_) {}
 }
 

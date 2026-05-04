@@ -6,6 +6,8 @@
   "cpu_warning": 70.0,
   "cpu_critical": 85.0,
   "health_check_interval": 60,
-  "slack_webhook": "",
-  "alert_suppress_minutes": 10
+  "slack_webhook": "YOUR_SLACK_WEBHOOK_URL",
+  "alert_suppress_minutes": 30,
+  "report_enabled": true,
+  "report_hour": 10
 }

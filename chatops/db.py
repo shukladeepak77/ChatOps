@@ -164,22 +164,37 @@ def set_last_notified(metric: str):
     conn.commit()
 
 
-def get_metric_stats(metric: str, since_hours: int = 24) -> dict:
-    """Return avg, min, max for a metric over the past N hours."""
+def get_metric_stats(metric: str, since_hours: int = 24, node: str = None) -> dict:
+    """Return avg, min, max for a metric over the past N hours, optionally filtered by node."""
     conn = _get_conn()
-    row = conn.execute(
-        """
-        SELECT
-            ROUND(AVG(value), 1) as avg,
-            ROUND(MIN(value), 1) as min_val,
-            ROUND(MAX(value), 1) as max_val,
-            COUNT(*)            as samples
-        FROM metrics_history
-        WHERE metric = ?
-          AND timestamp >= datetime('now', ? || ' hours')
-        """,
-        (metric, f"-{since_hours}"),
-    ).fetchone()
+    if node:
+        row = conn.execute(
+            """
+            SELECT
+                ROUND(AVG(value), 1) as avg,
+                ROUND(MIN(value), 1) as min_val,
+                ROUND(MAX(value), 1) as max_val,
+                COUNT(*)            as samples
+            FROM metrics_history
+            WHERE metric = ? AND node = ?
+              AND timestamp >= datetime('now', ? || ' hours')
+            """,
+            (metric, node, f"-{since_hours}"),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            """
+            SELECT
+                ROUND(AVG(value), 1) as avg,
+                ROUND(MIN(value), 1) as min_val,
+                ROUND(MAX(value), 1) as max_val,
+                COUNT(*)            as samples
+            FROM metrics_history
+            WHERE metric = ?
+              AND timestamp >= datetime('now', ? || ' hours')
+            """,
+            (metric, f"-{since_hours}"),
+        ).fetchone()
     if row and row["samples"]:
         return {
             "avg": row["avg"],
@@ -190,19 +205,32 @@ def get_metric_stats(metric: str, since_hours: int = 24) -> dict:
     return {"avg": None, "min": None, "max": None, "samples": 0}
 
 
-def get_alert_count(since_hours: int = 24) -> dict:
-    """Return total and unacked alert counts over the past N hours."""
+def get_alert_count(since_hours: int = 24, node: str = None) -> dict:
+    """Return total and unacked alert counts over the past N hours, optionally filtered by node."""
     conn = _get_conn()
-    row = conn.execute(
-        """
-        SELECT
-            COUNT(*)                              as total,
-            SUM(CASE WHEN acked=0 THEN 1 ELSE 0 END) as unacked
-        FROM alerts
-        WHERE timestamp >= datetime('now', ? || ' hours')
-        """,
-        (f"-{since_hours}",),
-    ).fetchone()
+    if node:
+        row = conn.execute(
+            """
+            SELECT
+                COUNT(*)                              as total,
+                SUM(CASE WHEN acked=0 THEN 1 ELSE 0 END) as unacked
+            FROM alerts
+            WHERE node = ?
+              AND timestamp >= datetime('now', ? || ' hours')
+            """,
+            (node, f"-{since_hours}"),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            """
+            SELECT
+                COUNT(*)                              as total,
+                SUM(CASE WHEN acked=0 THEN 1 ELSE 0 END) as unacked
+            FROM alerts
+            WHERE timestamp >= datetime('now', ? || ' hours')
+            """,
+            (f"-{since_hours}",),
+        ).fetchone()
     return {
         "total":  row["total"]  or 0,
         "unacked": row["unacked"] or 0,

@@ -8,6 +8,7 @@ def client(monkeypatch):
         pass
     import app as app_module
     monkeypatch.setattr(app_module, "_health_check_loop", _noop)
+    monkeypatch.setattr(app_module, "_daily_report_loop", _noop)
     from app import app
     with TestClient(app) as c:
         yield c
@@ -159,3 +160,89 @@ def test_runbooks_list(client):
     assert len(runbooks) == 4
     for rb in runbooks:
         assert all(k in rb for k in ["name", "description", "preview"])
+
+
+# ── Nodes ─────────────────────────────────────────────────────────────────────
+
+def test_nodes_endpoint_returns_list(client):
+    resp = client.get("/chatops/nodes")
+    assert resp.status_code == 200
+    nodes = resp.json()["nodes"]
+    assert isinstance(nodes, list)
+    assert len(nodes) >= 1
+    names = [n["name"] for n in nodes]
+    assert "local" in names
+
+
+def test_nodes_endpoint_has_fields(client):
+    resp = client.get("/chatops/nodes")
+    for node in resp.json()["nodes"]:
+        assert all(k in node for k in ["name", "host", "user", "key_path"])
+
+
+def test_node_config_get_local(client):
+    resp = client.get("/chatops/nodes/local/config")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "thresholds" in data
+    assert "is_default" in data
+    for key in ["disk_warning", "disk_critical", "memory_warning",
+                "memory_critical", "cpu_warning", "cpu_critical"]:
+        assert key in data["thresholds"]
+
+
+# ── Report endpoint ───────────────────────────────────────────────────────────
+
+def test_report_endpoint(client):
+    resp = client.get("/chatops/report")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "nodes" in data
+    assert "generated_at" in data
+    assert "hours" in data
+
+
+def test_report_endpoint_custom_hours(client):
+    resp = client.get("/chatops/report?hours=12")
+    assert resp.status_code == 200
+    assert resp.json()["hours"] == 12
+
+
+# ── Alerts node filter ────────────────────────────────────────────────────────
+
+def test_alerts_filter_by_node(client):
+    from chatops.db import add_alert
+    add_alert("Local alert", "WARNING", node="local")
+    add_alert("Remote alert", "WARNING", node="filternode")
+    resp = client.get("/chatops/alerts?node=filternode")
+    assert resp.status_code == 200
+    alerts = resp.json()["alerts"]
+    assert all(a.get("node") == "filternode" for a in alerts)
+
+
+# ── Metrics node filter ───────────────────────────────────────────────────────
+
+def test_metrics_history_by_node(client):
+    from chatops.db import add_metric
+    add_metric("disk", 55.0, node="metricnode")
+    resp = client.get("/chatops/metrics/history?metric=disk&node=metricnode")
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert len(data) >= 1
+    assert data[0]["value"] == 55.0
+
+
+# ── Upload log ────────────────────────────────────────────────────────────────
+
+def test_upload_log(client):
+    log_content = b"ERROR: database connection refused\nERROR: timeout\n"
+    resp = client.post(
+        "/chatops/upload-log",
+        files={"file": ("test.log", log_content, "text/plain")},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "response" in data
+    assert "filename" in data
+    assert data["filename"] == "test.log"
+    assert "Severity" in data["response"]

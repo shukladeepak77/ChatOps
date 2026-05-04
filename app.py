@@ -50,7 +50,8 @@ def _health_check_sync():
                     if (now_dt - last_dt).total_seconds() < suppress_minutes * 60:
                         should_notify = False
                 if should_notify:
-                    if notify_slack(webhook, metric, status, pct, hostname):
+                    ok, _ = notify_slack(webhook, metric, status, pct, hostname)
+                    if ok:
                         set_last_notified(metric)
         except Exception:
             pass
@@ -59,10 +60,15 @@ def _health_check_sync():
 def _poll_remote_nodes_sync():
     from chatops.nodes import list_nodes
     from chatops.ssh import get_remote_metrics
-    from chatops.db import add_metric, add_alert
-    from chatops.config import alert_status_from_config, load_config
+    from chatops.db import add_metric, add_alert, get_last_notified, set_last_notified
+    from chatops.config import load_config
+    from chatops.actions import notify_slack, alert_status as _alert_status
+    from datetime import datetime, timezone, timedelta
 
     cfg = load_config()
+    webhook = cfg.get("slack_webhook", "").strip()
+    suppress_minutes = int(cfg.get("alert_suppress_minutes", 10))
+
     try:
         nodes = list_nodes()
     except Exception:
@@ -78,13 +84,26 @@ def _poll_remote_nodes_sync():
                 add_metric(metric, pct, node=node_name)
                 warn = node_thresholds.get(f"{metric}_warning", cfg.get(f"{metric}_warning"))
                 crit = node_thresholds.get(f"{metric}_critical", cfg.get(f"{metric}_critical"))
-                from chatops.actions import alert_status as _alert_status
                 status = _alert_status(pct, warn, crit)
                 if status != "OK":
                     add_alert(
                         f"[{node_name}] {metric.capitalize()} {status}: {pct:.1f}%",
                         status, source=node_name, node=node_name,
                     )
+
+                if status == "CRITICAL" and webhook:
+                    suppress_key = f"{node_name}:{metric}"
+                    last = get_last_notified(suppress_key)
+                    should_notify = True
+                    if last:
+                        last_dt = datetime.fromisoformat(last).replace(tzinfo=timezone.utc)
+                        now_dt = datetime.now(timezone.utc)
+                        if (now_dt - last_dt).total_seconds() < suppress_minutes * 60:
+                            should_notify = False
+                    if should_notify:
+                        ok, _ = notify_slack(webhook, metric, status, pct, node_name)
+                        if ok:
+                            set_last_notified(suppress_key)
         except Exception:
             pass
 

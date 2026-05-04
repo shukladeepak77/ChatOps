@@ -39,7 +39,7 @@ _INTENTS: Dict[str, list] = {
     "memory":      ["memory", "ram", "mem", "swap", "how much memory", "how much ram"],
     "cpu":         ["cpu", "processor", "cpu usage", "cpu load", "compute"],
     "uptime":      ["uptime", "up time", "how long", "server uptime", "been up", "running since"],
-    "config":      ["config", "configuration", "settings", "thresholds"],
+    "config":      ["config", "configuration", "settings", "thresholds", "show system config", "system config"],
     "help":        ["help", "commands", "what can you do", "options"],
     "ip":          ["check ip", "ip address", "show ip", "interfaces", "ip addr"],
     "routes":      ["check routes", "routing table", "ip route", "show routes"],
@@ -245,8 +245,8 @@ def route_message(message: str) -> Dict[str, str]:
         result = cancel_runbook()
         return {"response": result["message"]}
 
-    # config set slack_webhook <url>
-    slack_cfg_m = re.match(r'^config\s+set\s+slack[-_]?webhook\s+(\S+)$', raw_lower)
+    # config set slack_webhook <url>  — match case-insensitively but preserve original URL case
+    slack_cfg_m = re.match(r'^config\s+set\s+slack[-_]?webhook\s+(\S+)$', raw, re.IGNORECASE)
     if slack_cfg_m:
         from .config import save_config as _save_config
         url = slack_cfg_m.group(1)
@@ -268,8 +268,10 @@ def route_message(message: str) -> Dict[str, str]:
         webhook = cfg_ts.get("slack_webhook", "").strip()
         if not webhook:
             return {"response": "No Slack webhook configured. Use: config set slack_webhook <url>"}
-        ok = _notify_slack(webhook, "test", "TEST", 0.0, socket.gethostname())
-        return {"response": "Test notification sent to Slack." if ok else "Failed to send — check the webhook URL."}
+        ok, err = _notify_slack(webhook, "test", "TEST", 0.0, socket.gethostname())
+        if ok:
+            return {"response": "Test notification sent to Slack."}
+        return {"response": f"Failed to send — {err or 'check the webhook URL.'}"}
 
     # show report [Nh]
     report_m = re.match(r'^show\s+report(?:\s+(\d+)h?)?$', s)
@@ -284,8 +286,8 @@ def route_message(message: str) -> Dict[str, str]:
     if report_hour_m:
         from .config import save_config as _save_config
         hour = max(0, min(23, int(report_hour_m.group(1))))
-        _save_config({"report_hour": hour})
-        return {"response": f"Daily report scheduled for {hour:02d}:00 each day."}
+        _save_config({"report_hour": hour, "report_enabled": True})
+        return {"response": f"Daily report enabled and scheduled for {hour:02d}:00 each day."}
 
     # config set report on/off
     report_toggle_m = re.match(r'^config\s+set\s+report\s+(on|off|enable|disable)$', s)
@@ -403,9 +405,35 @@ def route_message(message: str) -> Dict[str, str]:
         return {"response": "\n".join(lines)}
 
     if intent == "config":
-        lines = ["Current thresholds:"]
-        for k, v in cfg.items():
-            lines.append(f"  {k}: {v}")
+        webhook = cfg.get("slack_webhook", "")
+        webhook_display = webhook if webhook else "(not configured)"
+        report_status = "Enabled" if cfg.get("report_enabled") else "Disabled"
+        lines = [
+            "System Configuration",
+            "",
+            "Disk Thresholds:",
+            f"  Warning:   {cfg.get('disk_warning')}%",
+            f"  Critical:  {cfg.get('disk_critical')}%",
+            "",
+            "Memory Thresholds:",
+            f"  Warning:   {cfg.get('memory_warning')}%",
+            f"  Critical:  {cfg.get('memory_critical')}%",
+            "",
+            "CPU Thresholds:",
+            f"  Warning:   {cfg.get('cpu_warning')}%",
+            f"  Critical:  {cfg.get('cpu_critical')}%",
+            "",
+            "Health Check:",
+            f"  Interval:  {cfg.get('health_check_interval')}s",
+            "",
+            "Slack:",
+            f"  Webhook:   {webhook_display}",
+            f"  Suppress:  {cfg.get('alert_suppress_minutes')} minutes",
+            "",
+            "Daily Report:",
+            f"  Status:    {report_status}",
+            f"  Hour:      {cfg.get('report_hour', 8):02d}:00",
+        ]
         return {"response": "\n".join(lines)}
 
     if intent == "logs":
@@ -517,14 +545,53 @@ def _annotate_status(output: str, intent: str, cfg: dict) -> str:
     elif intent == "health":
         disk_m = re.search(r"Disk:\s+([\d.]+)%", output)
         mem_m  = re.search(r"Memory:\s+([\d.]+)%", output)
+        cpu_m  = re.search(r"CPU:\s+([\d.]+)%", output)
         if disk_m and mem_m:
             dst = alert_status(float(disk_m.group(1)), cfg["disk_warning"], cfg["disk_critical"])
             mst = alert_status(float(mem_m.group(1)),  cfg["memory_warning"], cfg["memory_critical"])
-            overall = "CRITICAL" if "CRITICAL" in (dst, mst) else ("WARNING" if "WARNING" in (dst, mst) else "OK")
-            output = re.sub(r"(Disk:\s+[\d.]+%)", rf"\1  [{dst}]", output)
-            output = re.sub(r"(Memory:\s+[\d.]+%)", rf"\1  [{mst}]", output)
+            cst = alert_status(float(cpu_m.group(1)),  cfg["cpu_warning"], cfg["cpu_critical"]) if cpu_m else "OK"
+            statuses = [dst, mst, cst]
+            overall = "CRITICAL" if "CRITICAL" in statuses else ("WARNING" if "WARNING" in statuses else "OK")
+            output = re.sub(r"Disk:\s+([\d.]+)%",   lambda m: f"Disk:   {dst} ({m.group(1)}%)", output)
+            output = re.sub(r"Memory:\s+([\d.]+)%", lambda m: f"Memory: {mst} ({m.group(1)}%)", output)
+            if cpu_m:
+                output = re.sub(r"CPU:\s+([\d.]+)%", lambda m: f"CPU:    {cst} ({m.group(1)}%)", output)
             output = f"Overall: {overall}\n" + output
     return output
+
+
+def _run_local_intent(intent: str, cfg: dict) -> str:
+    """Run an intent locally and return plain text output (used for localhost node in 'on all')."""
+    try:
+        if intent == "disk":
+            d = check_disk()
+            st = alert_status(d["percent_used"], cfg["disk_warning"], cfg["disk_critical"])
+            return f"Disk: {d['percent_used']:.1f}%  [{st}]"
+        if intent == "memory":
+            m = check_memory()
+            st = alert_status(m["percent_used"], cfg["memory_warning"], cfg["memory_critical"])
+            return f"Memory: {m['percent_used']:.1f}%  [{st}]"
+        if intent == "cpu":
+            c = check_cpu()
+            st = alert_status(c["percent_used"], cfg["cpu_warning"], cfg["cpu_critical"])
+            return f"CPU: {c['percent_used']:.1f}%  [{st}]"
+        if intent == "uptime":
+            u = check_uptime()
+            return f"up {u['uptime_days']}d {u['uptime_hours']}h {u['uptime_minutes']}m"
+        if intent == "health":
+            disk = check_disk(); mem = check_memory(); cpu = check_cpu(); up = check_uptime()
+            dst = alert_status(disk["percent_used"], cfg["disk_warning"], cfg["disk_critical"])
+            mst = alert_status(mem["percent_used"],  cfg["memory_warning"], cfg["memory_critical"])
+            cst = alert_status(cpu["percent_used"],  cfg["cpu_warning"], cfg["cpu_critical"])
+            overall = "CRITICAL" if "CRITICAL" in (dst, mst, cst) else ("WARNING" if "WARNING" in (dst, mst, cst) else "OK")
+            return (f"Overall: {overall}\n"
+                    f"Disk:   {dst} ({disk['percent_used']:.1f}%)\n"
+                    f"Memory: {mst} ({mem['percent_used']:.1f}%)\n"
+                    f"CPU:    {cst} ({cpu['percent_used']:.1f}%)\n"
+                    f"Uptime: {up['uptime_days']}d {up['uptime_hours']}h {up['uptime_minutes']}m")
+    except Exception as e:
+        return f"Error: {e}"
+    return "(not supported locally)"
 
 
 def _route_remote(intent: str, target: str, raw_cmd: str) -> Dict[str, str]:
@@ -543,8 +610,12 @@ def _route_remote(intent: str, target: str, raw_cmd: str) -> Dict[str, str]:
     if target == "all":
         lines = [f"Remote: {raw_cmd} — all nodes\n"]
         for name, node in all_nodes.items():
-            output = _annotate_status(run_remote(node, REMOTE_CMDS[intent]), intent, cfg)
-            lines.append(f"[{name}]  {node['user']}@{node['host']}")
+            if node.get("host") in ("127.0.0.1", "localhost"):
+                output = _run_local_intent(intent, cfg)
+                lines.append(f"[{name}]  local")
+            else:
+                output = _annotate_status(run_remote(node, REMOTE_CMDS[intent]), intent, cfg)
+                lines.append(f"[{name}]  {node['user']}@{node['host']}")
             for line in output.splitlines():
                 lines.append(f"  {line}")
             lines.append("")

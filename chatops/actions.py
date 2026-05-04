@@ -39,9 +39,19 @@ def help_text() -> str:
         f"  {_s(rose,'add node &lt;name&gt; &lt;user&gt;@&lt;host&gt;')} | {_s(rose,'list nodes')}"
         f" | {_s(rose,'remove node &lt;name&gt;')}\n"
         f"  {_s(rose,'&lt;any command&gt; on &lt;node&gt;')} | {_s(rose,'&lt;any command&gt; on all')}\n"
-        f"  {_s(rose,'copy ssh key &lt;user&gt;@&lt;host&gt;')}\n"
+        f"  {_s(rose,'copy ssh key &lt;user&gt;@&lt;host&gt;')} | {_s(rose,'confirm copy ssh key')}\n"
         "\n"
-        f"  {_s(gray,'run tests')} | {_s(gray,'config')} | {_s(gray,'show report')} | {_s(gray,'test slack')} | {_s(gray,'help')}"
+        '<span style="color:#374151;font-weight:700">Slack &amp; Reports:</span>\n'
+        f"  {_s(gray,'config set slack_webhook &lt;url&gt;')} | {_s(gray,'test slack')}"
+        f" | {_s(gray,'config set alert suppress &lt;minutes&gt;')}\n"
+        f"  {_s(gray,'config set report on')} | {_s(gray,'config set report off')}"
+        f" | {_s(gray,'config set report hour &lt;0-23&gt;')} | {_s(gray,'show report')}\n"
+        "\n"
+        '<span style="color:#374151;font-weight:700">General:</span>\n'
+        f"  {_s(gray,'show system config')} | {_s(gray,'help')}\n"
+        "\n"
+        '<span style="color:#374151;font-weight:700">UI Only:</span>\n'
+        f'  <span style="color:#7c3aed;font-weight:600;">Alert thresholds (disk / memory / cpu warning &amp; critical) are managed via the <span style="color:#4f46e5;text-decoration:underline;">Config tab</span> in the UI.</span>'
     )
 
 
@@ -328,55 +338,130 @@ def notify_slack(webhook_url: str, metric: str, status: str, value: float, host:
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=5) as resp:
-            return resp.status == 200
-    except Exception:
-        return False
+            return resp.status == 200, None
+    except urllib.error.HTTPError as e:
+        return False, f"HTTP {e.code}: {e.reason}"
+    except urllib.error.URLError as e:
+        return False, f"URL error: {e.reason}"
+    except Exception as e:
+        return False, str(e)
 
 
 def generate_report(hours: int = 24) -> dict:
-    """Build a health summary report for the past N hours."""
-    from .db import get_metric_stats, get_alert_count
+    """Build a health summary report for the past N hours, covering all nodes."""
+    from .db import get_metric_stats, get_alert_count, list_metric_nodes
+    from .nodes import list_nodes
     import socket
     from datetime import datetime
 
-    metrics = {}
-    for m in ("disk", "memory", "cpu"):
-        metrics[m] = get_metric_stats(m, hours)
-
-    alerts = get_alert_count(hours)
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     hostname = socket.gethostname()
 
+    # Collect all known node names from DB + node registry
+    db_nodes = set(list_metric_nodes())
+    try:
+        registry_nodes = set(list_nodes().keys())
+    except Exception:
+        registry_nodes = set()
+    all_nodes = sorted(db_nodes | registry_nodes | {"local"})
+
+    nodes = []
+    for node in all_nodes:
+        metrics = {}
+        for m in ("disk", "memory", "cpu"):
+            metrics[m] = get_metric_stats(m, hours, node=node)
+        alerts = get_alert_count(hours, node=node)
+        # Skip nodes with no metric data and no alerts
+        has_data = any(v["samples"] > 0 for v in metrics.values()) or alerts["total"] > 0
+        if not has_data:
+            continue
+        display_name = hostname if node == "local" else node
+        nodes.append({
+            "node":         node,
+            "display_name": display_name,
+            "metrics":      metrics,
+            "alerts":       alerts,
+        })
+
+    total_alerts = get_alert_count(hours)
+
     return {
-        "hostname": hostname,
-        "hours":    hours,
-        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "metrics":  metrics,
-        "alerts":   alerts,
+        "hostname":     hostname,
+        "hours":        hours,
+        "generated_at": generated_at,
+        "nodes":        nodes,
+        "total_alerts": total_alerts,
     }
 
 
 def format_report_text(report: dict) -> str:
-    """Format a report dict as a human-readable string for the chat window."""
+    """Format a report dict as styled HTML for the chat window."""
     hours = report["hours"]
     period = f"Last {hours}h" if hours != 24 else "Last 24h"
+
+    def _bar(pct, color):
+        w = min(int((pct or 0) / 100 * 80), 80)
+        return (
+            f'<span style="display:inline-block;width:{w}px;height:7px;'
+            f'background:{color};border-radius:4px;vertical-align:middle;margin:0 6px"></span>'
+        )
+
+    def _metric_color(avg):
+        if avg is None: return "#9ca3af"
+        if avg >= 85:   return "#ef4444"
+        if avg >= 70:   return "#f97316"
+        return "#10b981"
+
     lines = [
-        f"Health Report — {period}  ({report['generated_at']})",
-        f"Host: {report['hostname']}",
+        f'<span style="font-size:1.05rem;font-weight:700;color:#1e3a8a">&#128202; Health Report</span>'
+        f'<span style="color:#6b7280;font-size:.82rem;margin-left:8px">{period} &nbsp;·&nbsp; {report["generated_at"]}</span>',
         "",
     ]
-    for metric, stats in report["metrics"].items():
-        if stats["samples"] == 0:
-            lines.append(f"  {metric.capitalize():<8} no data")
-        else:
-            lines.append(
-                f"  {metric.capitalize():<8} avg: {stats['avg']:.1f}%  "
-                f"min: {stats['min']:.1f}%  max: {stats['max']:.1f}%  "
-                f"({stats['samples']} samples)"
+
+    for node_data in report.get("nodes", []):
+        lines.append(
+            f'<span style="color:#374151;font-weight:700;border-bottom:1px solid #e5e7eb;'
+            f'display:inline-block;padding-bottom:2px;margin-top:4px">'
+            f'&#128421; {node_data["display_name"]}</span>'
+        )
+        for metric, stats in node_data["metrics"].items():
+            if stats["samples"] == 0:
+                lines.append(f'  <span style="color:#9ca3af">{metric.capitalize():<8} — no data</span>')
+            else:
+                color = _metric_color(stats["avg"])
+                bar   = _bar(stats["avg"], color)
+                lines.append(
+                    f'  <span style="color:#374151;font-weight:600">{metric.capitalize():<8}</span>{bar}'
+                    f'<span style="color:{color};font-weight:600">{stats["avg"]:.1f}%</span>'
+                    f'<span style="color:#9ca3af;font-size:.82rem"> avg &nbsp;'
+                    f'&#8595;{stats["min"]:.1f}% &nbsp;&#8593;{stats["max"]:.1f}%'
+                    f' &nbsp;({stats["samples"]} samples)</span>'
+                )
+        a = node_data["alerts"]
+        if a["unacked"]:
+            alert_html = (
+                f'  <span style="color:#dc2626;font-weight:600">&#9888; Alerts: {a["total"]} total'
+                f' &nbsp;({a["unacked"]} unacknowledged)</span>'
             )
-    a = report["alerts"]
-    lines.append("")
-    warn = "  ⚠" if a["unacked"] else ""
-    lines.append(f"  Alerts: {a['total']} total  ({a['unacked']} unacknowledged){warn}")
+        else:
+            alert_html = (
+                f'  <span style="color:#10b981">&#10003; Alerts: {a["total"]} total'
+                f' &nbsp;(all acknowledged)</span>'
+            )
+        lines.append(alert_html)
+        lines.append("")
+
+    ta = report.get("total_alerts", {})
+    if ta.get("unacked"):
+        lines.append(
+            f'<span style="color:#dc2626;font-weight:700">&#9888; Total alerts (all nodes): '
+            f'{ta["total"]}  ({ta["unacked"]} unacknowledged)</span>'
+        )
+    else:
+        lines.append(
+            f'<span style="color:#10b981;font-weight:700">&#10003; Total alerts (all nodes): '
+            f'{ta.get("total", 0)}  — all clear</span>'
+        )
     return "\n".join(lines)
 
 
@@ -384,25 +469,28 @@ def format_report_slack(report: dict) -> str:
     """Format a report dict as a Slack message string."""
     hours = report["hours"]
     period = f"Last {hours}h" if hours != 24 else "Daily"
-    lines = [
-        f":bar_chart: *ChatOps {period} Report — {report['generated_at']}*",
-        f"Host: `{report['hostname']}`",
-        "",
-    ]
-    for metric, stats in report["metrics"].items():
-        if stats["samples"] == 0:
-            lines.append(f"  {metric.capitalize():<8} no data")
-        else:
-            lines.append(
-                f"  *{metric.capitalize()}*  "
-                f"avg: {stats['avg']:.1f}%  "
-                f"peak: {stats['max']:.1f}%  "
-                f"samples: {stats['samples']}"
-            )
-    a = report["alerts"]
-    flag = "  :warning:" if a["unacked"] else ""
-    lines.append("")
-    lines.append(f"  Alerts (last {hours}h): *{a['total']}* total  ({a['unacked']} unacknowledged){flag}")
+    lines = [f":bar_chart: *ChatOps {period} Report — {report['generated_at']}*", ""]
+
+    for node_data in report.get("nodes", []):
+        lines.append(f"*── {node_data['display_name']} ──*")
+        for metric, stats in node_data["metrics"].items():
+            if stats["samples"] == 0:
+                lines.append(f"  {metric.capitalize():<8} no data")
+            else:
+                lines.append(
+                    f"  *{metric.capitalize()}*  "
+                    f"avg: {stats['avg']:.1f}%  "
+                    f"peak: {stats['max']:.1f}%  "
+                    f"samples: {stats['samples']}"
+                )
+        a = node_data["alerts"]
+        flag = "  :warning:" if a["unacked"] else ""
+        lines.append(f"  Alerts: *{a['total']}* total  ({a['unacked']} unacknowledged){flag}")
+        lines.append("")
+
+    ta = report.get("total_alerts", {})
+    total_flag = "  :warning:" if ta.get("unacked") else ""
+    lines.append(f":pushpin: Total alerts (all nodes): *{ta.get('total', 0)}*  ({ta.get('unacked', 0)} unacknowledged){total_flag}")
     return "\n".join(lines)
 
 
