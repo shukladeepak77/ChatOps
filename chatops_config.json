@@ -5,5 +5,7 @@
   "memory_critical": 90.0,
   "cpu_warning": 70.0,
   "cpu_critical": 85.0,
-  "health_check_interval": 60
+  "health_check_interval": 60,
+  "slack_webhook": "",
+  "alert_suppress_minutes": 10
 }

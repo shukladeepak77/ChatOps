@@ -989,3 +989,553 @@ Copy this table to track your results:
 **Total: 60 test cases**
 - Chat message tests: TC-01 to TC-33, TC-38 to TC-46, TC-53 to TC-60
 - UI interaction tests: TC-34 to TC-37, TC-47 to TC-52
+
+---
+
+## Section 17 — Network Monitoring
+
+---
+
+### TC-61 · Check IP Addresses
+
+**Type:** `check ip`
+
+**Expected response:**
+```
+Network interfaces:
+  lo           UNKNOWN    127.0.0.1/8
+  eth0         UP         10.0.0.1/24 ...
+```
+
+**Pass if:** Response lists at least one interface with a state and IP address.
+
+---
+
+### TC-62 · Check Routes
+
+**Type:** `check routes`
+
+**Expected response:**
+```
+Routing table:
+  default via 10.0.0.1 dev eth0
+  10.0.0.0/24 dev eth0 proto kernel ...
+```
+
+**Pass if:** Response contains "Routing table" and at least one route entry.
+
+---
+
+### TC-63 · Check Network Stats
+
+**Type:** `check network`
+
+**Expected response:**
+```
+Network interface stats:
+  lo           RX: 0.5 MB   TX: 0.5 MB   Err in/out: 0/0   Drop in/out: 0/0
+  eth0         RX: 120.3 MB TX: 45.1 MB  Err in/out: 0/0   Drop in/out: 0/0
+```
+
+**Pass if:** Response contains at least one interface with RX/TX values.
+
+---
+
+### TC-64 · Check DNS
+
+**Type:** `check dns`
+
+**Expected response:**
+```
+DNS: google.com → 142.250.x.x  Latency: 12.4ms  Status: OK
+```
+
+**Pass if:** Response contains "DNS", a resolved IP, and `Status: OK`.
+
+---
+
+### TC-65 · Check Connections
+
+**Type:** `check connections`
+
+**Expected response:**
+```
+TCP connections: 8 total  (ESTAB: 5  TIME-WAIT: 3)
+```
+
+**Pass if:** Response contains "connections" and a total count.
+
+---
+
+## Section 18 — Service Management
+
+---
+
+### TC-66 · Service Status — Known Service
+
+**Type:** `service status ssh`
+
+**Expected response:**
+```
+Service: ssh
+  Status: active (running)
+  PID: 1234
+  OpenBSD Secure Shell server
+```
+
+**Pass if:** Response contains "Service: ssh" and a status line.
+
+---
+
+### TC-67 · Service Status — Unknown Service
+
+**Type:** `service status fakeservice`
+
+**Expected response:**
+```
+Service: fakeservice
+  Status: inactive (dead)
+```
+
+**Pass if:** Response contains "Service: fakeservice" and does not crash.
+
+---
+
+### TC-68 · Restart Service — Confirmation Prompt
+
+**Type:** `restart ssh`
+
+**Expected response:**
+```
+Restart service 'ssh'?
+Command: systemctl restart ssh
+
+Reply 'confirm restart ssh' to proceed, or 'cancel' to abort.
+```
+
+**Pass if:** Response contains "confirm restart ssh" and "cancel".
+
+---
+
+### TC-69 · Restart Service — Cancel
+
+**Type:** `restart ssh` then `cancel`
+
+**Expected:** Second response contains "Cancelled."
+
+**Pass if:** Cancel clears the pending restart.
+
+---
+
+### TC-70 · Restart Service — Confirm Without Prior Request
+
+**Type:** `confirm restart nginx` (without first typing `restart nginx`)
+
+**Expected response:**
+```
+No pending restart for 'nginx'. Use 'restart nginx' first.
+```
+
+**Pass if:** Response contains "No pending restart".
+
+---
+
+### TC-71 · Check Failed Services
+
+**Type:** `check failed services`
+
+**Expected response (if none failed):**
+```
+No failed services detected.
+```
+
+**Expected response (if any failed):**
+```
+Failed services:
+  nginx
+  myapp
+```
+
+**Pass if:** Response contains either "No failed services" or a list of service names.
+
+---
+
+## Section 19 — Multi-instance Support
+
+---
+
+### TC-72 · Add a Node
+
+**Type:** `add node web-01 ubuntu@192.168.1.10`
+
+**Expected response:**
+```
+Node 'web-01' added — ubuntu@192.168.1.10  (key: ~/.ssh/id_rsa)
+```
+
+**Pass if:** Response confirms node was added with correct user and host.
+
+---
+
+### TC-73 · List Nodes — With Nodes Registered
+
+**Type:** `list nodes` (after TC-72)
+
+**Expected response:**
+```
+Registered nodes:
+  web-01 — ubuntu@192.168.1.10  (key: ~/.ssh/id_rsa)
+```
+
+**Pass if:** Response shows the registered node.
+
+---
+
+### TC-74 · List Nodes — Empty Registry
+
+**Type:** `list nodes` (with no nodes added)
+
+**Expected response:**
+```
+No nodes registered.
+Usage: add node <name> <user>@<host> [key_path]
+```
+
+**Pass if:** Response contains "No nodes registered".
+
+---
+
+### TC-75 · Remove a Node
+
+**Type:** `remove node web-01` (after TC-72)
+
+**Expected response:**
+```
+Node 'web-01' removed.
+```
+
+**Pass if:** Node no longer appears in `list nodes`.
+
+---
+
+### TC-76 · Remove Non-existent Node
+
+**Type:** `remove node ghost`
+
+**Expected response:**
+```
+Node 'ghost' not found.
+```
+
+**Pass if:** Response contains "not found".
+
+---
+
+### TC-77 · Remote Command — Specific Node
+
+**Prerequisite:** A real reachable node registered (e.g., `add node local ubuntu@127.0.0.1`)
+
+**Type:** `check disk on local`
+
+**Expected response:**
+```
+[local]  ubuntu@127.0.0.1
+  Total: 50G | Used: 20G | Free: 28G | Usage: 42%
+```
+
+**Pass if:** Response contains the node name and disk usage data.
+
+---
+
+### TC-78 · Remote Command — All Nodes
+
+**Prerequisite:** At least two nodes registered
+
+**Type:** `system health on all`
+
+**Expected response:**
+```
+Remote: system health — all nodes
+
+[web-01]  ubuntu@192.168.1.10
+  Disk: 45%
+  Memory: 62%
+  ...
+```
+
+**Pass if:** Response shows output for each registered node.
+
+---
+
+### TC-79 · Remote Command — Unknown Node
+
+**Type:** `check disk on unknown-host`
+
+**Expected response:**
+```
+Unknown node 'unknown-host'. Available: web-01, db-server
+```
+
+**Pass if:** Response contains "Unknown node" and lists available nodes.
+
+---
+
+## Section 20 — Slack Alert Notifications
+
+---
+
+### TC-80 · Configure Slack Webhook via Chat
+
+**Type:** `config set slack_webhook https://hooks.slack.com/services/test/url`
+
+**Expected response:**
+```
+Slack webhook configured. CRITICAL alerts will be sent to Slack.
+```
+
+**Pass if:** Response confirms webhook was saved.
+
+---
+
+### TC-81 · Test Slack — No Webhook Configured
+
+**Type:** `test slack` (before configuring a webhook)
+
+**Expected response:**
+```
+No Slack webhook configured. Use: config set slack_webhook <url>
+```
+
+**Pass if:** Response contains "No Slack webhook configured".
+
+---
+
+### TC-82 · Test Slack — Webhook Configured
+
+**Prerequisite:** A valid Slack webhook URL configured (TC-80)
+
+**Type:** `test slack`
+
+**Expected response:**
+```
+Test notification sent to Slack.
+```
+
+**Pass if:** Response confirms success AND a test message appears in the Slack channel.
+
+---
+
+### TC-83 · Set Alert Suppression Window
+
+**Type:** `config set alert suppress 15`
+
+**Expected response:**
+```
+Alert suppression set to 15 minutes.
+```
+
+**Pass if:** Response confirms the new suppression window.
+
+---
+
+### TC-84 · CRITICAL Alert Triggers Slack Notification
+
+**Prerequisite:** Valid Slack webhook configured; lower a threshold below current usage (e.g., set `cpu_critical` to 5%)
+
+**Action:** Wait up to 60 seconds for the next health check cycle.
+
+**Expected:** A Slack message appears in the configured channel:
+```
+🚨 [CRITICAL] ChatOps Alert
+  Cpu: XX.X% used
+  Host: `<hostname>`  |  2026-05-03 09:14:00
+```
+
+**Pass if:** Slack message received with correct metric and severity.
+
+---
+
+### TC-85 · Slack Alert Suppression
+
+**Prerequisite:** TC-84 just fired a Slack notification
+
+**Action:** Wait for the next health check (within the suppression window).
+
+**Expected:** No second Slack notification sent within the suppression period.
+
+**Pass if:** Only one notification per suppression window per metric.
+
+---
+
+### TC-86 · Config Tab — Slack Settings Visible
+
+**Action:** Open Config tab in the browser.
+
+**Expected:** New fields visible:
+- Slack Webhook URL text input
+- Alert Suppression (minutes) number input
+
+**Pass if:** Both fields are present and save correctly via the Save Settings button.
+
+---
+
+## Section 21 — Daily Health Reports
+
+---
+
+### TC-87 · Show Report — Default 24h
+
+**Type:** `show report`
+
+**Expected response:**
+```
+Health Report — Last 24h  (2026-05-03 09:30:00)
+Host: web-01
+
+  Disk     avg: 61.2%  min: 60.8%  max: 74.0%  (96 samples)
+  Memory   avg: 71.4%  min: 68.1%  max: 89.0%  (96 samples)
+  Cpu      avg: 34.1%  min: 2.0%   max: 88.0%  (96 samples)
+
+  Alerts: 3 total  (1 unacknowledged)  ⚠
+```
+
+**Pass if:** Response contains "Health Report", hostname, metric stats, and alert count.
+
+---
+
+### TC-88 · Show Report — Custom Time Window
+
+**Type:** `show report 48h`
+
+**Expected response:**
+```
+Health Report — Last 48h  (...)
+```
+
+**Pass if:** Response header says "Last 48h".
+
+---
+
+### TC-89 · Enable Daily Report
+
+**Type:** `config set report on`
+
+**Expected response:**
+```
+Daily report enabled.
+```
+
+**Pass if:** Response contains "enabled".
+
+---
+
+### TC-90 · Disable Daily Report
+
+**Type:** `config set report off`
+
+**Expected response:**
+```
+Daily report disabled.
+```
+
+**Pass if:** Response contains "disabled".
+
+---
+
+### TC-91 · Set Report Hour
+
+**Type:** `config set report hour 9`
+
+**Expected response:**
+```
+Daily report scheduled for 09:00 each day.
+```
+
+**Pass if:** Response confirms the scheduled hour.
+
+---
+
+### TC-92 · Config Tab — Daily Report Section
+
+**Action:** Open Config tab in the browser.
+
+**Expected:** New Daily Report section visible with:
+- Enabled On/Off dropdown
+- Hour (0–23) number input
+- Both fields save correctly via Save Settings
+
+**Pass if:** Both fields present and values persist after save.
+
+---
+
+### TC-93 · Report API Endpoint
+
+**Action:** Navigate to `http://<server>:8001/chatops/report` in browser (or use curl)
+
+**Expected JSON response:**
+```json
+{
+  "hostname": "web-01",
+  "hours": 24,
+  "generated_at": "2026-05-03 09:30:00",
+  "metrics": {
+    "disk":   {"avg": 61.2, "min": 60.8, "max": 74.0, "samples": 96},
+    "memory": {"avg": 71.4, "min": 68.1, "max": 89.0, "samples": 96},
+    "cpu":    {"avg": 34.1, "min": 2.0,  "max": 88.0, "samples": 96}
+  },
+  "alerts": {"total": 3, "unacked": 1}
+}
+```
+
+**Pass if:** Response contains all required keys with numeric values.
+
+---
+
+## Test Execution Tracker (Phase 2)
+
+| TC # | Description | Result | Notes |
+|------|-------------|--------|-------|
+| TC-61 | Check IP addresses | | |
+| TC-62 | Check routes | | |
+| TC-63 | Check network stats | | |
+| TC-64 | Check DNS | | |
+| TC-65 | Check connections | | |
+| TC-66 | Service status — known | | |
+| TC-67 | Service status — unknown | | |
+| TC-68 | Restart — confirmation prompt | | |
+| TC-69 | Restart — cancel | | |
+| TC-70 | Confirm restart without request | | |
+| TC-71 | Check failed services | | |
+| TC-72 | Add node | | |
+| TC-73 | List nodes — populated | | |
+| TC-74 | List nodes — empty | | |
+| TC-75 | Remove node | | |
+| TC-76 | Remove non-existent node | | |
+| TC-77 | Remote command — single node | | |
+| TC-78 | Remote command — all nodes | | |
+| TC-79 | Remote command — unknown node | | |
+| TC-80 | Config Slack webhook via chat | | |
+| TC-81 | Test slack — no webhook | | |
+| TC-82 | Test slack — valid webhook | | |
+| TC-83 | Set alert suppression | | |
+| TC-84 | CRITICAL alert fires Slack | | |
+| TC-85 | Alert suppression prevents re-fire | | |
+| TC-86 | Config tab — Slack fields | | |
+| TC-87 | Show report — 24h | | |
+| TC-88 | Show report — custom window | | |
+| TC-89 | Enable daily report | | |
+| TC-90 | Disable daily report | | |
+| TC-91 | Set report hour | | |
+| TC-92 | Config tab — report section | | |
+| TC-93 | Report API endpoint | | |
+
+---
+
+**Phase 2 Total: 33 new test cases (TC-61 to TC-93)**
+- Network monitoring: TC-61 to TC-65
+- Service management: TC-66 to TC-71
+- Multi-instance: TC-72 to TC-79
+- Slack notifications: TC-80 to TC-86
+- Daily reports: TC-87 to TC-93
+
+**Grand total: 93 manual test cases**

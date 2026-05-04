@@ -162,3 +162,116 @@ Integration tests via FastAPI `TestClient`.
 | E18 | `test_config_update` | PUT `/chatops/config` `{"disk_warning": 75}` | 200, subsequent GET returns `disk_warning == 75` |
 | E19 | `test_config_partial_update` | PUT with one field only | Other fields remain at previous values |
 | E20 | `test_runbooks_list` | GET `/chatops/runbooks` | 200, `runbooks` list has 4 entries with name/description/preview |
+
+---
+
+## 7. Network Actions — `test_chatops_actions.py` (new)
+
+Unit tests for network monitoring functions added in Phase 2.
+
+| ID | Test Name | Input | Expected |
+|----|-----------|-------|----------|
+| N1 | `test_check_ip_returns_list` | `check_ip()` | Returns a list |
+| N2 | `test_check_ip_has_fields` | `check_ip()` | Each entry has `interface`, `state`, `addresses` |
+| N3 | `test_check_routes_returns_list` | `check_routes()` | Returns a list of strings |
+| N4 | `test_check_network_stats_returns_list` | `check_network_stats()` | Returns a list |
+| N5 | `test_check_network_stats_has_fields` | `check_network_stats()` | Each entry has `interface`, `bytes_sent_mb`, `bytes_recv_mb`, `errors_in`, `errors_out` |
+| N6 | `test_check_dns_returns_keys` | `check_dns()` | Dict has `hostname`, `resolved_ip`, `latency_ms`, `status` |
+| N7 | `test_check_dns_status_ok` | `check_dns("localhost")` | `status == "OK"` |
+| N8 | `test_check_connections_returns_keys` | `check_connections()` | Dict has `total`, `by_state` |
+
+---
+
+## 8. Service Actions — `test_chatops_actions.py` (new)
+
+| ID | Test Name | Input | Expected |
+|----|-----------|-------|----------|
+| S1 | `test_check_service_returns_keys` | `check_service("ssh")` | Dict has `name`, `active`, `state`, `sub_state` |
+| S2 | `test_check_failed_services_returns_list` | `check_failed_services()` | Returns a list |
+
+---
+
+## 9. Node Registry — `test_chatops_nodes.py` (new)
+
+Unit tests for `chatops/nodes.py` using a temporary JSON file.
+
+| ID | Test Name | Operation | Expected |
+|----|-----------|-----------|----------|
+| ND1 | `test_add_node` | `add_node("web-01", "10.0.0.1", "ubuntu")` | Node appears in `list_nodes()` |
+| ND2 | `test_list_nodes_empty` | `list_nodes()` with no file | Returns `{}` |
+| ND3 | `test_list_nodes_returns_dict` | After `add_node` | Returns dict with node entry |
+| ND4 | `test_get_node_existing` | `get_node("web-01")` after add | Returns dict with `host`, `user`, `key_path` |
+| ND5 | `test_get_node_missing` | `get_node("nonexistent")` | Returns `None` |
+| ND6 | `test_remove_node_existing` | `add_node` → `remove_node("web-01")` | Returns `True`, node gone from `list_nodes()` |
+| ND7 | `test_remove_node_nonexistent` | `remove_node("ghost")` | Returns `False` |
+
+---
+
+## 10. Slack & Report Actions — `test_chatops_actions.py` (new)
+
+| ID | Test Name | Input | Expected |
+|----|-----------|-------|----------|
+| SL1 | `test_notify_slack_invalid_url_returns_false` | `notify_slack("http://invalid", "cpu", "CRITICAL", 95.0)` | Returns `False` |
+| RP1 | `test_generate_report_returns_keys` | `generate_report()` | Dict has `hostname`, `hours`, `generated_at`, `metrics`, `alerts` |
+| RP2 | `test_generate_report_metrics_keys` | `generate_report()["metrics"]` | Has `disk`, `memory`, `cpu` keys |
+| RP3 | `test_generate_report_alerts_keys` | `generate_report()["alerts"]` | Has `total`, `unacked` keys |
+| RP4 | `test_format_report_text_contains_host` | `format_report_text(generate_report())` | String contains hostname |
+| RP5 | `test_format_report_slack_contains_host` | `format_report_slack(generate_report())` | String contains hostname |
+
+---
+
+## 11. DB Report Functions — `test_chatops_db.py` (new)
+
+| ID | Test Name | Operation | Expected |
+|----|-----------|-----------|----------|
+| DB-R1 | `test_get_metric_stats_no_data` | `get_metric_stats("disk", 24)` with empty DB | Returns dict with `samples == 0` and `avg == None` |
+| DB-R2 | `test_get_alert_count_empty` | `get_alert_count(24)` with empty DB | Returns `{"total": 0, "unacked": 0}` |
+| DB-R3 | `test_get_metric_stats_with_data` | `add_metric` → `get_metric_stats` | Returns correct avg/min/max |
+| DB-R4 | `test_get_alert_count_with_data` | `add_alert` → `get_alert_count` | Returns correct total and unacked |
+
+---
+
+## 12. Router — New Routes — `test_chatops_router.py` (new)
+
+| ID | Test Name | Input | Expected |
+|----|-----------|-------|----------|
+| R-N1 | `test_route_check_ip` | `"check ip"` | Response contains "interface" or "Network interfaces" |
+| R-N2 | `test_route_check_routes` | `"check routes"` | Response contains "Routing table" or "route" |
+| R-N3 | `test_route_check_network` | `"check network"` | Response contains "interface" or "Network interface stats" |
+| R-N4 | `test_route_check_dns` | `"check dns"` | Response contains "DNS" and "status" |
+| R-N5 | `test_route_check_connections` | `"check connections"` | Response contains "connections" |
+| R-N6 | `test_route_service_status` | `"service status ssh"` | Response contains "Service:" |
+| R-N7 | `test_route_restart_prompt` | `"restart ssh"` | Response contains "confirm restart" |
+| R-N8 | `test_route_confirm_restart_without_request` | `"confirm restart nginx"` (no prior restart) | Response contains "No pending" |
+| R-N9 | `test_route_check_failed_services` | `"check failed services"` | Response contains "failed" or "No failed" |
+| R-N10 | `test_route_list_nodes_empty` | `"list nodes"` with no nodes | Response contains "No nodes registered" |
+| R-N11 | `test_route_show_report` | `"show report"` | Response contains "Health Report" |
+| R-N12 | `test_route_show_report_custom_hours` | `"show report 48h"` | Response contains "48h" |
+| R-N13 | `test_route_report_toggle_on` | `"config set report on"` | Response contains "enabled" |
+| R-N14 | `test_route_report_toggle_off` | `"config set report off"` | Response contains "disabled" |
+| R-N15 | `test_route_report_hour` | `"config set report hour 9"` | Response contains "09:00" |
+
+---
+
+## 13. API Endpoints — New — `test_chatops_api.py` (new)
+
+| ID | Test Name | Method + Endpoint | Expected |
+|----|-----------|-------------------|----------|
+| E-N1 | `test_report_endpoint` | GET `/chatops/report` | 200, has `hostname`, `metrics`, `alerts` keys |
+| E-N2 | `test_report_endpoint_custom_hours` | GET `/chatops/report?hours=48` | 200, `hours == 48` |
+| E-N3 | `test_config_includes_new_fields` | GET `/chatops/config` | Response has `slack_webhook`, `alert_suppress_minutes`, `report_enabled`, `report_hour` |
+
+---
+
+## Updated Overview
+
+| Category | File | Original | New | Total |
+|----------|------|----------|-----|-------|
+| Actions Layer | `test_chatops_actions.py` | 23 | +15 | 38 |
+| Router Layer | `test_chatops_router.py` | 25 | +15 | 40 |
+| Database Layer | `test_chatops_db.py` | 14 | +4 | 18 |
+| Config Layer | `test_chatops_config.py` | 6 | — | 6 |
+| Runbooks Layer | `test_chatops_runbooks.py` | 9 | — | 9 |
+| API Endpoints | `test_chatops_api.py` | 20 | +3 | 23 |
+| Node Registry | `test_chatops_nodes.py` | — | +7 | 7 |
+| **Total** | | **97** | **+44** | **141** |

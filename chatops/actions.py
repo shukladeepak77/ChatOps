@@ -13,6 +13,9 @@ def help_text() -> str:
     orange = "#f97316"
     purple = "#8b5cf6"
     gray   = "#6b7280"
+    cyan   = "#06b6d4"
+    amber  = "#d97706"
+    rose   = "#f43f5e"
 
     return (
         '<span style="color:#374151;font-weight:700">Commands:</span>\n'
@@ -23,7 +26,22 @@ def help_text() -> str:
         f'  <span style="color:#9ca3af;font-style:italic">— paste inline, or upload a log file</span>\n'
         f"  {_s(purple,'show alerts')} | {_s(purple,'list runbooks')}"
         f" | {_s(purple,'run &lt;runbook&gt;')} | {_s(purple,'confirm &lt;runbook&gt;')} | {_s(purple,'cancel')}\n"
-        f"  {_s(gray,'run tests')} | {_s(gray,'config')} | {_s(gray,'help')}"
+        "\n"
+        '<span style="color:#374151;font-weight:700">Network:</span>\n'
+        f"  {_s(cyan,'check ip')} | {_s(cyan,'check routes')} | {_s(cyan,'check network')}"
+        f" | {_s(cyan,'check dns')} | {_s(cyan,'check connections')}\n"
+        "\n"
+        '<span style="color:#374151;font-weight:700">Services:</span>\n'
+        f"  {_s(amber,'service status &lt;name&gt;')} | {_s(amber,'restart &lt;name&gt;')}"
+        f" | {_s(amber,'confirm restart &lt;name&gt;')} | {_s(amber,'check failed services')}\n"
+        "\n"
+        '<span style="color:#374151;font-weight:700">Multi-instance:</span>\n'
+        f"  {_s(rose,'add node &lt;name&gt; &lt;user&gt;@&lt;host&gt;')} | {_s(rose,'list nodes')}"
+        f" | {_s(rose,'remove node &lt;name&gt;')}\n"
+        f"  {_s(rose,'&lt;any command&gt; on &lt;node&gt;')} | {_s(rose,'&lt;any command&gt; on all')}\n"
+        f"  {_s(rose,'copy ssh key &lt;user&gt;@&lt;host&gt;')}\n"
+        "\n"
+        f"  {_s(gray,'run tests')} | {_s(gray,'config')} | {_s(gray,'show report')} | {_s(gray,'test slack')} | {_s(gray,'help')}"
     )
 
 
@@ -147,6 +165,247 @@ def check_ports() -> list:
         return []
 
 
+def check_ip() -> list:
+    try:
+        res = subprocess.run(["ip", "-br", "addr"], capture_output=True, text=True, timeout=3)
+        interfaces = []
+        for line in res.stdout.splitlines():
+            parts = line.split()
+            if parts:
+                interfaces.append({
+                    "interface": parts[0],
+                    "state":     parts[1] if len(parts) > 1 else "UNKNOWN",
+                    "addresses": parts[2:] if len(parts) > 2 else [],
+                })
+        return interfaces
+    except Exception:
+        return []
+
+
+def check_routes() -> list:
+    try:
+        res = subprocess.run(["ip", "route"], capture_output=True, text=True, timeout=3)
+        routes = []
+        for line in res.stdout.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split()
+            row = {"destination": parts[0], "gateway": "-", "interface": "-", "proto": "-", "src": "-", "metric": "-"}
+            i = 1
+            while i < len(parts):
+                token = parts[i]
+                if token == "via" and i + 1 < len(parts):
+                    row["gateway"] = parts[i + 1]; i += 2
+                elif token == "dev" and i + 1 < len(parts):
+                    row["interface"] = parts[i + 1]; i += 2
+                elif token == "proto" and i + 1 < len(parts):
+                    row["proto"] = parts[i + 1]; i += 2
+                elif token == "src" and i + 1 < len(parts):
+                    row["src"] = parts[i + 1]; i += 2
+                elif token == "metric" and i + 1 < len(parts):
+                    row["metric"] = parts[i + 1]; i += 2
+                else:
+                    i += 1
+            routes.append(row)
+        return routes
+    except Exception:
+        return []
+
+
+def check_network_stats() -> list:
+    try:
+        import psutil
+        stats = psutil.net_io_counters(pernic=True)
+        return [
+            {
+                "interface":     iface,
+                "bytes_sent_mb": round(s.bytes_sent / (1024 ** 2), 2),
+                "bytes_recv_mb": round(s.bytes_recv / (1024 ** 2), 2),
+                "pkts_sent":     s.packets_sent,
+                "pkts_recv":     s.packets_recv,
+                "errors_in":     s.errin,
+                "errors_out":    s.errout,
+                "drops_in":      s.dropin,
+                "drops_out":     s.dropout,
+            }
+            for iface, s in stats.items()
+        ]
+    except Exception:
+        return []
+
+
+def check_dns(hostnames: list[str] | None = None) -> list[dict]:
+    import socket
+    import time
+    if hostnames is None:
+        hostnames = ["google.com", "cloudflare.com", "github.com"]
+    results = []
+    for hostname in hostnames:
+        try:
+            start = time.time()
+            ip = socket.gethostbyname(hostname)
+            latency_ms = round((time.time() - start) * 1000, 2)
+            results.append({"hostname": hostname, "resolved_ip": ip, "latency_ms": latency_ms, "status": "OK"})
+        except Exception as e:
+            results.append({"hostname": hostname, "resolved_ip": None, "latency_ms": None, "status": f"FAILED: {e}"})
+    return results
+
+
+def check_connections() -> dict:
+    try:
+        res = subprocess.run(["ss", "-tn"], capture_output=True, text=True, timeout=3)
+        states: dict = {}
+        for line in res.stdout.splitlines()[1:]:
+            parts = line.split()
+            if parts:
+                states[parts[0]] = states.get(parts[0], 0) + 1
+        return {"total": sum(states.values()), "by_state": states}
+    except Exception:
+        return {"total": 0, "by_state": {}}
+
+
+def check_service(name: str) -> dict:
+    try:
+        active_res = subprocess.run(
+            ["systemctl", "is-active", name], capture_output=True, text=True, timeout=3
+        )
+        props_res = subprocess.run(
+            ["systemctl", "show", name, "--property=ActiveState,SubState,Description,MainPID"],
+            capture_output=True, text=True, timeout=3,
+        )
+        props = {}
+        for line in props_res.stdout.splitlines():
+            if "=" in line:
+                k, v = line.split("=", 1)
+                props[k] = v
+        return {
+            "name":        name,
+            "active":      active_res.stdout.strip(),
+            "state":       props.get("ActiveState", active_res.stdout.strip()),
+            "sub_state":   props.get("SubState", ""),
+            "description": props.get("Description", ""),
+            "pid":         props.get("MainPID", "0"),
+        }
+    except Exception as e:
+        return {"name": name, "active": "unknown", "state": "unknown", "error": str(e)}
+
+
+def check_failed_services() -> list:
+    try:
+        res = subprocess.run(
+            ["systemctl", "--failed", "--no-legend", "--no-pager", "--plain"],
+            capture_output=True, text=True, timeout=5,
+        )
+        failed = []
+        for line in res.stdout.splitlines():
+            parts = line.strip().split()
+            if parts:
+                failed.append(parts[0].replace(".service", ""))
+        return failed
+    except Exception:
+        return []
+
+
+def notify_slack(webhook_url: str, metric: str, status: str, value: float, host: str = "localhost") -> bool:
+    """POST a CRITICAL alert to a Slack webhook. Returns True on success."""
+    import urllib.request
+    import json as _json
+    from datetime import datetime
+    payload = {
+        "text": (
+            f":rotating_light: *[{status}] ChatOps Alert*\n"
+            f"  *{metric.capitalize()}*: {value:.1f}% used\n"
+            f"  Host: `{host}`  |  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+    }
+    try:
+        data = _json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            webhook_url,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
+def generate_report(hours: int = 24) -> dict:
+    """Build a health summary report for the past N hours."""
+    from .db import get_metric_stats, get_alert_count
+    import socket
+    from datetime import datetime
+
+    metrics = {}
+    for m in ("disk", "memory", "cpu"):
+        metrics[m] = get_metric_stats(m, hours)
+
+    alerts = get_alert_count(hours)
+    hostname = socket.gethostname()
+
+    return {
+        "hostname": hostname,
+        "hours":    hours,
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "metrics":  metrics,
+        "alerts":   alerts,
+    }
+
+
+def format_report_text(report: dict) -> str:
+    """Format a report dict as a human-readable string for the chat window."""
+    hours = report["hours"]
+    period = f"Last {hours}h" if hours != 24 else "Last 24h"
+    lines = [
+        f"Health Report — {period}  ({report['generated_at']})",
+        f"Host: {report['hostname']}",
+        "",
+    ]
+    for metric, stats in report["metrics"].items():
+        if stats["samples"] == 0:
+            lines.append(f"  {metric.capitalize():<8} no data")
+        else:
+            lines.append(
+                f"  {metric.capitalize():<8} avg: {stats['avg']:.1f}%  "
+                f"min: {stats['min']:.1f}%  max: {stats['max']:.1f}%  "
+                f"({stats['samples']} samples)"
+            )
+    a = report["alerts"]
+    lines.append("")
+    warn = "  ⚠" if a["unacked"] else ""
+    lines.append(f"  Alerts: {a['total']} total  ({a['unacked']} unacknowledged){warn}")
+    return "\n".join(lines)
+
+
+def format_report_slack(report: dict) -> str:
+    """Format a report dict as a Slack message string."""
+    hours = report["hours"]
+    period = f"Last {hours}h" if hours != 24 else "Daily"
+    lines = [
+        f":bar_chart: *ChatOps {period} Report — {report['generated_at']}*",
+        f"Host: `{report['hostname']}`",
+        "",
+    ]
+    for metric, stats in report["metrics"].items():
+        if stats["samples"] == 0:
+            lines.append(f"  {metric.capitalize():<8} no data")
+        else:
+            lines.append(
+                f"  *{metric.capitalize()}*  "
+                f"avg: {stats['avg']:.1f}%  "
+                f"peak: {stats['max']:.1f}%  "
+                f"samples: {stats['samples']}"
+            )
+    a = report["alerts"]
+    flag = "  :warning:" if a["unacked"] else ""
+    lines.append("")
+    lines.append(f"  Alerts (last {hours}h): *{a['total']}* total  ({a['unacked']} unacknowledged){flag}")
+    return "\n".join(lines)
+
+
 def analyze_logs(logs: str) -> dict:
     up = (logs or "").upper()
     errors = up.count("ERROR")
@@ -215,6 +474,50 @@ def run_tests() -> dict:
         return {"response": "Tests timed out after 180 seconds.", "status": "TIMEOUT"}
     except Exception as e:
         return {"response": f"Error running tests: {e}", "status": "ERROR"}
+
+
+def copy_ssh_key(target: str) -> dict:
+    key_path = os.path.expanduser("~/.ssh/id_rsa")
+    pub_path = key_path + ".pub"
+
+    # Generate key pair if missing
+    generated = False
+    if not os.path.exists(key_path):
+        try:
+            subprocess.run(
+                ["ssh-keygen", "-t", "ed25519", "-f", key_path, "-N", ""],
+                capture_output=True, text=True, timeout=10, check=True,
+            )
+            generated = True
+        except Exception as e:
+            return {"status": "error", "message": f"Failed to generate SSH key: {e}"}
+
+    try:
+        result = subprocess.run(
+            ["ssh-copy-id", "-i", pub_path, "-o", "StrictHostKeyChecking=no", target],
+            capture_output=True, text=True, timeout=30,
+        )
+        output = (result.stdout + result.stderr).strip()
+        if result.returncode == 0:
+            msg = ("SSH key generated and copied" if generated else "SSH key copied") + f" to {target}."
+            return {"status": "ok", "message": msg}
+        # Password prompt or auth failure — give actionable output
+        if "password:" in output.lower() or "Permission denied" in output:
+            return {
+                "status": "error",
+                "message": (
+                    f"Remote host requires a password for initial key copy.\n"
+                    f"Run this in your terminal:\n"
+                    f"  ssh-copy-id -i {pub_path} {target}"
+                ),
+            }
+        return {"status": "error", "message": output or "ssh-copy-id failed."}
+    except subprocess.TimeoutExpired:
+        return {"status": "error", "message": "Timed out waiting for ssh-copy-id (30s). The host may be unreachable or waiting for a password."}
+    except FileNotFoundError:
+        return {"status": "error", "message": "ssh-copy-id not found. Install openssh-client and retry."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 
 def alert_status(percent: float, warning: float = 80.0, critical: float = 90.0) -> str:

@@ -87,6 +87,19 @@
     .acked-tag { font-size: .75rem; color: #10b981; font-weight: 600; }
     .empty-state { color: #9ca3af; text-align: center; padding: 40px; font-size: .9rem; }
 
+    /* ── Node selector bar ── */
+    .node-bar { display: flex; align-items: center; gap: 10px; padding-bottom: 10px; }
+    .node-bar label { font-size: .82rem; color: #6b7280; font-weight: 500; white-space: nowrap; }
+    .node-select { padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: .85rem; background: #fff; min-width: 160px; }
+
+    /* ── Node info card (Config tab, remote node) ── */
+    .node-info-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; max-width: 560px; }
+    .node-info-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 18px; color: #111; }
+    .node-info-row { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid #f3f4f6; gap: 12px; }
+    .node-info-row:last-child { border-bottom: none; }
+    .node-info-label { width: 80px; font-size: .82rem; color: #6b7280; font-weight: 500; }
+    .node-info-value { flex: 1; font-size: .88rem; color: #111; font-family: monospace; }
+
     /* ── Metrics tab ── */
     #tab-metrics { padding: 16px; gap: 16px; overflow-y: auto; }
     .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
@@ -163,6 +176,10 @@
 
 <!-- ── ALERTS ── -->
 <div id="tab-alerts" class="tab-content">
+  <div class="node-bar">
+    <label>Node:</label>
+    <select class="node-select" id="alerts-node-select" onchange="loadAlerts()"></select>
+  </div>
   <div class="filter-bar">
     <button class="active" onclick="filterAlerts('all', this)">All</button>
     <button onclick="filterAlerts('unacked', this)">Unacknowledged</button>
@@ -174,6 +191,10 @@
 
 <!-- ── METRICS ── -->
 <div id="tab-metrics" class="tab-content">
+  <div class="node-bar">
+    <label>Node:</label>
+    <select class="node-select" id="metrics-node-select" onchange="loadMetrics()"></select>
+  </div>
   <div class="metric-summary" id="metric-summary"></div>
   <button id="metrics-refresh" onclick="loadMetrics()">Refresh</button>
   <div class="charts-grid">
@@ -185,6 +206,11 @@
 
 <!-- ── CONFIG ── -->
 <div id="tab-config" class="tab-content">
+  <div class="node-bar" style="padding: 0 0 12px;">
+    <label>Node:</label>
+    <select class="node-select" id="config-node-select" onchange="onConfigNodeChange()"></select>
+  </div>
+  <div id="config-local-panel">
   <div class="config-card">
     <h3>Alert Thresholds</h3>
     <div class="config-group">
@@ -214,8 +240,72 @@
         <div><input type="number" id="cfg-interval" min="10" max="3600" /></div>
       </div>
     </div>
+    <div class="config-group">
+      <label>Slack Webhook URL</label>
+      <div class="config-row">
+        <div style="flex:3">
+          <input type="text" id="cfg-slack-webhook" placeholder="https://hooks.slack.com/services/…" style="width:100%;padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:.85rem;" />
+        </div>
+      </div>
+      <span style="font-size:.75rem;color:#9ca3af">Paste a Slack Incoming Webhook URL — CRITICAL alerts will be posted automatically.</span>
+    </div>
+    <div class="config-group">
+      <label>Alert Suppression (minutes)</label>
+      <div class="config-row">
+        <div><input type="number" id="cfg-suppress" min="1" max="1440" /></div>
+      </div>
+    </div>
+    <div class="config-group">
+      <label>Daily Report</label>
+      <div class="config-row">
+        <div>
+          <span>Enabled</span>
+          <select id="cfg-report-enabled" style="width:100%;padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:.9rem;margin-top:4px;">
+            <option value="false">Off</option>
+            <option value="true">On</option>
+          </select>
+        </div>
+        <div>
+          <span>Hour (0–23)</span>
+          <input type="number" id="cfg-report-hour" min="0" max="23" />
+        </div>
+      </div>
+      <span style="font-size:.75rem;color:#9ca3af">Posts a daily summary to Slack at the configured hour (requires webhook).</span>
+    </div>
     <button class="config-save" onclick="saveConfig()">Save Settings</button>
     <div id="config-msg"></div>
+  </div>
+  </div><!-- /config-local-panel -->
+  <div id="config-node-panel" style="display:none">
+    <div class="config-card" style="max-width:560px">
+      <h3 id="node-info-title">Node</h3>
+      <div id="node-info-body" style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #f3f4f6;"></div>
+      <h3 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#111">Alert Thresholds <span id="node-cfg-badge" style="font-size:.72rem;font-weight:500;color:#6b7280;margin-left:6px"></span></h3>
+      <div class="config-group">
+        <label>Disk (%)</label>
+        <div class="config-row">
+          <div><span>Warning</span><input type="number" id="ncfg-disk-warning" min="0" max="100" /></div>
+          <div><span>Critical</span><input type="number" id="ncfg-disk-critical" min="0" max="100" /></div>
+        </div>
+      </div>
+      <div class="config-group">
+        <label>Memory (%)</label>
+        <div class="config-row">
+          <div><span>Warning</span><input type="number" id="ncfg-memory-warning" min="0" max="100" /></div>
+          <div><span>Critical</span><input type="number" id="ncfg-memory-critical" min="0" max="100" /></div>
+        </div>
+      </div>
+      <div class="config-group">
+        <label>CPU (%)</label>
+        <div class="config-row">
+          <div><span>Warning</span><input type="number" id="ncfg-cpu-warning" min="0" max="100" /></div>
+          <div><span>Critical</span><input type="number" id="ncfg-cpu-critical" min="0" max="100" /></div>
+        </div>
+      </div>
+      <button class="config-save" onclick="saveNodeConfig()">Save Node Thresholds</button>
+      <div id="node-config-msg" style="margin-top:10px;font-size:.85rem;color:#10b981;height:18px;"></div>
+      <p style="margin-top:12px;font-size:.78rem;color:#9ca3af">Manage nodes via chat: <code>add node</code> · <code>remove node</code> · <code>copy ssh key</code></p>
+    </div>
   </div>
 </div>
 
@@ -337,7 +427,9 @@ let _alertsData = [];
 
 async function loadAlerts() {
   try {
-    const res = await fetch('/chatops/alerts?limit=50');
+    const node = document.getElementById('alerts-node-select')?.value || '';
+    const nodeParam = node ? `&node=${encodeURIComponent(node)}` : '';
+    const res = await fetch(`/chatops/alerts?limit=50${nodeParam}`);
     const data = await res.json();
     _alertsData = data.alerts || [];
     const count = data.unacked_count || 0;
@@ -388,29 +480,51 @@ function escHtml(s) {
   return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+// ── Nodes ─────────────────────────────────────────────────────────────────────
+let _nodesList = [];
+
+async function loadNodes() {
+  try {
+    const res = await fetch('/chatops/nodes');
+    const data = await res.json();
+    _nodesList = data.nodes || [];
+    for (const selId of ['alerts-node-select', 'metrics-node-select', 'config-node-select']) {
+      const sel = document.getElementById(selId);
+      if (!sel) continue;
+      const cur = sel.value;
+      sel.innerHTML = _nodesList.map(n =>
+        `<option value="${escHtml(n.name)}">${escHtml(n.name)} (${escHtml(n.host)})</option>`
+      ).join('');
+      if (cur && _nodesList.find(n => n.name === cur)) sel.value = cur;
+    }
+  } catch (_) {}
+}
+
 // ── Metrics ───────────────────────────────────────────────────────────────────
 const _charts = {};
 const METRIC_COLORS = { disk: '#1e90ff', memory: '#f97316', cpu: '#10b981' };
 
 async function loadMetrics() {
-  await loadMetricSummary();
+  const node = document.getElementById('metrics-node-select')?.value || 'local';
+  await loadMetricSummary(node);
   for (const metric of ['disk', 'memory', 'cpu']) {
     try {
-      const res = await fetch(`/chatops/metrics/history?metric=${metric}&limit=60`);
+      const res = await fetch(`/chatops/metrics/history?metric=${metric}&limit=60&node=${encodeURIComponent(node)}`);
       const data = await res.json();
       renderChart(metric, data.data || []);
     } catch (_) {}
   }
 }
 
-async function loadMetricSummary() {
+async function loadMetricSummary(node) {
+  node = node || 'local';
   const summary = document.getElementById('metric-summary');
   const metrics = ['disk', 'memory', 'cpu'];
   const labels = { disk: 'Disk', memory: 'Memory', cpu: 'CPU' };
   let html = '';
   for (const m of metrics) {
     try {
-      const res = await fetch(`/chatops/metrics/history?metric=${m}&limit=1`);
+      const res = await fetch(`/chatops/metrics/history?metric=${m}&limit=1&node=${encodeURIComponent(node)}`);
       const data = await res.json();
       const latest = data.data?.[0];
       const val = latest ? latest.value.toFixed(1) : '—';
@@ -480,6 +594,11 @@ function renderChart(metric, dataPoints) {
 
 // ── Config ────────────────────────────────────────────────────────────────────
 async function loadConfig() {
+  const sel = document.getElementById('config-node-select');
+  if (sel && sel.value && sel.value !== 'local') {
+    onConfigNodeChange();
+    return;
+  }
   try {
     const res = await fetch('/chatops/config');
     const cfg = await res.json();
@@ -490,7 +609,72 @@ async function loadConfig() {
     document.getElementById('cfg-cpu-warning').value     = cfg.cpu_warning;
     document.getElementById('cfg-cpu-critical').value    = cfg.cpu_critical;
     document.getElementById('cfg-interval').value        = cfg.health_check_interval;
+    document.getElementById('cfg-slack-webhook').value = cfg.slack_webhook || '';
+    document.getElementById('cfg-suppress').value      = cfg.alert_suppress_minutes || 10;
+    document.getElementById('cfg-report-enabled').value = cfg.report_enabled ? 'true' : 'false';
+    document.getElementById('cfg-report-hour').value     = cfg.report_hour ?? 8;
   } catch (_) {}
+}
+
+async function onConfigNodeChange() {
+  const sel = document.getElementById('config-node-select');
+  const node = sel?.value || 'local';
+  const localPanel = document.getElementById('config-local-panel');
+  const nodePanel  = document.getElementById('config-node-panel');
+  if (node === 'local') {
+    localPanel.style.display = '';
+    nodePanel.style.display  = 'none';
+    loadConfig();
+    return;
+  }
+  localPanel.style.display = 'none';
+  nodePanel.style.display  = '';
+  const info = (_nodesList || []).find(n => n.name === node) || {};
+  document.getElementById('node-info-title').textContent = `Node: ${node}`;
+  document.getElementById('node-info-body').innerHTML = `
+    <div class="node-info-row"><span class="node-info-label">Host</span><span class="node-info-value">${escHtml(info.host || '—')}</span></div>
+    <div class="node-info-row"><span class="node-info-label">User</span><span class="node-info-value">${escHtml(info.user || '—')}</span></div>
+    <div class="node-info-row"><span class="node-info-label">Key</span><span class="node-info-value">${escHtml(info.key_path || '—')}</span></div>
+  `;
+  try {
+    const res = await fetch(`/chatops/nodes/${encodeURIComponent(node)}/config`);
+    const data = await res.json();
+    const t = data.thresholds || {};
+    document.getElementById('ncfg-disk-warning').value    = t.disk_warning    ?? 75;
+    document.getElementById('ncfg-disk-critical').value   = t.disk_critical   ?? 90;
+    document.getElementById('ncfg-memory-warning').value  = t.memory_warning  ?? 80;
+    document.getElementById('ncfg-memory-critical').value = t.memory_critical ?? 90;
+    document.getElementById('ncfg-cpu-warning').value     = t.cpu_warning     ?? 70;
+    document.getElementById('ncfg-cpu-critical').value    = t.cpu_critical    ?? 85;
+    document.getElementById('node-cfg-badge').textContent = data.is_default ? '(using global defaults)' : '(node-specific)';
+  } catch (_) {}
+}
+
+async function saveNodeConfig() {
+  const sel = document.getElementById('config-node-select');
+  const node = sel?.value;
+  if (!node || node === 'local') return;
+  const body = {
+    disk_warning:    parseFloat(document.getElementById('ncfg-disk-warning').value),
+    disk_critical:   parseFloat(document.getElementById('ncfg-disk-critical').value),
+    memory_warning:  parseFloat(document.getElementById('ncfg-memory-warning').value),
+    memory_critical: parseFloat(document.getElementById('ncfg-memory-critical').value),
+    cpu_warning:     parseFloat(document.getElementById('ncfg-cpu-warning').value),
+    cpu_critical:    parseFloat(document.getElementById('ncfg-cpu-critical').value),
+  };
+  try {
+    await fetch(`/chatops/nodes/${encodeURIComponent(node)}/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    document.getElementById('node-cfg-badge').textContent = '(node-specific)';
+    const msg = document.getElementById('node-config-msg');
+    msg.textContent = 'Node thresholds saved.';
+    setTimeout(() => { msg.textContent = ''; }, 3000);
+  } catch (_) {
+    document.getElementById('node-config-msg').textContent = 'Save failed.';
+  }
 }
 
 async function saveConfig() {
@@ -502,6 +686,10 @@ async function saveConfig() {
     cpu_warning:            parseFloat(document.getElementById('cfg-cpu-warning').value),
     cpu_critical:           parseFloat(document.getElementById('cfg-cpu-critical').value),
     health_check_interval:  parseInt(document.getElementById('cfg-interval').value),
+    slack_webhook:           document.getElementById('cfg-slack-webhook').value.trim(),
+    alert_suppress_minutes:  parseInt(document.getElementById('cfg-suppress').value) || 10,
+    report_enabled: document.getElementById('cfg-report-enabled').value === 'true',
+    report_hour:    parseInt(document.getElementById('cfg-report-hour').value) || 8,
   };
   try {
     await fetch('/chatops/config', {
@@ -530,8 +718,10 @@ function pollAlertBadge() {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 loadChatHistory();
+loadNodes();
 pollAlertBadge();
 setInterval(pollAlertBadge, 30000);
+setInterval(loadNodes, 60000);
 </script>
 </body>
 </html>

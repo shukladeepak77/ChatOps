@@ -9,6 +9,10 @@ _DEFAULTS = {
     "cpu_warning": 70.0,
     "cpu_critical": 85.0,
     "health_check_interval": 60,
+    "slack_webhook": "",
+    "alert_suppress_minutes": 10,
+    "report_enabled": False,
+    "report_hour": 8,
 }
 
 _CONFIG_FILE = "chatops_config.json"
