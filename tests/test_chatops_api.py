@@ -11,6 +11,9 @@ def client(monkeypatch):
     monkeypatch.setattr(app_module, "_daily_report_loop", _noop)
     from app import app
     with TestClient(app) as c:
+        resp = c.post("/chatops/auth/login", json={"username": "admin", "password": "admin"})
+        token = resp.json()["token"]
+        c.headers.update({"Authorization": f"Bearer {token}"})
         yield c
 
 

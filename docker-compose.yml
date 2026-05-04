@@ -1,0 +1,13 @@
+services:
+  chatops:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - chatops_data:/app/data
+    environment:
+      - CHATOPS_SECRET=change-this-in-production
+    restart: unless-stopped
+
+volumes:
+  chatops_data:

@@ -2,16 +2,21 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
 from fastapi.responses import HTMLResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 import pathlib
 
 from chatops.router import route_message
+from chatops.auth import decode_token, create_token, verify_password, hash_password, ROLE_LEVEL
 from chatops.db import (
     init_db, save_message, get_history, clear_history,
     get_alerts, ack_alert, unacked_count, get_metric_history, add_alert,
     list_metric_nodes,
+    get_user, create_user as db_create_user, list_users as db_list_users,
+    update_user_role, set_user_active,
+    add_audit, get_audit_log,
 )
 from chatops.config import load_config, save_config
 from chatops.runbooks import list_runbooks
@@ -184,6 +189,29 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
+# ── Auth helpers ───────────────────────────────────────────────────────────────
+
+_security = HTTPBearer(auto_error=False)
+
+
+def _get_current_user(credentials: HTTPAuthorizationCredentials = Depends(_security)):
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    payload = decode_token(credentials.credentials)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    return payload
+
+
+def _require_role(min_role: str):
+    level = ROLE_LEVEL[min_role]
+    def _dep(user=Depends(_get_current_user)):
+        if ROLE_LEVEL.get(user.get("role"), 0) < level:
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        return user
+    return _dep
+
+
 # ── Request models ─────────────────────────────────────────────────────────────
 
 class ChatMessage(BaseModel):
@@ -213,6 +241,21 @@ class ConfigUpdate(BaseModel):
     report_hour:    Optional[int]  = None
 
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class CreateUserRequest(BaseModel):
+    username: str
+    password: str
+    role: str = "operator"
+
+
+class UpdateRoleRequest(BaseModel):
+    role: str
+
+
 # ── ChatOps routes ─────────────────────────────────────────────────────────────
 
 @app.get("/chatops", response_class=HTMLResponse)
@@ -223,45 +266,109 @@ async def chatops_page():
     return HTMLResponse("<html><body><h1>ChatOps</h1></body></html>")
 
 
+# ── Auth endpoints ─────────────────────────────────────────────────────────────
+
+@app.post("/chatops/auth/login")
+def login(req: LoginRequest):
+    user = get_user(req.username)
+    if not user or not verify_password(req.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    token = create_token(req.username, user["role"])
+    return {"token": token, "username": req.username, "role": user["role"]}
+
+
+@app.get("/chatops/auth/me")
+def me(user=Depends(_get_current_user)):
+    return {"username": user["sub"], "role": user["role"]}
+
+
+@app.get("/chatops/auth/users")
+def list_users_endpoint(user=Depends(_require_role("admin"))):
+    return {"users": db_list_users()}
+
+
+@app.post("/chatops/auth/users")
+def create_user_endpoint(req: CreateUserRequest, user=Depends(_require_role("admin"))):
+    if req.role not in ROLE_LEVEL:
+        raise HTTPException(status_code=400, detail=f"Invalid role. Choose: {list(ROLE_LEVEL)}")
+    ok = db_create_user(req.username, hash_password(req.password), req.role)
+    if not ok:
+        raise HTTPException(status_code=409, detail=f"User '{req.username}' already exists")
+    return {"status": "ok", "username": req.username, "role": req.role}
+
+
+@app.delete("/chatops/auth/users/{username}")
+def deactivate_user_endpoint(username: str, user=Depends(_require_role("admin"))):
+    if username == user["sub"]:
+        raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
+    ok = set_user_active(username, False)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"User '{username}' not found")
+    return {"status": "ok"}
+
+
+@app.put("/chatops/auth/users/{username}/role")
+def update_role_endpoint(username: str, req: UpdateRoleRequest, user=Depends(_require_role("admin"))):
+    if req.role not in ROLE_LEVEL:
+        raise HTTPException(status_code=400, detail=f"Invalid role. Choose: {list(ROLE_LEVEL)}")
+    ok = update_user_role(username, req.role)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"User '{username}' not found")
+    return {"status": "ok"}
+
+
+# ── Audit endpoint ─────────────────────────────────────────────────────────────
+
+@app.get("/chatops/audit")
+def get_audit_endpoint(
+    limit: int = 50,
+    username: str = None,
+    node: str = None,
+    user=Depends(_require_role("operator")),
+):
+    return {"audit_log": get_audit_log(limit=limit, username=username, node=node)}
+
+
 @app.post("/chatops/message")
-def chatops_message(msg: ChatMessage):
+def chatops_message(msg: ChatMessage, user=Depends(_require_role("operator"))):
     save_message("user", msg.message)
     result = route_message(msg.message)
     save_message("bot", result.get("response", ""))
+    add_audit(user["sub"], msg.message, (result.get("response") or "")[:200])
     return result
 
 
 @app.get("/chatops/history")
-def get_chat_history(limit: int = 50):
+def get_chat_history(limit: int = 50, user=Depends(_require_role("viewer"))):
     return {"history": get_history(limit)}
 
 
 @app.delete("/chatops/history")
-def clear_chat_history():
+def clear_chat_history(user=Depends(_require_role("operator"))):
     clear_history()
     return {"status": "ok"}
 
 
 @app.get("/chatops/alerts")
-def get_alerts_endpoint(limit: int = 50, unacked_only: bool = False, node: str = None):
+def get_alerts_endpoint(limit: int = 50, unacked_only: bool = False, node: str = None, user=Depends(_require_role("viewer"))):
     alerts = get_alerts(limit=limit, unacked_only=unacked_only, node=node)
     count = unacked_count(node=node)
     return {"alerts": alerts, "unacked_count": count}
 
 
 @app.post("/chatops/alerts/{alert_id}/ack")
-def ack_alert_endpoint(alert_id: int):
+def ack_alert_endpoint(alert_id: int, user=Depends(_require_role("operator"))):
     ack_alert(alert_id)
     return {"status": "ok", "unacked_count": unacked_count()}
 
 
 @app.get("/chatops/metrics/history")
-def metrics_history_endpoint(metric: str = "disk", limit: int = 60, node: str = "local"):
+def metrics_history_endpoint(metric: str = "disk", limit: int = 60, node: str = "local", user=Depends(_require_role("viewer"))):
     return {"metric": metric, "data": get_metric_history(metric, limit, node=node)}
 
 
 @app.get("/chatops/nodes")
-def get_nodes_endpoint():
+def get_nodes_endpoint(user=Depends(_require_role("viewer"))):
     from chatops.nodes import list_nodes
     nodes = [{"name": "local", "host": "this server", "user": "-", "key_path": "-"}]
     for name, info in list_nodes().items():
@@ -276,7 +383,7 @@ def get_nodes_endpoint():
 
 
 @app.get("/chatops/nodes/{name}/config")
-def get_node_config_endpoint(name: str):
+def get_node_config_endpoint(name: str, user=Depends(_require_role("viewer"))):
     from chatops.nodes import get_node
     global_cfg = load_config()
     defaults = {k: global_cfg[k] for k in (
@@ -293,39 +400,38 @@ def get_node_config_endpoint(name: str):
 
 
 @app.put("/chatops/nodes/{name}/config")
-def set_node_config_endpoint(name: str, body: NodeThresholds):
+def set_node_config_endpoint(name: str, body: NodeThresholds, user=Depends(_require_role("admin"))):
     from chatops.nodes import set_node_thresholds
     ok = set_node_thresholds(name, body.model_dump())
     if not ok:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail=f"Node '{name}' not found")
     return {"status": "ok"}
 
 
 @app.get("/chatops/report")
-def get_report_endpoint(hours: int = 24):
+def get_report_endpoint(hours: int = 24, user=Depends(_require_role("viewer"))):
     from chatops.actions import generate_report
     return generate_report(hours)
 
 
 @app.get("/chatops/config")
-def get_config_endpoint():
+def get_config_endpoint(user=Depends(_require_role("viewer"))):
     return load_config()
 
 
 @app.put("/chatops/config")
-def update_config_endpoint(updates: ConfigUpdate):
+def update_config_endpoint(updates: ConfigUpdate, user=Depends(_require_role("admin"))):
     data = {k: v for k, v in updates.model_dump().items() if v is not None}
     return save_config(data)
 
 
 @app.get("/chatops/runbooks")
-def get_runbooks_endpoint():
+def get_runbooks_endpoint(user=Depends(_require_role("viewer"))):
     return {"runbooks": list_runbooks()}
 
 
 @app.post("/chatops/upload-log")
-async def upload_log(file: UploadFile = File(...)):
+async def upload_log(file: UploadFile = File(...), user=Depends(_require_role("admin"))):
     content = await file.read()
     try:
         text = content.decode("utf-8", errors="replace")

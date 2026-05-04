@@ -38,11 +38,33 @@ def init_db():
                 metric      TEXT PRIMARY KEY,
                 notified_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS users (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                username      TEXT    NOT NULL UNIQUE,
+                password_hash TEXT    NOT NULL,
+                role          TEXT    NOT NULL DEFAULT 'operator',
+                created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+                active        INTEGER NOT NULL DEFAULT 1
+            );
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                username  TEXT    NOT NULL DEFAULT 'system',
+                command   TEXT    NOT NULL,
+                result    TEXT,
+                node      TEXT    DEFAULT 'local',
+                timestamp TEXT    NOT NULL DEFAULT (datetime('now'))
+            );
         """)
         for table in ('metrics_history', 'alerts'):
             cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
             if 'node' not in cols:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN node TEXT NOT NULL DEFAULT 'local'")
+        if conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
+            from chatops.auth import hash_password as _hp
+            conn.execute(
+                "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+                ("admin", _hp("admin"), "admin"),
+            )
 
 
 # ── Chat history ──────────────────────────────────────────────────────────────
@@ -203,6 +225,75 @@ def get_metric_stats(metric: str, since_hours: int = 24, node: str = None) -> di
             "samples": row["samples"],
         }
     return {"avg": None, "min": None, "max": None, "samples": 0}
+
+
+# ── Users ──────────────────────────────────────────────────────────────────────
+
+def create_user(username: str, password_hash: str, role: str = "operator") -> bool:
+    try:
+        with _conn() as conn:
+            conn.execute(
+                "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+                (username, password_hash, role),
+            )
+        return True
+    except sqlite3.IntegrityError:
+        return False
+
+
+def get_user(username: str) -> dict | None:
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM users WHERE username=? AND active=1", (username,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def list_users() -> List[Dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT id, username, role, created_at, active FROM users ORDER BY id"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def update_user_role(username: str, role: str) -> bool:
+    with _conn() as conn:
+        cur = conn.execute("UPDATE users SET role=? WHERE username=?", (role, username))
+    return cur.rowcount > 0
+
+
+def set_user_active(username: str, active: bool) -> bool:
+    with _conn() as conn:
+        cur = conn.execute("UPDATE users SET active=? WHERE username=?", (int(active), username))
+    return cur.rowcount > 0
+
+
+# ── Audit log ──────────────────────────────────────────────────────────────────
+
+def add_audit(username: str, command: str, result: str = None, node: str = "local"):
+    with _conn() as conn:
+        conn.execute(
+            "INSERT INTO audit_log (username, command, result, node) VALUES (?, ?, ?, ?)",
+            (username, command, result, node),
+        )
+
+
+def get_audit_log(limit: int = 50, username: str = None, node: str = None) -> List[Dict]:
+    with _conn() as conn:
+        conditions, params = [], []
+        if username:
+            conditions.append("username=?")
+            params.append(username)
+        if node:
+            conditions.append("node=?")
+            params.append(node)
+        where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+        rows = conn.execute(
+            f"SELECT * FROM audit_log{where} ORDER BY id DESC LIMIT ?",
+            params + [limit],
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def get_alert_count(since_hours: int = 24, node: str = None) -> dict:

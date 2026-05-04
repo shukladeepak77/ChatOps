@@ -88,7 +88,8 @@ def test_route_runbooks_list():
 # ── Config ────────────────────────────────────────────────────────────────────
 
 def test_route_config():
-    assert "disk_warning" in _resp("config")
+    resp = _resp("config")
+    assert "Disk" in resp and "Warning" in resp
 
 
 # ── Inline log analysis ───────────────────────────────────────────────────────

@@ -49,6 +49,8 @@ _INTENTS: Dict[str, list] = {
     "service":     ["service status", "check service"],
     "failed":      ["check failed services", "failed services", "systemctl failed"],
     "nodes":       ["list nodes", "show nodes", "nodes"],
+    "users":       ["list users", "show users", "add user", "remove user", "user management"],
+    "audit":       ["show audit", "audit log", "show audit log"],
 }
 
 _ALL_PHRASES = [
@@ -244,6 +246,57 @@ def route_message(message: str) -> Dict[str, str]:
         _pending_ssh_copy = None
         result = cancel_runbook()
         return {"response": result["message"]}
+
+    # ── User management commands (admin only, role enforcement is at API level) ─
+    add_user_m = re.match(r'^add\s+user\s+(\S+)\s+(\S+)\s+(viewer|operator|admin)$', s)
+    if add_user_m:
+        from .db import create_user as _db_create_user, get_user as _db_get_user
+        from chatops.auth import hash_password as _hp
+        uname, pwd, role = add_user_m.group(1), add_user_m.group(2), add_user_m.group(3)
+        ok = _db_create_user(uname, _hp(pwd), role)
+        if ok:
+            return {"response": f"User '{uname}' created with role '{role}'."}
+        return {"response": f"User '{uname}' already exists."}
+
+    remove_user_m = re.match(r'^remove\s+user\s+(\S+)$', s)
+    if remove_user_m:
+        from .db import set_user_active as _set_active
+        uname = remove_user_m.group(1)
+        ok = _set_active(uname, False)
+        if ok:
+            return {"response": f"User '{uname}' deactivated."}
+        return {"response": f"User '{uname}' not found."}
+
+    set_role_m = re.match(r'^set\s+role\s+(\S+)\s+(viewer|operator|admin)$', s)
+    if set_role_m:
+        from .db import update_user_role as _update_role
+        uname, role = set_role_m.group(1), set_role_m.group(2)
+        ok = _update_role(uname, role)
+        if ok:
+            return {"response": f"User '{uname}' role updated to '{role}'."}
+        return {"response": f"User '{uname}' not found."}
+
+    if s in ("list users", "show users"):
+        from .db import list_users as _list_users
+        users = _list_users()
+        if not users:
+            return {"response": "No users found."}
+        lines = ["Users:"]
+        for u in users:
+            status = "active" if u["active"] else "inactive"
+            lines.append(f"  {u['username']} — {u['role']} ({status})")
+        return {"response": "\n".join(lines)}
+
+    if s in ("show audit log", "audit log", "show audit"):
+        from .db import get_audit_log as _get_audit
+        logs = _get_audit(limit=10)
+        if not logs:
+            return {"response": "No audit log entries yet."}
+        lines = ["Recent audit log (last 10):"]
+        for entry in logs:
+            ts = (entry.get("timestamp") or "")[:16]
+            lines.append(f"  [{ts}] {entry['username']}: {entry['command']}")
+        return {"response": "\n".join(lines)}
 
     # config set slack_webhook <url>  — match case-insensitively but preserve original URL case
     slack_cfg_m = re.match(r'^config\s+set\s+slack[-_]?webhook\s+(\S+)$', raw, re.IGNORECASE)

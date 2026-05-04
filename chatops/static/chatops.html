@@ -142,9 +142,58 @@
     }
     .config-save:hover { background: #1e40af; }
     #config-msg { margin-top: 10px; font-size: .85rem; color: #10b981; height: 18px; }
+
+    /* ── Login overlay ── */
+    #login-overlay {
+      position: fixed; inset: 0; background: #f0f2f5;
+      display: flex; align-items: center; justify-content: center; z-index: 1000;
+    }
+    #login-overlay.hidden { display: none; }
+    .login-card {
+      background: #fff; border-radius: 16px; border: 1px solid #e5e7eb;
+      padding: 40px; width: 360px; box-shadow: 0 4px 24px rgba(0,0,0,.08);
+    }
+    .login-card h2 { font-size: 1.4rem; font-weight: 700; color: #1e3a8a; margin-bottom: 6px; }
+    .login-card p { font-size: .82rem; color: #6b7280; margin-bottom: 28px; }
+    .login-field { margin-bottom: 16px; }
+    .login-field label { display: block; font-size: .8rem; color: #374151; font-weight: 500; margin-bottom: 6px; }
+    .login-field input {
+      width: 100%; padding: 10px 12px; border: 1px solid #d1d5db;
+      border-radius: 8px; font-size: .9rem; outline: none;
+    }
+    .login-field input:focus { border-color: #1e3a8a; box-shadow: 0 0 0 2px #dbeafe; }
+    #login-btn {
+      width: 100%; padding: 11px; background: #1e3a8a; color: #fff;
+      border: none; border-radius: 8px; font-size: .95rem; font-weight: 600; cursor: pointer; margin-top: 4px;
+    }
+    #login-btn:hover { background: #1e40af; }
+    #login-error { color: #ef4444; font-size: .82rem; margin-top: 10px; min-height: 18px; }
+    /* ── User info in header ── */
+    .user-info { display: flex; align-items: center; gap: 10px; margin-left: 16px; padding-left: 16px; border-left: 1px solid rgba(255,255,255,.3); }
+    .user-role-badge { font-size: .7rem; font-weight: 700; padding: 2px 8px; border-radius: 10px; background: rgba(255,255,255,.2); color: #fff; }
+    #logout-btn { padding: 5px 12px; background: transparent; border: 1px solid rgba(255,255,255,.4); color: rgba(255,255,255,.9); border-radius: 6px; cursor: pointer; font-size: .8rem; }
+    #logout-btn:hover { background: rgba(255,255,255,.15); }
   </style>
 </head>
 <body>
+
+<!-- ── LOGIN OVERLAY ── -->
+<div id="login-overlay">
+  <div class="login-card">
+    <h2>ChatOps Console</h2>
+    <p>Sign in to access the operations dashboard</p>
+    <div class="login-field">
+      <label>Username</label>
+      <input id="login-username" type="text" placeholder="admin" autocomplete="username" />
+    </div>
+    <div class="login-field">
+      <label>Password</label>
+      <input id="login-password" type="password" placeholder="••••••••" autocomplete="current-password" />
+    </div>
+    <button id="login-btn" onclick="doLogin()">Sign In</button>
+    <div id="login-error"></div>
+  </div>
+</div>
 
 <header>
   <div class="header-brand">
@@ -159,6 +208,11 @@
     <button data-tab="metrics" onclick="switchTab('metrics', this)">Metrics</button>
     <button data-tab="config" onclick="switchTab('config', this)">Config</button>
     <button data-tab="help" onclick="switchTab('help', this)">Help</button>
+    <div class="user-info" id="user-info" style="display:none">
+      <span id="user-display"></span>
+      <span id="user-role-display" class="user-role-badge"></span>
+      <button id="logout-btn" onclick="logout()">Sign Out</button>
+    </div>
   </nav>
 </header>
 
@@ -443,6 +497,92 @@
 </div>
 
 <script>
+// ── Auth ──────────────────────────────────────────────────────────────────────
+const _nativeFetch = window.fetch.bind(window);
+
+async function authFetch(url, options = {}) {
+  const token = localStorage.getItem('chatops_token');
+  const headers = { ...(options.headers || {}) };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (!(options.body instanceof FormData) && options.body && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+  const res = await _nativeFetch(url, { ...options, headers });
+  if (res.status === 401) { logout(); throw new Error('Session expired'); }
+  return res;
+}
+
+async function doLogin() {
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  const btn = document.getElementById('login-btn');
+  if (!username || !password) { errEl.textContent = 'Enter username and password.'; return; }
+  btn.disabled = true;
+  btn.textContent = 'Signing in…';
+  try {
+    const res = await _nativeFetch('/chatops/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!res.ok) { errEl.textContent = 'Invalid username or password.'; return; }
+    const data = await res.json();
+    localStorage.setItem('chatops_token', data.token);
+    localStorage.setItem('chatops_user', data.username);
+    localStorage.setItem('chatops_role', data.role);
+    showApp(data.username, data.role);
+  } catch (e) {
+    errEl.textContent = 'Could not connect to server.';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Sign In';
+  }
+}
+
+function showApp(username, role) {
+  document.getElementById('login-overlay').classList.add('hidden');
+  document.getElementById('user-info').style.display = 'flex';
+  document.getElementById('user-display').textContent = username;
+  document.getElementById('user-role-display').textContent = role;
+  loadChatHistory();
+  loadNodes();
+  pollAlertBadge();
+}
+
+function logout() {
+  localStorage.removeItem('chatops_token');
+  localStorage.removeItem('chatops_user');
+  localStorage.removeItem('chatops_role');
+  document.getElementById('login-overlay').classList.remove('hidden');
+  document.getElementById('user-info').style.display = 'none';
+  document.getElementById('login-error').textContent = '';
+  document.getElementById('login-password').value = '';
+}
+
+async function initAuth() {
+  const token = localStorage.getItem('chatops_token');
+  if (!token) return;
+  try {
+    const res = await _nativeFetch('/chatops/auth/me', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      showApp(data.username, data.role);
+    } else {
+      logout();
+    }
+  } catch (_) { logout(); }
+}
+
+document.getElementById('login-password').addEventListener('keypress', e => {
+  if (e.key === 'Enter') doLogin();
+});
+document.getElementById('login-username').addEventListener('keypress', e => {
+  if (e.key === 'Enter') document.getElementById('login-password').focus();
+});
+
 // ── Tab switching ─────────────────────────────────────────────────────────────
 function switchTab(name, btn) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -493,7 +633,7 @@ async function sendMessage() {
   sendBtn.disabled = true;
 
   try {
-    const res = await fetch('/chatops/message', {
+    const res = await authFetch('/chatops/message', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: text }),
@@ -519,7 +659,7 @@ document.getElementById('file-input').addEventListener('change', async function 
   try {
     const formData = new FormData();
     formData.append('file', file);
-    const res = await fetch('/chatops/upload-log', { method: 'POST', body: formData });
+    const res = await authFetch('/chatops/upload-log', { method: 'POST', body: formData });
     const data = await res.json();
     addBubble(data?.response || 'No response', 'bot');
   } catch (e) {
@@ -534,14 +674,14 @@ document.getElementById('chat-input').addEventListener('keypress', e => {
 });
 
 async function clearHistory() {
-  await fetch('/chatops/history', { method: 'DELETE' });
+  await authFetch('/chatops/history', { method: 'DELETE' });
   chatWin.innerHTML = '';
   addBubble('Chat history cleared.', 'bot');
 }
 
 async function loadChatHistory() {
   try {
-    const res = await fetch('/chatops/history?limit=30');
+    const res = await authFetch('/chatops/history?limit=30');
     const data = await res.json();
     if (data.history && data.history.length > 0) {
       const sep = document.createElement('div');
@@ -562,7 +702,7 @@ async function loadAlerts() {
   try {
     const node = document.getElementById('alerts-node-select')?.value || '';
     const nodeParam = node ? `&node=${encodeURIComponent(node)}` : '';
-    const res = await fetch(`/chatops/alerts?limit=50${nodeParam}`);
+    const res = await authFetch(`/chatops/alerts?limit=50${nodeParam}`);
     const data = await res.json();
     _alertsData = data.alerts || [];
     const count = data.unacked_count || 0;
@@ -605,7 +745,7 @@ function renderAlerts() {
 }
 
 async function ackAlert(id) {
-  await fetch(`/chatops/alerts/${id}/ack`, { method: 'POST' });
+  await authFetch(`/chatops/alerts/${id}/ack`, { method: 'POST' });
   await loadAlerts();
 }
 
@@ -618,7 +758,7 @@ let _nodesList = [];
 
 async function loadNodes() {
   try {
-    const res = await fetch('/chatops/nodes');
+    const res = await authFetch('/chatops/nodes');
     const data = await res.json();
     _nodesList = data.nodes || [];
     for (const selId of ['alerts-node-select', 'metrics-node-select', 'config-node-select']) {
@@ -642,7 +782,7 @@ async function loadMetrics() {
   await loadMetricSummary(node);
   for (const metric of ['disk', 'memory', 'cpu']) {
     try {
-      const res = await fetch(`/chatops/metrics/history?metric=${metric}&limit=60&node=${encodeURIComponent(node)}`);
+      const res = await authFetch(`/chatops/metrics/history?metric=${metric}&limit=60&node=${encodeURIComponent(node)}`);
       const data = await res.json();
       renderChart(metric, data.data || []);
     } catch (_) {}
@@ -657,7 +797,7 @@ async function loadMetricSummary(node) {
   let html = '';
   for (const m of metrics) {
     try {
-      const res = await fetch(`/chatops/metrics/history?metric=${m}&limit=1&node=${encodeURIComponent(node)}`);
+      const res = await authFetch(`/chatops/metrics/history?metric=${m}&limit=1&node=${encodeURIComponent(node)}`);
       const data = await res.json();
       const latest = data.data?.[0];
       const val = latest ? latest.value.toFixed(1) : '—';
@@ -733,7 +873,7 @@ async function loadConfig() {
     return;
   }
   try {
-    const res = await fetch('/chatops/config');
+    const res = await authFetch('/chatops/config');
     const cfg = await res.json();
     document.getElementById('cfg-disk-warning').value    = cfg.disk_warning;
     document.getElementById('cfg-disk-critical').value   = cfg.disk_critical;
@@ -771,8 +911,8 @@ async function onConfigNodeChange() {
   `;
   try {
     const [cfgRes, nodeRes] = await Promise.all([
-      fetch(`/chatops/nodes/${encodeURIComponent(node)}/config`),
-      fetch('/chatops/config'),
+      authFetch(`/chatops/nodes/${encodeURIComponent(node)}/config`),
+      authFetch('/chatops/config'),
     ]);
     const data = await cfgRes.json();
     const globalCfg = await nodeRes.json();
@@ -802,7 +942,7 @@ async function saveNodeConfig() {
     cpu_critical:    parseFloat(document.getElementById('ncfg-cpu-critical').value),
   };
   try {
-    await fetch(`/chatops/nodes/${encodeURIComponent(node)}/config`, {
+    await authFetch(`/chatops/nodes/${encodeURIComponent(node)}/config`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -831,7 +971,7 @@ async function saveConfig() {
     report_hour:    parseInt(document.getElementById('cfg-report-hour').value) || 8,
   };
   try {
-    await fetch('/chatops/config', {
+    await authFetch('/chatops/config', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
@@ -846,7 +986,7 @@ async function saveConfig() {
 
 // ── Polling ───────────────────────────────────────────────────────────────────
 function pollAlertBadge() {
-  fetch('/chatops/alerts?limit=1')
+  authFetch('/chatops/alerts?limit=1')
     .then(r => r.json())
     .then(d => {
       const count = d.unacked_count || 0;
@@ -856,11 +996,9 @@ function pollAlertBadge() {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
-loadChatHistory();
-loadNodes();
-pollAlertBadge();
 setInterval(pollAlertBadge, 30000);
 setInterval(loadNodes, 60000);
+initAuth();
 </script>
 </body>
 </html>
