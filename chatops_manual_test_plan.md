@@ -4,8 +4,13 @@
 
 1. Open your browser on Windows
 2. Navigate to the ChatOps URL (e.g. `http://<server-ip>:8001/chatops`)
-3. You should see the **ChatOps Console** with a chat input at the bottom
-4. Type each message exactly as shown and compare the response
+3. A **Sign In** overlay appears — log in with the default credentials:
+   - Username: `admin`  |  Password: `admin`
+4. After login the main console appears with a blue header and tab navigation
+5. Type each message exactly as shown and compare the response
+
+> **Default credentials:** `admin` / `admin` — change the password after first login using `add user` to create a new admin account and `remove user admin` to deactivate the default.
+> **Session:** Your login session lasts 8 hours. After it expires, the login page reappears automatically.
 
 **How to mark results:**
 - ✅ PASS — response matches the expected output
@@ -20,26 +25,37 @@ will differ on your machine — focus on the **keywords and structure**, not exa
 
 ---
 
-### TC-01 · Hint Text in Header Bar
+### TC-01 · Login Page & Header Bar
 
 **Action:** Open the chatbot URL in the browser (no typing needed)
 
-**Expected — blue header bar shows:**
+**Step 1 — Before login:**
+A centered white card overlay appears on a grey background with:
+- Title: "ChatOps Console"
+- Subtitle: "Sign in to access the operations dashboard"
+- Username and Password input fields
+- **Sign In** button
+
+The blue header and all tabs are hidden until login succeeds.
+
+**Step 2 — After logging in with `admin` / `admin`:**
+
+The overlay disappears and the blue header bar shows:
 ```
 ChatOps Console
 disk · memory · cpu · health · ports · type help for all commands
 ```
+The hint text appears as a small subtitle. The word **help** appears slightly brighter.
+In the top-right corner of the header: username **admin**, a small **admin** role badge, and a **Sign Out** button.
 
-The hint text appears as a small subtitle line directly below the title inside the blue bar.
-The word **help** appears slightly brighter than the rest.
-
-If you have previously used the chatbot, old messages appear in the chat window below a
+If you have previously used the chatbot, old messages reappear in the chat window below a
 `— previous session —` divider. The chat window itself has NO automatic welcome bubble.
 
 **Pass if:**
-- Hint text is visible in the blue header (not in the chat window)
-- Chat window opens directly at the last message (no scrolling past a welcome bubble)
-- Previous session messages are separated by the `— previous session —` label
+- Login overlay appears before main app
+- After correct credentials: overlay hides, header visible with username and role badge
+- Hint text visible in the blue header
+- Chat window opens at the last message with `— previous session —` divider
 
 ---
 
@@ -697,21 +713,37 @@ No pending confirmation for 'disk_breakdown'. Use 'run disk_breakdown' first.
 
 ### TC-46 · View Current Config via Chat
 
-**Type:** `config`
+**Type:** `show system config`  *(also accepted: `config`)*
 
 **Expected response:**
 ```
-Current thresholds:
-  disk_warning: 80.0
-  disk_critical: 90.0
-  memory_warning: 80.0
-  memory_critical: 90.0
-  cpu_warning: 70.0
-  cpu_critical: 85.0
-  health_check_interval: 60
+System Configuration
+
+Disk Thresholds:
+  Warning:   80.0%
+  Critical:  90.0%
+
+Memory Thresholds:
+  Warning:   80.0%
+  Critical:  90.0%
+
+CPU Thresholds:
+  Warning:   70.0%
+  Critical:  85.0%
+
+Health Check:
+  Interval:  60s
+
+Slack:
+  Webhook:   (not configured)
+  Suppress:  10 minutes
+
+Daily Report:
+  Status:    Disabled
+  Hour:      08:00
 ```
 
-**Pass if:** Response lists all 7 threshold keys with their current values.
+**Pass if:** Response shows all grouped sections — Disk/Memory/CPU thresholds, Health Check, Slack, and Daily Report.
 
 ---
 
@@ -815,6 +847,8 @@ Chat history cleared.
 ---
 
 ## Section 15 — Run Tests via Chat
+
+> **Note:** The `run tests`, `run test suite`, and `pytest` commands are intentionally hidden from the Help tab and chat help output. They are for internal QA use only and are not part of the end-user interface.
 
 ---
 
@@ -1538,4 +1572,394 @@ Daily report scheduled for 09:00 each day.
 - Slack notifications: TC-80 to TC-86
 - Daily reports: TC-87 to TC-93
 
-**Grand total: 93 manual test cases**
+---
+
+## Section 22 — Login & Authentication
+
+---
+
+### TC-94 · Login Overlay Appears Before App
+
+**Action:** Open the ChatOps URL with no stored session (use a fresh browser / incognito window)
+
+**Expected:**
+- White login card centred on grey background
+- Title: "ChatOps Console"
+- Subtitle: "Sign in to access the operations dashboard"
+- Username and Password fields
+- **Sign In** button
+- Blue header, nav tabs, and chat window are NOT visible yet
+
+**Pass if:** Login card is the first and only thing visible on the page.
+
+---
+
+### TC-95 · Login — Wrong Password
+
+**Action:** Enter username `admin`, password `wrongpassword`, click **Sign In**
+
+**Expected:** Error message appears in red below the button:
+```
+Invalid username or password.
+```
+The login overlay stays open. The main app does not appear.
+
+**Pass if:** Error is shown inline; app remains hidden.
+
+---
+
+### TC-96 · Login — Blank Fields
+
+**Action:** Leave both fields empty and click **Sign In**
+
+**Expected:**
+```
+Enter username and password.
+```
+
+**Pass if:** Validation fires before sending a request to the server.
+
+---
+
+### TC-97 · Login — Correct Credentials
+
+**Action:** Enter `admin` / `admin`, click **Sign In** (or press Enter in the password field)
+
+**Expected:**
+- Login overlay disappears
+- Blue header becomes visible
+- Top-right of header shows: username `admin` · role badge `admin` · **Sign Out** button
+- Chat tab is active; previous session history loads
+
+**Pass if:** All of the above are visible after login.
+
+---
+
+### TC-98 · Enter Key Works on Login Form
+
+**Action:** Type `admin` in username, press **Tab**, type `admin` in password, press **Enter**
+
+**Expected:** Login proceeds exactly as clicking the Sign In button.
+
+**Pass if:** Enter key in the password field submits the form.
+
+---
+
+### TC-99 · Session Persists on Page Reload
+
+**Prerequisite:** Successfully logged in (TC-97)
+
+**Action:** Reload the page (F5 or browser refresh)
+
+**Expected:**
+- Login overlay does NOT appear
+- App loads directly with main interface
+- Username and role badge still visible in header
+
+**Pass if:** No re-login required after reload within the 8-hour session window.
+
+---
+
+### TC-100 · Sign Out
+
+**Action:** Click the **Sign Out** button in the header
+
+**Expected:**
+- Login overlay reappears immediately
+- Main app (header + tabs + chat) is hidden again
+- After page reload, login overlay still appears (token cleared)
+
+**Pass if:** Sign Out clears the session and restores the login page.
+
+---
+
+### TC-101 · API Requires Authentication
+
+**Action:**
+1. Sign out (TC-100)
+2. Open browser developer tools (F12) → Console tab
+3. Type: `fetch('/chatops/config').then(r => console.log(r.status))`
+
+**Expected:** Console prints `401`
+
+**Pass if:** Unauthenticated API access returns 401, not 200.
+
+---
+
+## Section 23 — User Management
+
+> **Prerequisite for all tests in this section:** Logged in as `admin`.
+
+---
+
+### TC-102 · Add a New User via Chat
+
+**Type:** `add user john abc123 operator`
+
+**Expected:**
+```
+User 'john' created with role 'operator'.
+```
+
+**Pass if:** Response confirms user was created with the correct role.
+
+---
+
+### TC-103 · List Users via Chat
+
+**Type:** `list users`
+
+**Expected:**
+```
+Users:
+  admin — admin (active)
+  john  — operator (active)
+```
+
+**Pass if:** Both users appear with role and status.
+
+---
+
+### TC-104 · New User Can Log In
+
+**Prerequisite:** TC-102 completed
+
+**Action:** Sign out, then log in with username `john` / password `abc123`
+
+**Expected:**
+- Login succeeds
+- Header shows username `john` · role badge `operator`
+
+**Pass if:** New user account works immediately after creation.
+
+---
+
+### TC-105 · Operator Role — Cannot Change Config
+
+**Prerequisite:** Logged in as `john` (operator)
+
+**Action:** Go to the Config tab and click **Save Settings**
+
+**Expected:** Request fails with a permission error (browser console shows 403).
+The `show system config` chat command still works (read-only).
+
+**Pass if:** Operator can read config but PUT request returns 403.
+
+---
+
+### TC-106 · Set User Role via Chat
+
+**Prerequisite:** Logged in as `admin`
+
+**Type:** `set role john viewer`
+
+**Expected:**
+```
+User 'john' role updated to 'viewer'.
+```
+
+**Pass if:** Role updated. Log in as `john` and verify role badge shows `viewer`.
+
+---
+
+### TC-107 · Deactivate User via Chat
+
+**Prerequisite:** Logged in as `admin`
+
+**Type:** `remove user john`
+
+**Expected:**
+```
+User 'john' deactivated.
+```
+
+**Pass if:** Response confirms deactivation.
+
+---
+
+### TC-108 · Deactivated User Cannot Log In
+
+**Prerequisite:** TC-107 completed
+
+**Action:** Sign out, try to log in as `john` / `abc123`
+
+**Expected:** "Invalid username or password." error (deactivated accounts are blocked)
+
+**Pass if:** Login is rejected for deactivated user.
+
+---
+
+### TC-109 · Duplicate Username Shows Error
+
+**Type:** `add user admin newpass123 viewer`
+
+**Expected:**
+```
+User 'admin' already exists.
+```
+
+**Pass if:** No duplicate created; error returned.
+
+---
+
+### TC-110 · Invalid Role Shows Error via Chat
+
+**Type:** `add user dave pass123 superuser`
+
+*(superuser is not a valid role)*
+
+**Expected:** The command does not match the pattern (requires `viewer`, `operator`, or `admin`) — router returns the "I didn't understand" fallback.
+
+**Pass if:** No user is created; fallback message shown.
+
+---
+
+## Section 24 — Audit Trail
+
+> **Prerequisite:** Logged in as `admin`.
+
+---
+
+### TC-111 · Audit Log Records Commands
+
+**Step 1 — Send a command:** `check disk`
+
+**Step 2 — Type:** `show audit log`
+
+**Expected:**
+```
+Recent audit log (last 10):
+  [2026-05-04 22:15] admin: check disk
+  [2026-05-04 22:14] admin: show audit log
+  ...
+```
+
+**Pass if:** "check disk" appears in the audit log attributed to `admin`.
+
+---
+
+### TC-112 · Audit Log Shows Multiple Users
+
+**Prerequisite:** Create user `john` (TC-102), log in as `john`, send `check memory`, log back in as `admin`
+
+**Type:** `show audit log`
+
+**Expected:** Log shows entries from both `admin` and `john` with their respective commands.
+
+**Pass if:** Both usernames appear in the audit log.
+
+---
+
+### TC-113 · Audit API — Requires Authentication
+
+**Action:**
+1. Sign out
+2. Open browser console and type:
+   `fetch('/chatops/audit').then(r => console.log(r.status))`
+
+**Expected:** Console prints `401`
+
+**Pass if:** Audit endpoint is not accessible without login.
+
+---
+
+## Section 25 — Docker Deployment
+
+> **Prerequisite:** Docker and Docker Compose installed on the host machine.
+
+---
+
+### TC-114 · Build Docker Image
+
+**Action:** On the server, run:
+```bash
+cd /home/<user>/chatops
+docker build -t chatops .
+```
+
+**Expected:** Build completes without errors. Final line shows the image tag.
+
+**Pass if:** `docker images chatops` shows the image with a recent timestamp.
+
+---
+
+### TC-115 · Start with Docker Compose
+
+**Action:**
+```bash
+docker-compose up -d
+```
+
+Then open `http://<server>:8000/chatops` in a browser.
+
+**Expected:** ChatOps login page appears. Log in with `admin` / `admin`.
+
+**Pass if:** App loads and login succeeds through the Docker container.
+
+---
+
+### TC-116 · Data Persists After Container Restart
+
+**Prerequisite:** TC-115 running; send 3 chat messages
+
+**Action:**
+```bash
+docker-compose restart
+```
+Wait ~5 seconds, then reload the browser and log in.
+
+**Expected:** Previous chat messages reappear under `— previous session —`.
+
+**Pass if:** SQLite data persisted in the Docker volume across restart.
+
+---
+
+### TC-117 · Custom Secret Key via Environment Variable
+
+**Action:** In `docker-compose.yml`, set `CHATOPS_SECRET=my-custom-secret` and restart.
+Log in. Reload the page.
+
+**Expected:** Session token signed with the new secret — existing tokens are invalidated (login page reappears after restart, which is expected and correct).
+
+**Pass if:** App starts successfully and accepts new logins after secret change.
+
+---
+
+## Test Execution Tracker (Phase 3 — Auth, Users, Audit, Docker)
+
+| TC # | Description | Result | Notes |
+|------|-------------|--------|-------|
+| TC-94  | Login overlay before app | | |
+| TC-95  | Login — wrong password error | | |
+| TC-96  | Login — blank fields validation | | |
+| TC-97  | Login — correct credentials | | |
+| TC-98  | Enter key on login form | | |
+| TC-99  | Session persists on reload | | |
+| TC-100 | Sign Out clears session | | |
+| TC-101 | API returns 401 without auth | | |
+| TC-102 | Add user via chat | | |
+| TC-103 | List users via chat | | |
+| TC-104 | New user can log in | | |
+| TC-105 | Operator cannot change config | | |
+| TC-106 | Set user role | | |
+| TC-107 | Deactivate user via chat | | |
+| TC-108 | Deactivated user cannot log in | | |
+| TC-109 | Duplicate username error | | |
+| TC-110 | Invalid role not accepted | | |
+| TC-111 | Audit log records commands | | |
+| TC-112 | Audit log shows multiple users | | |
+| TC-113 | Audit API requires auth | | |
+| TC-114 | Build Docker image | | |
+| TC-115 | Start with docker-compose | | |
+| TC-116 | Data persists after restart | | |
+| TC-117 | Custom secret key via env var | | |
+
+---
+
+**Phase 3 Total: 24 new test cases (TC-94 to TC-117)**
+- Login & authentication: TC-94 to TC-101
+- User management: TC-102 to TC-110
+- Audit trail: TC-111 to TC-113
+- Docker deployment: TC-114 to TC-117
+
+**Grand total: 117 manual test cases**
