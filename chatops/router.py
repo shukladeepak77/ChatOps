@@ -424,7 +424,7 @@ def route_message(message: str) -> Dict[str, str]:
     if intent == "alerts":
         from .db import get_alerts, unacked_count
         node_filter = target_node if target_node and target_node != "all" else None
-        alerts = get_alerts(limit=5, node=node_filter)
+        alerts = get_alerts(limit=20, node=node_filter)
         count = unacked_count(node=node_filter)
         scope = f" for [{node_filter}]" if node_filter else ""
         if not alerts:
@@ -650,6 +650,18 @@ def route_message(message: str) -> Dict[str, str]:
         for n, info in nodes.items():
             lines.append(f"  {n} — {info['user']}@{info['host']}  (key: {info['key_path']})")
         return {"response": "\n".join(lines)}
+
+    from .llm import ask as _llm_ask, is_configured as _llm_ok
+    if _llm_ok() and raw:
+        answer = _llm_ask(
+            raw,
+            system=(
+                "You are a DevOps and Linux systems assistant embedded in a ChatOps console. "
+                "Answer the operator's question concisely and technically. "
+                "Focus on actionable steps. Keep responses under 150 words."
+            ),
+        )
+        return {"response": answer}
 
     return {
         "response": (
