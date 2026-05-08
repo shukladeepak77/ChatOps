@@ -11,6 +11,10 @@ venv/
 
 # Logs
 sample_logs/
+*.log
+
+# PDF / binary assets
+*.pdf
 
 # Environment
 .env
