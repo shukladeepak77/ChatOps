@@ -417,6 +417,22 @@ def route_message(message: str) -> Dict[str, str]:
         status = "enabled" if enabled else "disabled"
         return {"response": f"Daily report {status}."}
 
+    # ── Free-form questions → LLM (before intent detection) ───────────────────
+    _Q_WORDS = ("how ", "why ", "what ", "when ", "where ", "can ", "should ",
+                "is ", "are ", "does ", "will ", "explain ", "tell me", "describe ")
+    if any(s.startswith(q) for q in _Q_WORDS):
+        from .llm import ask as _llm_ask, is_configured as _llm_ok
+        if _llm_ok():
+            answer = _llm_ask(
+                raw,
+                system=(
+                    "You are a DevOps and Linux systems assistant embedded in a ChatOps console. "
+                    "Answer concisely and technically with actionable steps. "
+                    "Keep responses under 150 words."
+                ),
+            )
+            return {"response": answer}
+
     # ── Intent detection ───────────────────────────────────────────────────────
     intent = _detect_intent(s)
 
