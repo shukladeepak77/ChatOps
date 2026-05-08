@@ -9,5 +9,9 @@
   "slack_webhook": "YOUR_SLACK_WEBHOOK_URL",
   "alert_suppress_minutes": 30,
   "report_enabled": true,
-  "report_hour": 10
+  "report_hour": 10,
+  "llm_provider": "groq",
+  "llm_model": "llama-3.1-70b-versatile",
+  "llm_api_key": "",
+  "ollama_url": "http://localhost:11434"
 }

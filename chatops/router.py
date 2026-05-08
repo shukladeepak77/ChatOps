@@ -298,6 +298,72 @@ def route_message(message: str) -> Dict[str, str]:
             lines.append(f"  [{ts}] {entry['username']}: {entry['command']}")
         return {"response": "\n".join(lines)}
 
+    # ── LLM config commands ────────────────────────────────────────────────────
+    llm_provider_m = re.match(r'^config\s+set\s+llm\s+provider\s+(\S+)$', s)
+    if llm_provider_m:
+        from .config import save_config as _sc
+        from .llm import _VALID_PROVIDERS
+        provider = llm_provider_m.group(1).lower()
+        if provider not in _VALID_PROVIDERS:
+            return {"response": f"Unknown provider '{provider}'. Choose: {', '.join(_VALID_PROVIDERS)}"}
+        _sc({"llm_provider": provider})
+        return {"response": f"LLM provider set to '{provider}'."}
+
+    # config set llm api key <key>  — preserve case
+    llm_key_m = re.match(r'^config\s+set\s+llm\s+api[\s_-]?key\s+(\S+)$', raw, re.IGNORECASE)
+    if llm_key_m:
+        from .config import save_config as _sc
+        _sc({"llm_api_key": llm_key_m.group(1)})
+        return {"response": "LLM API key saved."}
+
+    llm_model_m = re.match(r'^config\s+set\s+llm\s+model\s+(\S+)$', raw, re.IGNORECASE)
+    if llm_model_m:
+        from .config import save_config as _sc
+        _sc({"llm_model": llm_model_m.group(1)})
+        return {"response": f"LLM model set to '{llm_model_m.group(1)}'."}
+
+    llm_url_m = re.match(r'^config\s+set\s+ollama[\s_-]?url\s+(\S+)$', raw, re.IGNORECASE)
+    if llm_url_m:
+        from .config import save_config as _sc
+        _sc({"ollama_url": llm_url_m.group(1)})
+        return {"response": f"Ollama URL set to '{llm_url_m.group(1)}'."}
+
+    # test llm
+    if s == "test llm":
+        from .llm import ask as _llm_ask, is_configured as _llm_ok
+        if not _llm_ok():
+            return {"response": "LLM not configured. Use:\n  config set llm provider <ollama|groq|claude>\n  config set llm api key <key>  (groq/claude only)"}
+        result = _llm_ask("Reply with exactly: LLM OK", system="You are a test responder.")
+        return {"response": f"LLM test: {result}"}
+
+    # explain alert <id>
+    explain_m = re.match(r'^explain\s+alert\s+(\d+)$', s)
+    if explain_m:
+        from .db import get_alerts as _get_alerts
+        from .llm import ask as _llm_ask, is_configured as _llm_ok
+        if not _llm_ok():
+            return {"response": "LLM not configured. Use: config set llm provider <ollama|groq|claude>"}
+        alert_id = int(explain_m.group(1))
+        alerts = _get_alerts(limit=500)
+        alert = next((a for a in alerts if a["id"] == alert_id), None)
+        if not alert:
+            return {"response": f"Alert #{alert_id} not found."}
+        prompt = (
+            f"Alert: {alert['message']}\n"
+            f"Severity: {alert['severity']}\n"
+            f"Node: {alert['node']}\n"
+            f"Time: {alert['timestamp']}\n\n"
+            f"In 2-3 sentences: what is the likely root cause, and what is the single most important action to take?"
+        )
+        rca = _llm_ask(prompt)
+        return {
+            "response": (
+                f"Alert #{alert_id} — {alert['severity']}\n"
+                f"{alert['message']}\n\n"
+                f"RCA:\n{rca}"
+            )
+        }
+
     # config set slack_webhook <url>  — match case-insensitively but preserve original URL case
     slack_cfg_m = re.match(r'^config\s+set\s+slack[-_]?webhook\s+(\S+)$', raw, re.IGNORECASE)
     if slack_cfg_m:
@@ -461,6 +527,12 @@ def route_message(message: str) -> Dict[str, str]:
         webhook = cfg.get("slack_webhook", "")
         webhook_display = webhook if webhook else "(not configured)"
         report_status = "Enabled" if cfg.get("report_enabled") else "Disabled"
+        llm_provider = cfg.get("llm_provider", "none")
+        llm_model_cfg = cfg.get("llm_model", "")
+        from .llm import _DEFAULT_MODELS
+        llm_model_display = llm_model_cfg or _DEFAULT_MODELS.get(llm_provider, "-")
+        llm_key = cfg.get("llm_api_key", "")
+        llm_key_display = ("*" * 6 + llm_key[-4:]) if len(llm_key) > 4 else ("(not set)" if not llm_key else llm_key)
         lines = [
             "System Configuration",
             "",
@@ -486,6 +558,12 @@ def route_message(message: str) -> Dict[str, str]:
             "Daily Report:",
             f"  Status:    {report_status}",
             f"  Hour:      {cfg.get('report_hour', 8):02d}:00",
+            "",
+            "LLM / AI:",
+            f"  Provider:  {llm_provider}",
+            f"  Model:     {llm_model_display}",
+            f"  API Key:   {llm_key_display}",
+            f"  Ollama URL:{cfg.get('ollama_url', 'http://localhost:11434')}",
         ]
         return {"response": "\n".join(lines)}
 

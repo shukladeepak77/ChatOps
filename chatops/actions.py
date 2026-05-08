@@ -47,6 +47,13 @@ def help_text() -> str:
         f"  {_s(gray,'config set report on')} | {_s(gray,'config set report off')}"
         f" | {_s(gray,'config set report hour &lt;0-23&gt;')} | {_s(gray,'show report')}\n"
         "\n"
+        '<span style="color:#374151;font-weight:700">AI / LLM:</span>\n'
+        f"  {_s(green,'explain alert &lt;id&gt;')} | {_s(green,'test llm')}\n"
+        f"  {_s(gray,'config set llm provider &lt;ollama|groq|claude|none&gt;')}\n"
+        f"  {_s(gray,'config set llm api key &lt;key&gt;')} | {_s(gray,'config set llm model &lt;model&gt;')}\n"
+        f"  {_s(gray,'config set ollama url &lt;url&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— default: http://localhost:11434</span>\n'
+        "\n"
         '<span style="color:#374151;font-weight:700">General:</span>\n'
         f"  {_s(gray,'show system config')} | {_s(gray,'help')}\n"
         "\n"

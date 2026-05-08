@@ -1962,4 +1962,318 @@ Log in. Reload the page.
 - Audit trail: TC-111 to TC-113
 - Docker deployment: TC-114 to TC-117
 
-**Grand total: 117 manual test cases**
+**Phase 3 Grand total: 117 manual test cases**
+
+---
+
+## Section 26 — LLM / AI Integration
+
+> **Prerequisite for all tests in this section:** Logged in as `admin`.
+> The LLM provider defaults to `none` (disabled) on a fresh install. Tests are grouped by provider so you can run only the providers you have access to.
+
+---
+
+### TC-118 · Config Display Includes LLM Section
+
+**Type:** `show system config`
+
+**Expected response includes (near the bottom):**
+```
+LLM / AI:
+  Provider:  none
+  Model:     -
+  API Key:   (not set)
+  Ollama URL:http://localhost:11434
+```
+
+**Pass if:** Response contains an `LLM / AI:` section with all four rows: Provider, Model, API Key, and Ollama URL.
+
+---
+
+### TC-119 · Help Command Lists LLM Commands
+
+**Type:** `help`
+
+**Expected response includes:**
+```
+AI / LLM:
+  explain alert <id> | test llm
+  config set llm provider <ollama|groq|claude|none>
+  config set llm api key <key> | config set llm model <model>
+  config set ollama url <url>
+```
+
+**Pass if:** Help output contains the `AI / LLM:` section with `explain alert`, `test llm`, and the four `config set llm` commands.
+
+---
+
+### TC-120 · Set LLM Provider — Valid Value
+
+**Type:** `config set llm provider ollama`
+
+**Expected:**
+```
+LLM provider set to 'ollama'.
+```
+
+**Verify:** Type `show system config` — the Provider row now shows `ollama` and Model shows `llama3.2` (auto-selected default).
+
+**Pass if:** Provider is saved and reflected in config display.
+
+---
+
+### TC-121 · Set LLM Provider — Invalid Value
+
+**Type:** `config set llm provider openai`
+
+**Expected:**
+```
+Unknown provider 'openai'. Choose: none, ollama, groq, claude
+```
+
+**Pass if:** Error message is shown; provider is unchanged (type `show system config` to confirm).
+
+---
+
+### TC-122 · Set LLM Provider — Disable (none)
+
+**Prerequisite:** Provider currently set to any value (e.g., from TC-120)
+
+**Type:** `config set llm provider none`
+
+**Expected:**
+```
+LLM provider set to 'none'.
+```
+
+**Pass if:** Provider resets to `none`. Running `test llm` immediately after returns the "not configured" guidance message.
+
+---
+
+### TC-123 · Set LLM API Key
+
+**Type:** `config set llm api key gsk_testkey12345`
+
+**Expected:**
+```
+LLM API key saved.
+```
+
+**Verify:** Type `show system config` — the API Key row shows `******2345` (last 4 characters visible, rest masked with `*`).
+
+**Pass if:** Key is saved; masked format shown in config — full key is NOT printed back.
+
+---
+
+### TC-124 · Set LLM Model Override (with dot in name)
+
+**Type:** `config set llm model llama3.2`
+
+**Expected:**
+```
+LLM model set to 'llama3.2'.
+```
+
+**Verify:** Type `show system config` — Model row shows `llama3.2` (dot preserved).
+
+**Pass if:** Model name including the `.` character is saved exactly as typed. This verifies the dot is not stripped.
+
+---
+
+### TC-125 · Set Ollama URL
+
+**Type:** `config set ollama url http://192.168.1.5:11434`
+
+**Expected:**
+```
+Ollama URL set to 'http://192.168.1.5:11434'.
+```
+
+**Verify:** Type `show system config` — Ollama URL row shows the new address.
+
+**Pass if:** Custom URL is saved and displayed in config.
+
+**Reset after test:** `config set ollama url http://localhost:11434` to restore the default.
+
+---
+
+### TC-126 · test llm — Provider Not Configured
+
+**Prerequisite:** `config set llm provider none`
+
+**Type:** `test llm`
+
+**Expected:**
+```
+LLM not configured. Use:
+  config set llm provider <ollama|groq|claude>
+  config set llm api key <key>  (groq/claude only)
+```
+
+**Pass if:** Guidance message is shown. No crash, no server error, no blank response.
+
+---
+
+### TC-127 · test llm — Cloud Provider Without API Key
+
+**Step 1 — Type:** `config set llm provider groq`
+
+**Step 2 — Type:** `test llm` *(without setting an API key)*
+
+**Expected:**
+```
+LLM not configured. Use:
+  config set llm provider <ollama|groq|claude>
+  config set llm api key <key>  (groq/claude only)
+```
+
+**Pass if:** Missing API key is caught before any outbound network call. Guidance message shown.
+
+---
+
+### TC-128 · test llm — Ollama (Local, Free)
+
+> **Prerequisite:** Ollama installed and running (`ollama serve`), `llama3.2` model pulled (`ollama pull llama3.2`).
+
+**Step 1 — Type:** `config set llm provider ollama`
+
+**Step 2 — Type:** `test llm`
+
+**Expected:**
+```
+LLM test: LLM OK
+```
+*(Exact wording may vary — the model may rephrase, but a short response is returned)*
+
+**Pass if:** Response contains `LLM test:` followed by a non-empty, non-error string. Error bracket format like `[Ollama unreachable:...]` must NOT appear.
+
+---
+
+### TC-129 · test llm — Groq (Cloud, Free Tier)
+
+> **Prerequisite:** A free Groq API key from `console.groq.com`.
+
+**Step 1 — Type:** `config set llm provider groq`
+
+**Step 2 — Type:** `config set llm api key <your-groq-key>`
+
+**Step 3 — Type:** `test llm`
+
+**Expected:**
+```
+LLM test: LLM OK
+```
+
+**Pass if:** Response contains `LLM test:` and no error bracket. Confirms the Groq API key and endpoint are working.
+
+---
+
+### TC-130 · test llm — Claude (Anthropic API)
+
+> **Prerequisite:** A valid Anthropic API key.
+
+**Step 1 — Type:** `config set llm provider claude`
+
+**Step 2 — Type:** `config set llm api key <your-anthropic-key>`
+
+**Step 3 — Type:** `config set llm model claude-haiku-4-5-20251001`
+
+**Step 4 — Type:** `test llm`
+
+**Expected:**
+```
+LLM test: LLM OK
+```
+
+**Pass if:** Response contains `LLM test:` and no error bracket. Confirms Claude Haiku API connectivity.
+
+---
+
+### TC-131 · explain alert — LLM Not Configured
+
+**Prerequisite:** `config set llm provider none`
+
+**Step 1 — Type:** `show alerts` to note any existing alert ID (e.g., `3`)
+
+**Step 2 — Type:** `explain alert 3`
+
+**Expected:**
+```
+LLM not configured. Use: config set llm provider <ollama|groq|claude>
+```
+
+**Pass if:** Guidance message shown with no crash or blank response. The alert itself is NOT modified.
+
+---
+
+### TC-132 · explain alert — Valid Alert, LLM Active
+
+> **Prerequisite:** LLM configured and connectivity confirmed (TC-128, TC-129, or TC-130 passed).
+
+**Step 1 — Type:** `show alerts`
+
+Note an alert ID from the list (e.g., `5`).
+
+**Step 2 — Type:** `explain alert 5`
+
+**Expected structure:**
+```
+Alert #5 — WARNING
+Disk WARNING: 85.2% used
+
+RCA:
+<2–3 sentence plain-English root cause and recommended action>
+```
+
+**Pass if:**
+- The original alert message is shown at the top
+- An `RCA:` section is present with a non-empty response
+- No error bracket appears in the RCA text (e.g., `[Groq HTTP 401...]` would be a FAIL)
+- Response arrives within 15 seconds
+
+---
+
+### TC-133 · explain alert — Non-existent Alert ID
+
+> **Prerequisite:** LLM configured
+
+**Type:** `explain alert 99999`
+
+**Expected:**
+```
+Alert #99999 not found.
+```
+
+**Pass if:** Clean "not found" message returned. No LLM call is made (response is instant). No server error or crash.
+
+---
+
+## Test Execution Tracker (Phase 4 — LLM / AI Integration)
+
+| TC # | Description | Result | Notes |
+|------|-------------|--------|-------|
+| TC-118 | Config display includes LLM section | | |
+| TC-119 | Help lists LLM commands | | |
+| TC-120 | Set LLM provider — valid | | |
+| TC-121 | Set LLM provider — invalid value | | |
+| TC-122 | Set LLM provider — disable (none) | | |
+| TC-123 | Set LLM API key — masked in display | | |
+| TC-124 | Set LLM model — dot preserved | | |
+| TC-125 | Set Ollama URL | | |
+| TC-126 | test llm — provider not set | | |
+| TC-127 | test llm — cloud provider, no key | | |
+| TC-128 | test llm — Ollama (local) | | |
+| TC-129 | test llm — Groq (free tier) | | |
+| TC-130 | test llm — Claude (Anthropic) | | |
+| TC-131 | explain alert — LLM not configured | | |
+| TC-132 | explain alert — valid alert, RCA returned | | |
+| TC-133 | explain alert — non-existent ID | | |
+
+---
+
+**Phase 4 Total: 16 new test cases (TC-118 to TC-133)**
+- Config & setup: TC-118 to TC-125
+- Provider connectivity: TC-126 to TC-130
+- RCA / explain alert: TC-131 to TC-133
+
+**Grand total: 133 manual test cases**

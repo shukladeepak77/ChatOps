@@ -13,6 +13,10 @@ _DEFAULTS = {
     "alert_suppress_minutes": 10,
     "report_enabled": False,
     "report_hour": 8,
+    "llm_provider": "none",
+    "llm_model": "",
+    "llm_api_key": "",
+    "ollama_url": "http://localhost:11434",
 }
 
 _CONFIG_FILE = "chatops_config.json"
