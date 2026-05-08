@@ -4,9 +4,11 @@ import urllib.error
 
 from .config import load_config
 
+_UA = "ChatOps/1.0"
+
 _DEFAULT_MODELS = {
     "ollama": "llama3.2",
-    "groq":   "llama-3.1-70b-versatile",
+    "groq":   "llama-3.3-70b-versatile",
     "claude": "claude-haiku-4-5-20251001",
 }
 
@@ -54,7 +56,7 @@ def _ask_ollama(prompt: str, system: str, model: str, base_url: str) -> str:
         req = urllib.request.Request(
             f"{base_url}/api/generate",
             data=data,
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", "User-Agent": _UA},
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -79,6 +81,7 @@ def _ask_openai_compat(prompt: str, system: str, model: str, base_url: str, api_
             headers={
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {api_key}",
+                "User-Agent": _UA,
             },
             method="POST",
         )
@@ -107,6 +110,7 @@ def _ask_claude(prompt: str, system: str, model: str, api_key: str) -> str:
                 "Content-Type":      "application/json",
                 "x-api-key":         api_key,
                 "anthropic-version": "2023-06-01",
+                "User-Agent":        _UA,
             },
             method="POST",
         )
