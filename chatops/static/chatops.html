@@ -735,6 +735,7 @@ function renderAlerts() {
     return `
       <div class="alert-card ${sev}">
         <span class="sev-badge ${sev}">${a.severity}</span>
+        <span style="color:#9ca3af;font-size:.75rem;margin-right:4px">#${a.id}</span>
         <span class="alert-msg">${escHtml(a.message)}</span>
         <span class="alert-time">${ts}</span>
         ${!a.acked

@@ -432,7 +432,7 @@ def route_message(message: str) -> Dict[str, str]:
         lines = [f"Recent alerts{scope} ({count} unacknowledged):"]
         for a in alerts:
             ack = "✓" if a["acked"] else "!"
-            lines.append(f"  [{ack}] [{a['severity']}] {a['message']}  ({a['timestamp']})")
+            lines.append(f"  #{a['id']} [{ack}] [{a['severity']}] {a['message']}  ({a['timestamp']})")
         return {"response": "\n".join(lines)}
 
     # ── Remote dispatch ────────────────────────────────────────────────────────
