@@ -4,8 +4,8 @@ from typing import Dict, Optional, List
 RUNBOOKS: Dict[str, dict] = {
     "clear_tmp": {
         "description": "Delete files in /tmp older than 1 day",
-        "command": ["find", "/tmp", "-maxdepth", "1", "-type", "f", "-mtime", "+1", "-delete"],
-        "preview": "find /tmp -maxdepth 1 -type f -mtime +1 -delete",
+        "command": ["find", "/tmp", "-maxdepth", "1", "-type", "f", "-mtime", "+1", "-print", "-delete"],
+        "preview": "find /tmp -maxdepth 1 -type f -mtime +1 -print -delete",
     },
     "disk_breakdown": {
         "description": "Show disk usage by mounted filesystem",
@@ -14,8 +14,8 @@ RUNBOOKS: Dict[str, dict] = {
     },
     "large_logs": {
         "description": "List log files over 50MB in /var/log",
-        "command": ["find", "/var/log", "-type", "f", "-size", "+50M", "-exec", "ls", "-lh", "{}", ";"],
-        "preview": "find /var/log -type f -size +50M",
+        "command": ["find", "/var/log", "-type", "f", "-size", "+50M", "-ls"],
+        "preview": "find /var/log -type f -size +50M -ls",
     },
     "listening_services": {
         "description": "List all listening services with PIDs",
@@ -70,7 +70,9 @@ def confirm_runbook(name: str) -> dict:
             rb["command"], shell=rb.get("shell", False),
             capture_output=True, text=True, timeout=30
         )
-        output = (result.stdout or result.stderr or "(no output)").strip()
+        stdout = result.stdout.strip()
+        stderr = "\n".join(l for l in result.stderr.splitlines() if "Permission denied" not in l).strip()
+        output = stdout or stderr or "Done. Nothing to delete."
         return {"status": "ok", "output": output[:1500]}
     except subprocess.TimeoutExpired:
         return {"status": "error", "message": "Runbook timed out after 30 seconds."}

@@ -696,42 +696,84 @@ def route_message(message: str, caller_role: str = "operator") -> Dict[str, str]
         return {"response": "\n".join(lines)}
 
     if intent == "config":
+        import socket as _sock, platform, subprocess as _sp
         webhook = cfg.get("slack_webhook", "")
         webhook_display = webhook if webhook else "(not configured)"
         report_status = "Enabled" if cfg.get("report_enabled") else "Disabled"
         llm_provider = cfg.get("llm_provider", "none")
         llm_model_cfg = cfg.get("llm_model", "")
-        from .llm import _DEFAULT_MODELS
+        from .llm import _DEFAULT_MODELS, is_configured as _llm_ok
         llm_model_display = llm_model_cfg or _DEFAULT_MODELS.get(llm_provider, "-")
         llm_key = cfg.get("llm_api_key", "")
         llm_key_display = ("*" * 6 + llm_key[-4:]) if len(llm_key) > 4 else ("(not set)" if not llm_key else llm_key)
+        llm_status = "Active" if _llm_ok() else "Not configured"
+
+        disk = check_disk()
+        mem  = check_memory()
+        cpu  = check_cpu()
+        up   = check_uptime()
+        uptime_str = f"{up['uptime_days']}d {up['uptime_hours']}h {up['uptime_minutes']}m"
+
+        try:
+            hostname = _sock.gethostname()
+            local_ip = _sock.gethostbyname(hostname)
+        except Exception:
+            hostname, local_ip = "-", "-"
+
+        try:
+            os_info = platform.freedesktop_os_release().get("PRETTY_NAME", platform.system())
+        except Exception:
+            os_info = platform.system()
+
+        try:
+            kernel = _sp.check_output(["uname", "-r"], text=True).strip()
+        except Exception:
+            kernel = "-"
+
+        from .nodes import list_nodes as _list_nodes
+        node_count = len(_list_nodes())
+
+        from .db import list_users as _list_users, get_alerts
+        user_count = len(_list_users())
+        alert_count = get_alerts(limit=1000)
+        unacked = sum(1 for a in alert_count if not a.get("acked"))
+
         lines = [
             "System Configuration",
             "",
-            "Disk Thresholds:",
-            f"  Warning:   {cfg.get('disk_warning')}%",
-            f"  Critical:  {cfg.get('disk_critical')}%",
+            "Server:",
+            f"  Hostname:  {hostname}",
+            f"  IP:        {local_ip}",
+            f"  OS:        {os_info}",
+            f"  Kernel:    {kernel}",
+            f"  Uptime:    {uptime_str}",
             "",
-            "Memory Thresholds:",
-            f"  Warning:   {cfg.get('memory_warning')}%",
-            f"  Critical:  {cfg.get('memory_critical')}%",
+            "Live Metrics:",
+            f"  Disk:      {disk['percent_used']:.1f}% used  ({disk['used_gb']}GB / {disk['total_gb']}GB)",
+            f"  Memory:    {mem['percent_used']:.1f}% used  ({mem['used_mb']}MB / {mem['total_mb']}MB)",
+            f"  CPU:       {cpu['percent_used']:.1f}%  ({cpu['cpu_count']} cores)",
             "",
-            "CPU Thresholds:",
-            f"  Warning:   {cfg.get('cpu_warning')}%",
-            f"  Critical:  {cfg.get('cpu_critical')}%",
+            "ChatOps:",
+            f"  Nodes:     {node_count} registered",
+            f"  Users:     {user_count}",
+            f"  Alerts:    {unacked} unacknowledged",
             "",
-            "Health Check:",
+            "Alert Thresholds:",
+            f"  Disk:      warn {cfg.get('disk_warning')}%  critical {cfg.get('disk_critical')}%",
+            f"  Memory:    warn {cfg.get('memory_warning')}%  critical {cfg.get('memory_critical')}%",
+            f"  CPU:       warn {cfg.get('cpu_warning')}%  critical {cfg.get('cpu_critical')}%",
             f"  Interval:  {cfg.get('health_check_interval')}s",
+            f"  Suppress:  {cfg.get('alert_suppress_minutes')} minutes",
             "",
             "Slack:",
             f"  Webhook:   {webhook_display}",
-            f"  Suppress:  {cfg.get('alert_suppress_minutes')} minutes",
             "",
             "Daily Report:",
             f"  Status:    {report_status}",
             f"  Hour:      {cfg.get('report_hour', 8):02d}:00",
             "",
             "LLM / AI:",
+            f"  Status:    {llm_status}",
             f"  Provider:  {llm_provider}",
             f"  Model:     {llm_model_display}",
             f"  API Key:   {llm_key_display}",
