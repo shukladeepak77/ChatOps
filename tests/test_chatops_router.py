@@ -89,7 +89,7 @@ def test_route_runbooks_list():
 
 def test_route_config():
     resp = _resp("config")
-    assert "Disk" in resp and "Warning" in resp
+    assert "Disk" in resp and "warn" in resp
 
 
 # ── Inline log analysis ───────────────────────────────────────────────────────
@@ -241,3 +241,151 @@ def test_route_config_set_report_hour():
 def test_route_show_report():
     resp = _resp("show report")
     assert "health report" in resp.lower() or "report" in resp.lower()
+
+
+# ── User management (admin-only) ──────────────────────────────────────────────
+
+def _resp_role(msg, role="admin"):
+    from chatops.router import route_message
+    return route_message(msg, caller_role=role).get("response", "")
+
+
+def test_add_user_valid():
+    resp = _resp_role("add user testuser pass123 operator", role="admin")
+    assert "created" in resp.lower()
+
+
+def test_add_user_duplicate():
+    _resp_role("add user dupuser pass123 operator", role="admin")
+    resp = _resp_role("add user dupuser pass123 operator", role="admin")
+    assert "already exists" in resp.lower()
+
+
+def test_add_user_invalid_syntax():
+    resp = _resp_role("add user baduser admin", role="admin")
+    assert "Invalid syntax" in resp or "Usage" in resp
+
+
+def test_add_user_denied_for_operator():
+    resp = _resp_role("add user newuser pass123 viewer", role="operator")
+    assert "denied" in resp.lower() or "Access" in resp
+
+
+def test_list_users_admin():
+    resp = _resp_role("list users", role="admin")
+    assert "admin" in resp.lower()
+
+
+def test_list_users_denied_for_viewer():
+    resp = _resp_role("list users", role="viewer")
+    assert "denied" in resp.lower() or "Access" in resp
+
+
+def test_remove_user():
+    _resp_role("add user removetest pass123 viewer", role="admin")
+    resp = _resp_role("remove user removetest", role="admin")
+    assert "deleted" in resp.lower()
+
+
+def test_remove_admin_blocked():
+    resp = _resp_role("remove user admin", role="admin")
+    assert "Cannot" in resp
+
+
+def test_deactivate_user():
+    _resp_role("add user deactest pass123 viewer", role="admin")
+    resp = _resp_role("deactivate user deactest", role="admin")
+    assert "deactivated" in resp.lower()
+
+
+def test_set_role():
+    _resp_role("add user roletest pass123 viewer", role="admin")
+    resp = _resp_role("set role roletest operator", role="admin")
+    assert "updated" in resp.lower()
+
+
+def test_set_role_invalid_syntax():
+    resp = _resp_role("set role baduser", role="admin")
+    assert "Invalid syntax" in resp or "Usage" in resp
+
+
+# ── Show services ─────────────────────────────────────────────────────────────
+
+def test_show_services_returns_output():
+    resp = _resp("show services")
+    assert "Services" in resp or "No services" in resp
+
+
+def test_show_services_tip():
+    resp = _resp("show services")
+    assert "Tip" in resp or "filter" in resp or "Services" in resp
+
+
+def test_search_services_filter():
+    resp = _resp("show services systemd")
+    assert "systemd" in resp.lower() or "No services" in resp
+
+
+# ── Kill process ──────────────────────────────────────────────────────────────
+
+def test_kill_invalid_pid():
+    resp = _resp("kill process 9999999")
+    assert "No process" in resp or "not found" in resp.lower()
+
+
+def test_confirm_kill_without_request():
+    resp = _resp("confirm kill 12345")
+    assert "No pending" in resp or "first" in resp.lower()
+
+
+# ── DNS lookup ────────────────────────────────────────────────────────────────
+
+def test_check_dns_default():
+    resp = _resp("check dns")
+    assert "DNS" in resp
+
+
+def test_check_dns_domain():
+    resp = _resp("check dns google.com")
+    assert "google.com" in resp or "DNS" in resp or "Resolved" in resp
+
+
+def test_check_dns_invalid_domain():
+    resp = _resp("check dns thisisnotavaliddomain12345xyz.com")
+    assert "not found" in resp.lower() or "NXDOMAIN" in resp or "failed" in resp.lower() or "DNS" in resp
+
+
+# ── Analytics router ──────────────────────────────────────────────────────────
+
+def test_show_analytics_basic():
+    resp = _resp("show analytics")
+    assert "Analytics" in resp and "Alerts" in resp
+
+
+def test_show_analytics_with_period():
+    resp = _resp("show analytics 14d")
+    assert "14 days" in resp
+
+
+# ── Slack config commands ─────────────────────────────────────────────────────
+
+def test_config_set_slack_bot_token():
+    resp = _resp_role("config set slack bot token xoxb-test-token", role="admin")
+    assert "token" in resp.lower() or "saved" in resp.lower() or "enabled" in resp.lower()
+
+
+def test_config_set_slack_signing_secret():
+    resp = _resp_role("config set slack signing secret mysecret123", role="admin")
+    assert "saved" in resp.lower() or "secret" in resp.lower()
+
+
+# ── LLM config (admin-only) ───────────────────────────────────────────────────
+
+def test_show_llm_config_admin():
+    resp = _resp_role("show llm config", role="admin")
+    assert "Provider" in resp or "LLM" in resp
+
+
+def test_show_llm_config_denied_for_operator():
+    resp = _resp_role("show llm config", role="operator")
+    assert "denied" in resp.lower() or "Access" in resp

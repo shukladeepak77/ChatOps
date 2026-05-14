@@ -614,6 +614,25 @@ function addBubble(text, sender, scroll = true) {
   }
   chatWin.appendChild(el);
   if (scroll) chatWin.scrollTop = chatWin.scrollHeight;
+  return el;
+}
+
+async function openTestLog(filename) {
+  try {
+    const res = await authFetch(`/chatops/test-log/${filename}`);
+    if (!res.ok) { alert('Could not load log file.'); return; }
+    const text = await res.text();
+    const win = window.open('', '_blank');
+    win.document.write(
+      `<!DOCTYPE html><html><head><title>${filename}</title>` +
+      `<style>body{margin:0;background:#1e1e2e;color:#cdd6f4;font-family:monospace;font-size:13px;}` +
+      `pre{padding:20px;white-space:pre-wrap;word-break:break-all;}</style></head>` +
+      `<body><pre>${text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre></body></html>`
+    );
+    win.document.close();
+  } catch(e) {
+    alert('Could not load log file.');
+  }
 }
 
 async function sendMessage() {
@@ -625,9 +644,10 @@ async function sendMessage() {
   input.value = '';
 
   const isRunbook = /^confirm\s+\S+/i.test(text);
+  const isRunTest = /^run\s+tests?/i.test(text);
   const pendingEl = document.createElement('div');
   pendingEl.className = 'bubble bot pending';
-  pendingEl.textContent = isRunbook ? 'Executing runbook…' : 'Working…';
+  pendingEl.textContent = isRunTest ? 'Test execution in progress… this may take a few minutes.' : isRunbook ? 'Executing runbook…' : 'Working…';
   chatWin.appendChild(pendingEl);
   chatWin.scrollTop = chatWin.scrollHeight;
   sendBtn.disabled = true;
@@ -640,7 +660,14 @@ async function sendMessage() {
     });
     const data = await res.json();
     pendingEl.remove();
-    addBubble(data?.response || 'No response', 'bot');
+    const bubble = addBubble(data?.response || 'No response', 'bot');
+    if (data?.log_file) {
+      const btn = document.createElement('button');
+      btn.textContent = '📋 Open Full Log';
+      btn.style.cssText = 'display:inline-block;margin-top:8px;padding:4px 12px;background:#3b82f6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:0.82em;';
+      btn.onclick = () => openTestLog(data.log_file);
+      bubble.appendChild(btn);
+    }
   } catch (e) {
     pendingEl.remove();
     addBubble('Error reaching server.', 'bot');

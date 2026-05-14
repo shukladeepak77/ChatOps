@@ -23,6 +23,11 @@ def help_text() -> str:
         f" | {_s(blue,'check uptime')} | {_s(blue,'check ports')}\n"
         f"  {_s(green,'top processes')} | {_s(green,'system health')}\n"
         "\n"
+        '<span style="color:#374151;font-weight:700">General:</span>\n'
+        f"  {_s(gray,'show system config')} | {_s(gray,'help')}\n"
+        f"  {_s(gray,'run tests')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— run the full automation test suite (pytest)</span>\n'
+        "\n"
         '<span style="color:#374151;font-weight:700">Alerts:</span>\n'
         f"  {_s(purple,'show alerts')}"
         f'  <span style="color:#9ca3af;font-style:italic">— view recent alerts with severity and ID</span>\n'
@@ -37,6 +42,19 @@ def help_text() -> str:
         '<span style="color:#374151;font-weight:700">Runbooks:</span>\n'
         f"  {_s(purple,'list runbooks')} | {_s(purple,'run &lt;runbook&gt;')}"
         f" | {_s(purple,'confirm &lt;runbook&gt;')} | {_s(purple,'cancel')}\n"
+        f'  <span style="color:#9ca3af;font-style:italic">  Available: clear_tmp, disk_breakdown, large_logs, listening_services, flush_cache, rotate_logs, rotate_secret</span>\n'
+        "\n"
+        '<span style="color:#374151;font-weight:700">Knowledge Base:</span>\n'
+        f"  {_s(cyan,'list kb')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— list all KB articles</span>\n'
+        f"  {_s(cyan,'add kb &lt;title&gt;: &lt;content&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— add a new article</span>\n'
+        f"  {_s(cyan,'show kb &lt;id&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— read full article</span>\n'
+        f"  {_s(cyan,'search kb &lt;keyword&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— search by title, content or tags</span>\n'
+        f"  {_s(cyan,'delete kb &lt;id&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— delete article (admin only)</span>\n'
         "\n"
         '<span style="color:#374151;font-weight:700">Network:</span>\n'
         f"  {_s(cyan,'check ip')} | {_s(cyan,'check routes')} | {_s(cyan,'check network')}"
@@ -62,9 +80,21 @@ def help_text() -> str:
         f"  {_s(rose,'&lt;any command&gt; on &lt;node&gt;')} | {_s(rose,'&lt;any command&gt; on all')}\n"
         f"  {_s(rose,'copy ssh key &lt;user&gt;@&lt;host&gt;')} | {_s(rose,'confirm copy ssh key')}\n"
         "\n"
+        '<span style="color:#374151;font-weight:700">Analytics:</span>\n'
+        f"  {_s(green,'show analytics')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— alert stats, MTTR, top commands (last 7 days)</span>\n'
+        f"  {_s(green,'show analytics &lt;N&gt;d')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— e.g. show analytics 30d</span>\n'
+        f"  {_s(green,'download PDF')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— GET /chatops/analytics/report.pdf</span>\n'
+        "\n"
         '<span style="color:#374151;font-weight:700">Slack &amp; Reports:</span>\n'
         f"  {_s(gray,'config set slack_webhook &lt;url&gt;')} | {_s(gray,'test slack')}"
         f" | {_s(gray,'config set alert suppress &lt;minutes&gt;')}\n"
+        f"  {_s(gray,'config set slack bot token &lt;token&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— enable inbound Slack commands</span>\n'
+        f"  {_s(gray,'config set slack signing secret &lt;secret&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— verify Slack request signatures</span>\n'
         f"  {_s(gray,'config set report on')} | {_s(gray,'config set report off')}"
         f" | {_s(gray,'config set report hour &lt;0-23&gt;')} | {_s(gray,'show report')}\n"
         "\n"
@@ -90,9 +120,6 @@ def help_text() -> str:
         f'  <span style="color:#9ca3af;font-style:italic">— disable login (user kept in DB)</span>\n'
         f"  {_s(rose,'remove user &lt;username&gt;')}"
         f'  <span style="color:#9ca3af;font-style:italic">— permanently delete user</span>\n'
-        "\n"
-        '<span style="color:#374151;font-weight:700">General:</span>\n'
-        f"  {_s(gray,'show system config')} | {_s(gray,'help')}\n"
         "\n"
         '<span style="color:#374151;font-weight:700">UI Only:</span>\n'
         f'  <span style="color:#7c3aed;font-weight:600;">Alert thresholds (disk / memory / cpu warning &amp; critical) are managed via the <span style="color:#4f46e5;text-decoration:underline;">Config tab</span> in the UI.</span>'
@@ -582,11 +609,14 @@ def run_tests() -> dict:
         "tests/test_chatops_config.py",
         "tests/test_chatops_runbooks.py",
         "tests/test_chatops_api.py",
+        "tests/test_chatops_analytics.py",
+        "tests/test_chatops_kb.py",
+        "tests/test_chatops_auth.py",
     ]
     try:
         result = subprocess.run(
             [sys.executable, "-m", "pytest"] + test_files + ["--tb=short", "-v"],
-            capture_output=True, text=True, timeout=180,
+            capture_output=True, text=True, timeout=300,
         )
         output = (result.stdout + result.stderr).strip()
         lines = [l for l in output.splitlines() if l.strip()]
@@ -598,10 +628,15 @@ def run_tests() -> dict:
         os.makedirs(log_dir, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         log_path = os.path.join(log_dir, f"pytest_{timestamp}.log")
+        log_filename = f"pytest_{timestamp}.log"
         with open(log_path, "w") as f:
             f.write(output)
 
-        return {"response": f"Test Run — {status}\n\n{summary}", "status": status}
+        return {
+            "response": f"Test Run — {status}\n\n{summary}\n\n📄 Log saved: {log_filename}",
+            "status": status,
+            "log_file": log_filename,
+        }
     except subprocess.TimeoutExpired:
         return {"response": "Tests timed out after 180 seconds.", "status": "TIMEOUT"}
     except Exception as e:

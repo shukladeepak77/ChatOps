@@ -54,6 +54,14 @@ def init_db():
                 node      TEXT    DEFAULT 'local',
                 timestamp TEXT    NOT NULL DEFAULT (datetime('now'))
             );
+            CREATE TABLE IF NOT EXISTS kb_articles (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                title      TEXT    NOT NULL,
+                content    TEXT    NOT NULL,
+                tags       TEXT    NOT NULL DEFAULT '',
+                created_by TEXT    NOT NULL DEFAULT 'admin',
+                created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+            );
         """)
         for table in ('metrics_history', 'alerts'):
             cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
@@ -343,3 +351,46 @@ def get_alert_count(since_hours: int = 24, node: str = None) -> dict:
         "total":  row["total"]  or 0,
         "unacked": row["unacked"] or 0,
     }
+
+
+# ── Knowledge Base ─────────────────────────────────────────────────────────────
+
+def kb_add(title: str, content: str, tags: str = "", created_by: str = "admin") -> int:
+    with _conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO kb_articles (title, content, tags, created_by) VALUES (?, ?, ?, ?)",
+            (title.strip(), content.strip(), tags.strip(), created_by),
+        )
+    return cur.lastrowid
+
+
+def kb_search(query: str) -> List[Dict]:
+    q = f"%{query}%"
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT id, title, tags, created_by, created_at FROM kb_articles "
+            "WHERE title LIKE ? OR content LIKE ? OR tags LIKE ? ORDER BY id DESC",
+            (q, q, q),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def kb_get(article_id: int) -> Dict | None:
+    with _conn() as conn:
+        row = conn.execute("SELECT * FROM kb_articles WHERE id=?", (article_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def kb_list(limit: int = 20) -> List[Dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT id, title, tags, created_by, created_at FROM kb_articles ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def kb_delete(article_id: int) -> bool:
+    with _conn() as conn:
+        cur = conn.execute("DELETE FROM kb_articles WHERE id=?", (article_id,))
+    return cur.rowcount > 0

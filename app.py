@@ -2,8 +2,8 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Request
+from fastapi.responses import HTMLResponse, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 import pathlib
@@ -430,6 +430,19 @@ def get_runbooks_endpoint(user=Depends(_require_role("viewer"))):
     return {"runbooks": list_runbooks()}
 
 
+@app.get("/chatops/test-log/{filename}")
+def get_test_log(filename: str, user=Depends(_require_role("viewer"))):
+    import re, os
+    from fastapi.responses import PlainTextResponse
+    if not re.fullmatch(r"pytest_\d{8}_\d{6}\.log", filename):
+        raise HTTPException(status_code=400, detail="Invalid log filename")
+    log_path = os.path.join(os.path.dirname(__file__), "sample_logs", filename)
+    if not os.path.isfile(log_path):
+        raise HTTPException(status_code=404, detail="Log file not found")
+    with open(log_path) as f:
+        return PlainTextResponse(f.read())
+
+
 @app.post("/chatops/upload-log")
 async def upload_log(file: UploadFile = File(...), user=Depends(_require_role("admin"))):
     content = await file.read()
@@ -451,3 +464,90 @@ async def upload_log(file: UploadFile = File(...), user=Depends(_require_role("a
     save_message("user", f"[uploaded] {file.filename}")
     save_message("bot", response)
     return {"response": response, "filename": file.filename}
+
+
+# ── Analytics ─────────────────────────────────────────────────────────────────
+
+@app.get("/chatops/analytics")
+def get_analytics(days: int = 7, user=Depends(_require_role("viewer"))):
+    from chatops.analytics import get_alert_stats, get_mttr_stats, get_command_stats
+    return {
+        "alert_stats": get_alert_stats(days),
+        "mttr": get_mttr_stats(),
+        "top_commands": get_command_stats(days),
+    }
+
+
+@app.get("/chatops/analytics/report.pdf")
+def download_pdf_report(days: int = 7, user=Depends(_require_role("viewer"))):
+    from chatops.analytics import generate_pdf_report
+    pdf_bytes = generate_pdf_report(days)
+    return Response(
+        content=bytes(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=chatops_report_{days}d.pdf"},
+    )
+
+
+# ── Slack inbound bot ─────────────────────────────────────────────────────────
+
+@app.post("/chatops/slack/events")
+async def slack_events(request: Request):
+    import hmac, hashlib, json as _json, time as _time
+    from chatops.config import load_config as _cfg
+
+    body = await request.body()
+    cfg = _cfg()
+    signing_secret = cfg.get("slack_signing_secret", "")
+
+    if signing_secret:
+        ts = request.headers.get("X-Slack-Request-Timestamp", "")
+        sig = request.headers.get("X-Slack-Signature", "")
+        if abs(_time.time() - int(ts or 0)) > 300:
+            raise HTTPException(status_code=403, detail="Request too old")
+        base = f"v0:{ts}:{body.decode()}"
+        expected = "v0=" + hmac.new(signing_secret.encode(), base.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, sig):
+            raise HTTPException(status_code=403, detail="Invalid signature")
+
+    payload = _json.loads(body)
+
+    # URL verification challenge (one-time during app setup)
+    if payload.get("type") == "url_verification":
+        return {"challenge": payload["challenge"]}
+
+    event = payload.get("event", {})
+    etype = event.get("type", "")
+    if etype not in ("message", "app_mention"):
+        return {"ok": True}
+    if event.get("bot_id") or event.get("subtype"):
+        return {"ok": True}
+
+    text = event.get("text", "").strip()
+    channel = event.get("channel", "")
+    bot_token = cfg.get("slack_bot_token", "")
+    if not text or not bot_token:
+        return {"ok": True}
+
+    # Strip bot mention if present (e.g. <@U12345> check disk)
+    import re as _re
+    text = _re.sub(r"<@\w+>\s*", "", text).strip()
+
+    result = route_message(text, caller_role="operator")
+    reply = result.get("response", "Sorry, I didn't understand that.")
+
+    import urllib.request as _ur, urllib.error as _ue
+    import json as _j
+    payload_out = _j.dumps({"channel": channel, "text": reply}).encode()
+    req = _ur.Request(
+        "https://slack.com/api/chat.postMessage",
+        data=payload_out,
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {bot_token}"},
+        method="POST",
+    )
+    try:
+        _ur.urlopen(req, timeout=10)
+    except _ue.URLError:
+        pass
+
+    return {"ok": True}

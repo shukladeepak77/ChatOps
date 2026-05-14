@@ -424,7 +424,19 @@ def route_message(message: str, caller_role: str = "operator") -> Dict[str, str]
         from .config import save_config as _save_config
         url = slack_cfg_m.group(1)
         _save_config({"slack_webhook": url})
-        return {"response": f"Slack webhook configured. CRITICAL alerts will be sent to Slack."}
+        return {"response": "Slack webhook configured. CRITICAL alerts will be sent to Slack."}
+
+    slack_token_m = re.match(r'^config\s+set\s+slack\s+bot\s+token\s+(\S+)$', raw, re.IGNORECASE)
+    if slack_token_m:
+        from .config import save_config as _save_config
+        _save_config({"slack_bot_token": slack_token_m.group(1)})
+        return {"response": "Slack bot token saved. Inbound Slack commands are now enabled."}
+
+    slack_secret_m = re.match(r'^config\s+set\s+slack\s+signing\s+secret\s+(\S+)$', raw, re.IGNORECASE)
+    if slack_secret_m:
+        from .config import save_config as _save_config
+        _save_config({"slack_signing_secret": slack_secret_m.group(1)})
+        return {"response": "Slack signing secret saved."}
 
     suppress_m = re.match(r'^config\s+set\s+alert\s+suppress\s+(\d+)$', s)
     if suppress_m:
@@ -470,6 +482,88 @@ def route_message(message: str, caller_role: str = "operator") -> Dict[str, str]
         _save_config({"report_enabled": enabled})
         status = "enabled" if enabled else "disabled"
         return {"response": f"Daily report {status}."}
+
+    # ── Analytics ──────────────────────────────────────────────────────────────
+    analytics_m = re.match(r'^show\s+analytics(?:\s+(\d+)d?)?$', s)
+    if analytics_m or s in ("analytics", "show analytics"):
+        days = int(analytics_m.group(1)) if analytics_m and analytics_m.group(1) else 7
+        from .analytics import get_alert_stats, get_mttr_stats, get_command_stats
+        a = get_alert_stats(days)
+        m = get_mttr_stats()
+        cmds = get_command_stats(days)
+        sev_line = "  ".join(f"{k}: {v}" for k, v in sorted(a["by_severity"].items())) or "none"
+        mttr_line = (f"{m['avg_minutes']} min avg  (min {m['min_minutes']}  max {m['max_minutes']}  n={m['sample_size']})"
+                     if m.get("avg_minutes") else "no resolved alerts")
+        top_cmd = cmds[0]["command"] if cmds else "-"
+        lines = [
+            f"Analytics — last {days} days",
+            "",
+            "Alerts:",
+            f"  Total:       {a['total']}  (acked: {a['acked']}  unacked: {a['unacked']})",
+            f"  By severity: {sev_line}",
+            "",
+            "MTTR:",
+            f"  {mttr_line}",
+            "",
+            "Top commands:",
+        ]
+        for c in cmds[:5]:
+            lines.append(f"  {c['command'][:50]:<50}  {c['count']}x")
+        lines.append(f"\nTip: download full PDF report from  {cfg.get('base_url','http://<server>:8001')}/chatops/analytics/report.pdf")
+        return {"response": "\n".join(lines)}
+
+    # ── Knowledge Base ─────────────────────────────────────────────────────────
+    if s in ("list kb", "show kb", "kb list"):
+        from .db import kb_list as _kb_list
+        articles = _kb_list()
+        if not articles:
+            return {"response": "Knowledge base is empty.\nUse: add kb <title>: <content>"}
+        lines = [f"Knowledge Base ({len(articles)} articles):"]
+        for a in articles:
+            tags = f"  [{a['tags']}]" if a['tags'] else ""
+            lines.append(f"  #{a['id']}  {a['title']}{tags}  — by {a['created_by']} on {a['created_at'][:10]}")
+        lines.append("\nUse  show kb <id>  to read an article.")
+        return {"response": "\n".join(lines)}
+
+    show_kb_m = re.match(r'^show\s+kb\s+(\d+)$', s)
+    if show_kb_m:
+        from .db import kb_get as _kb_get
+        article = _kb_get(int(show_kb_m.group(1)))
+        if not article:
+            return {"response": f"No KB article with ID {show_kb_m.group(1)}."}
+        tags = f"\nTags: {article['tags']}" if article['tags'] else ""
+        return {"response": f"KB #{article['id']}: {article['title']}{tags}\nBy: {article['created_by']}  on  {article['created_at'][:10]}\n\n{article['content']}"}
+
+    search_kb_m = re.match(r'^(?:search\s+kb|kb\s+search)\s+(.+)$', s)
+    if search_kb_m:
+        from .db import kb_search as _kb_search
+        query = search_kb_m.group(1).strip()
+        results = _kb_search(query)
+        if not results:
+            return {"response": f"No KB articles found matching '{query}'."}
+        lines = [f"KB results for '{query}' ({len(results)} found):"]
+        for a in results:
+            tags = f"  [{a['tags']}]" if a['tags'] else ""
+            lines.append(f"  #{a['id']}  {a['title']}{tags}")
+        lines.append("\nUse  show kb <id>  to read an article.")
+        return {"response": "\n".join(lines)}
+
+    add_kb_m = re.match(r'^add\s+kb\s+(.+?)\s*:\s*(.+)$', raw, re.DOTALL)
+    if add_kb_m:
+        from .db import kb_add as _kb_add
+        title, content = add_kb_m.group(1).strip(), add_kb_m.group(2).strip()
+        aid = _kb_add(title, content, created_by=caller_role)
+        return {"response": f"KB article #{aid} added: '{title}'"}
+
+    delete_kb_m = re.match(r'^delete\s+kb\s+(\d+)$', s)
+    if delete_kb_m:
+        if caller_role != "admin":
+            return {"response": "Access denied. Only admins can delete KB articles."}
+        from .db import kb_delete as _kb_delete
+        ok = _kb_delete(int(delete_kb_m.group(1)))
+        if ok:
+            return {"response": f"KB article #{delete_kb_m.group(1)} deleted."}
+        return {"response": f"No KB article with ID {delete_kb_m.group(1)}."}
 
     # ── Kill process ───────────────────────────────────────────────────────────
     kill_m = re.match(r'^kill\s+process\s+(\d+)$', s)

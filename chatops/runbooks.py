@@ -22,6 +22,24 @@ RUNBOOKS: Dict[str, dict] = {
         "command": ["ss", "-tlnp"],
         "preview": "ss -tlnp",
     },
+    "flush_cache": {
+        "description": "Flush OS page/dentry/inode cache to free memory",
+        "command": "sync && echo 3 > /proc/sys/vm/drop_caches && echo 'Cache flushed.' && free -h",
+        "preview": "sync && echo 3 > /proc/sys/vm/drop_caches",
+        "shell": True,
+    },
+    "rotate_logs": {
+        "description": "Force log rotation for all configured log files",
+        "command": "logrotate -f /etc/logrotate.conf 2>&1 && echo 'Log rotation complete.'",
+        "preview": "logrotate -f /etc/logrotate.conf",
+        "shell": True,
+    },
+    "rotate_secret": {
+        "description": "Generate a new random application secret (64-char hex)",
+        "command": "python3 -c \"import secrets; s=secrets.token_hex(32); print(f'New secret generated:\\n  {s}\\n\\nStore this securely and update your application config.')\"",
+        "preview": "python3 -c \"import secrets; print(secrets.token_hex(32))\"",
+        "shell": True,
+    },
 }
 
 _pending: Optional[str] = None

@@ -8,3 +8,4 @@ rapidfuzz
 bcrypt
 PyJWT
 dnspython
+fpdf2

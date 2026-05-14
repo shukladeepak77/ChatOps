@@ -160,7 +160,7 @@ def test_runbooks_list(client):
     resp = client.get("/chatops/runbooks")
     assert resp.status_code == 200
     runbooks = resp.json()["runbooks"]
-    assert len(runbooks) == 4
+    assert len(runbooks) == 7
     for rb in runbooks:
         assert all(k in rb for k in ["name", "description", "preview"])
 
@@ -249,3 +249,59 @@ def test_upload_log(client):
     assert "filename" in data
     assert data["filename"] == "test.log"
     assert "Severity" in data["response"]
+
+
+# ── Analytics API ─────────────────────────────────────────────────────────────
+
+def test_analytics_endpoint(client):
+    resp = client.get("/chatops/analytics", headers={"Authorization": "Bearer " + _admin_token(client)})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "alert_stats" in data
+    assert "mttr" in data
+    assert "top_commands" in data
+
+
+def test_analytics_endpoint_unauthorized(client):
+    resp = client.get("/chatops/analytics", headers={"Authorization": "Bearer bad_token"})
+    assert resp.status_code == 401 or resp.status_code == 403
+
+
+def test_analytics_pdf_endpoint(client):
+    resp = client.get(
+        "/chatops/analytics/report.pdf",
+        headers={"Authorization": "Bearer " + _admin_token(client)},
+    )
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/pdf"
+    assert len(resp.content) > 100
+
+
+def test_analytics_pdf_unauthorized(client):
+    resp = client.get("/chatops/analytics/report.pdf", headers={"Authorization": "Bearer bad_token"})
+    assert resp.status_code in (401, 403)
+
+
+def test_analytics_with_period(client):
+    resp = client.get(
+        "/chatops/analytics?days=30",
+        headers={"Authorization": "Bearer " + _admin_token(client)},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["alert_stats"]["days"] == 30
+
+
+# ── Slack events endpoint ─────────────────────────────────────────────────────
+
+def test_slack_url_verification(client):
+    resp = client.post(
+        "/chatops/slack/events",
+        json={"type": "url_verification", "challenge": "test_challenge_abc"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["challenge"] == "test_challenge_abc"
+
+
+def _admin_token(client):
+    resp = client.post("/chatops/auth/login", json={"username": "admin", "password": "admin"})
+    return resp.json()["token"]
