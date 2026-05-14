@@ -18,22 +18,43 @@ def help_text() -> str:
     rose   = "#f43f5e"
 
     return (
-        '<span style="color:#374151;font-weight:700">Commands:</span>\n'
+        '<span style="color:#374151;font-weight:700">System Monitoring:</span>\n'
         f"  {_s(blue,'check disk')} | {_s(blue,'check memory')} | {_s(blue,'check cpu')}"
         f" | {_s(blue,'check uptime')} | {_s(blue,'check ports')}\n"
         f"  {_s(green,'top processes')} | {_s(green,'system health')}\n"
-        f"  {_s(orange,'analyze logs: &lt;content&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— paste inline, or upload a log file</span>\n'
-        f"  {_s(purple,'show alerts')} | {_s(purple,'list runbooks')}"
-        f" | {_s(purple,'run &lt;runbook&gt;')} | {_s(purple,'confirm &lt;runbook&gt;')} | {_s(purple,'cancel')}\n"
+        "\n"
+        '<span style="color:#374151;font-weight:700">Alerts:</span>\n'
+        f"  {_s(purple,'show alerts')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— view recent alerts with severity and ID</span>\n'
+        "\n"
+        '<span style="color:#374151;font-weight:700">AI-Powered Analysis:</span>\n'
+        f"  {_s(green,'analyze logs: &lt;content&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— paste inline or upload a log file for AI analysis</span>\n'
+        f"  {_s(green,'explain alert &lt;id&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— AI root cause analysis and fix suggestions for an alert</span>\n'
+        f'  <span style="color:#9ca3af;font-style:italic">  Ask anything: "how do I reduce swap?" → answered by AI</span>\n'
+        "\n"
+        '<span style="color:#374151;font-weight:700">Runbooks:</span>\n'
+        f"  {_s(purple,'list runbooks')} | {_s(purple,'run &lt;runbook&gt;')}"
+        f" | {_s(purple,'confirm &lt;runbook&gt;')} | {_s(purple,'cancel')}\n"
         "\n"
         '<span style="color:#374151;font-weight:700">Network:</span>\n'
         f"  {_s(cyan,'check ip')} | {_s(cyan,'check routes')} | {_s(cyan,'check network')}"
-        f" | {_s(cyan,'check dns')} | {_s(cyan,'check connections')}\n"
+        f" | {_s(cyan,'check connections')}\n"
+        f"  {_s(cyan,'check dns')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— default connectivity check</span>\n'
+        f"  {_s(cyan,'check dns &lt;domain&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— full DNS lookup (A, MX, NS, TXT, CNAME)  e.g. check dns yahoo.com</span>\n'
         "\n"
         '<span style="color:#374151;font-weight:700">Services:</span>\n'
+        f"  {_s(amber,'show services')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— list all services with PID</span>\n'
+        f"  {_s(amber,'show services &lt;keyword&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— filter services by name  e.g. show services ssh</span>\n'
         f"  {_s(amber,'service status &lt;name&gt;')} | {_s(amber,'restart &lt;name&gt;')}"
         f" | {_s(amber,'confirm restart &lt;name&gt;')} | {_s(amber,'check failed services')}\n"
+        f"  {_s(amber,'kill process &lt;pid&gt;')} | {_s(amber,'confirm kill &lt;pid&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— terminates a process by PID (SIGTERM)</span>\n'
         "\n"
         '<span style="color:#374151;font-weight:700">Multi-instance:</span>\n'
         f"  {_s(rose,'add node &lt;name&gt; &lt;user&gt;@&lt;host&gt;')} | {_s(rose,'list nodes')}"
@@ -47,12 +68,28 @@ def help_text() -> str:
         f"  {_s(gray,'config set report on')} | {_s(gray,'config set report off')}"
         f" | {_s(gray,'config set report hour &lt;0-23&gt;')} | {_s(gray,'show report')}\n"
         "\n"
-        '<span style="color:#374151;font-weight:700">AI / LLM:</span>\n'
-        f"  {_s(green,'explain alert &lt;id&gt;')} | {_s(green,'test llm')}\n"
+        '<span style="color:#374151;font-weight:700">AI / LLM Config:</span>\n'
+        f"  {_s(green,'test llm')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— verify LLM connection is working</span>\n'
+        f"  {_s(green,'show llm config')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— show active provider, model and API key (admin only)</span>\n'
+
         f"  {_s(gray,'config set llm provider &lt;ollama|groq|claude|none&gt;')}\n"
         f"  {_s(gray,'config set llm api key &lt;key&gt;')} | {_s(gray,'config set llm model &lt;model&gt;')}\n"
         f"  {_s(gray,'config set ollama url &lt;url&gt;')}"
         f'  <span style="color:#9ca3af;font-style:italic">— default: http://localhost:11434</span>\n'
+        "\n"
+        '<span style="color:#374151;font-weight:700">User Management (admin only):</span>\n'
+        f"  {_s(rose,'add user &lt;username&gt; &lt;password&gt; &lt;viewer|operator|admin&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— roles: viewer, operator, admin</span>\n'
+        f"  {_s(rose,'list users')} | {_s(rose,'show users')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— list all users with roles and status</span>\n'
+        f"  {_s(rose,'set role &lt;username&gt; &lt;viewer|operator|admin&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— change a user\'s role</span>\n'
+        f"  {_s(rose,'deactivate user &lt;username&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— disable login (user kept in DB)</span>\n'
+        f"  {_s(rose,'remove user &lt;username&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— permanently delete user</span>\n'
         "\n"
         '<span style="color:#374151;font-weight:700">General:</span>\n'
         f"  {_s(gray,'show system config')} | {_s(gray,'help')}\n"

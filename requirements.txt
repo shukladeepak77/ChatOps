@@ -7,3 +7,4 @@ psutil
 rapidfuzz
 bcrypt
 PyJWT
+dnspython

@@ -61,6 +61,7 @@ _ALL_PHRASES = [
 
 _pending_restart: str | None = None
 _pending_ssh_copy: str | None = None
+_pending_kill: str | None = None
 
 
 def _detect_intent(s: str) -> str:
@@ -79,12 +80,12 @@ def _detect_intent(s: str) -> str:
     return "unknown"
 
 
-def route_message(message: str) -> Dict[str, str]:
-    global _pending_restart, _pending_ssh_copy
+def route_message(message: str, caller_role: str = "operator") -> Dict[str, str]:
+    global _pending_restart, _pending_ssh_copy, _pending_kill
     raw = (message or "").strip()
     raw_lower = raw.lower()
-    # Allow - for node/service names
-    s = re.sub(r"[^a-z0-9\s:_\-]", "", raw_lower).strip()
+    # Allow - and . for node/service names
+    s = re.sub(r"[^a-z0-9\s:_\-\.]", "", raw_lower).strip()
 
     cfg = load_config()
 
@@ -140,6 +141,21 @@ def route_message(message: str) -> Dict[str, str]:
         placeholder = re.sub(r'\s+', ' ', logs).lower()
         if placeholder in ("<paste log content here>", "paste log content here", "<content>", "content"):
             return {"response": "Usage: analyze logs: <paste log content here>\nYou can also upload a log file using the Upload Log button."}
+        from .llm import ask as _llm_ask, is_configured as _llm_ok
+        if _llm_ok():
+            llm_prompt = (
+                "Analyze the following log content. Identify:\n"
+                "1. Severity (HIGH / MEDIUM / LOW)\n"
+                "2. Root cause\n"
+                "3. Impact\n"
+                "4. Suggested actions\n\n"
+                f"Log content:\n{logs[:3000]}"
+            )
+            answer = _llm_ask(
+                llm_prompt,
+                system="You are a DevOps engineer expert in log analysis. Be concise and technical. Keep response under 200 words.",
+            )
+            return {"response": f"Log Analysis (AI):\n{answer}"}
         data = analyze_logs_action(logs)
         actions = ", ".join(data.get("suggested_actions", []))
         return {
@@ -152,7 +168,7 @@ def route_message(message: str) -> Dict[str, str]:
         }
 
     # ── Service commands ───────────────────────────────────────────────────────
-    svc_status_m = re.match(r'^service\s+status\s+([\w\-]+)$', s)
+    svc_status_m = re.match(r'^service\s+status\s+([\w\-\.]+)$', s)
     if svc_status_m:
         name = svc_status_m.group(1)
         d = check_service(name)
@@ -168,7 +184,7 @@ def route_message(message: str) -> Dict[str, str]:
             lines.append(desc)
         return {"response": "\n".join(lines)}
 
-    restart_m = re.match(r'^restart\s+([\w\-]+)$', s)
+    restart_m = re.match(r'^restart\s+([\w\-\.]+)$', s)
     if restart_m:
         name = restart_m.group(1)
         _pending_restart = name
@@ -185,7 +201,7 @@ def route_message(message: str) -> Dict[str, str]:
             )
         }
 
-    confirm_restart_m = re.match(r'^confirm\s+restart\s+([\w\-]+)$', s)
+    confirm_restart_m = re.match(r'^confirm\s+restart\s+([\w\-\.]+)$', s)
     if confirm_restart_m:
         name = confirm_restart_m.group(1)
         if _pending_restart != name:
@@ -244,13 +260,30 @@ def route_message(message: str) -> Dict[str, str]:
     if s == "cancel":
         _pending_restart = None
         _pending_ssh_copy = None
+        _pending_kill = None
         result = cancel_runbook()
         return {"response": result["message"]}
 
-    # ── User management commands (admin only, role enforcement is at API level) ─
+    # ── User management commands (admin only) ──────────────────────────────────
+    _USER_MGMT_PATTERNS = (
+        r'^add\s+user\b', r'^deactivate\s+user\b', r'^remove\s+user\b',
+        r'^set\s+role\b',
+    )
+    _is_user_cmd = any(re.match(p, s) for p in _USER_MGMT_PATTERNS) or s in ("list users", "show users")
+    if _is_user_cmd and caller_role != "admin":
+        return {"response": "Access denied. User management commands are available to admin users only."}
+
+    if re.match(r'^add\s+user\b', s) and not re.match(r'^add\s+user\s+(\S+)\s+(\S+)\s+(viewer|operator|admin)$', s):
+        return {"response": (
+            "Invalid syntax. Usage:\n"
+            "  add user &lt;username&gt; &lt;password&gt; &lt;viewer|operator|admin&gt;\n\n"
+            "Example:\n"
+            "  add user john secret123 operator"
+        )}
+
     add_user_m = re.match(r'^add\s+user\s+(\S+)\s+(\S+)\s+(viewer|operator|admin)$', s)
     if add_user_m:
-        from .db import create_user as _db_create_user, get_user as _db_get_user
+        from .db import create_user as _db_create_user
         from chatops.auth import hash_password as _hp
         uname, pwd, role = add_user_m.group(1), add_user_m.group(2), add_user_m.group(3)
         ok = _db_create_user(uname, _hp(pwd), role)
@@ -258,14 +291,35 @@ def route_message(message: str) -> Dict[str, str]:
             return {"response": f"User '{uname}' created with role '{role}'."}
         return {"response": f"User '{uname}' already exists."}
 
-    remove_user_m = re.match(r'^remove\s+user\s+(\S+)$', s)
-    if remove_user_m:
+    deactivate_user_m = re.match(r'^deactivate\s+user\s+(\S+)$', s)
+    if deactivate_user_m:
         from .db import set_user_active as _set_active
-        uname = remove_user_m.group(1)
+        uname = deactivate_user_m.group(1)
+        if uname == "admin":
+            return {"response": "Cannot deactivate the admin user."}
         ok = _set_active(uname, False)
         if ok:
             return {"response": f"User '{uname}' deactivated."}
         return {"response": f"User '{uname}' not found."}
+
+    remove_user_m = re.match(r'^remove\s+user\s+(\S+)$', s)
+    if remove_user_m:
+        from .db import delete_user as _delete_user
+        uname = remove_user_m.group(1)
+        if uname == "admin":
+            return {"response": "Cannot remove the admin user."}
+        ok = _delete_user(uname)
+        if ok:
+            return {"response": f"User '{uname}' deleted."}
+        return {"response": f"User '{uname}' not found."}
+
+    if re.match(r'^set\s+role\b', s) and not re.match(r'^set\s+role\s+(\S+)\s+(viewer|operator|admin)$', s):
+        return {"response": (
+            "Invalid syntax. Usage:\n"
+            "  set role &lt;username&gt; &lt;viewer|operator|admin&gt;\n\n"
+            "Example:\n"
+            "  set role john operator"
+        )}
 
     set_role_m = re.match(r'^set\s+role\s+(\S+)\s+(viewer|operator|admin)$', s)
     if set_role_m:
@@ -417,6 +471,36 @@ def route_message(message: str) -> Dict[str, str]:
         status = "enabled" if enabled else "disabled"
         return {"response": f"Daily report {status}."}
 
+    # ── Kill process ───────────────────────────────────────────────────────────
+    kill_m = re.match(r'^kill\s+process\s+(\d+)$', s)
+    if kill_m:
+        pid = kill_m.group(1)
+        import subprocess
+        try:
+            out = subprocess.check_output(["ps", "-p", pid, "-o", "pid=,comm=,args="], text=True).strip()
+            if not out:
+                return {"response": f"No process found with PID {pid}."}
+            _pending_kill = pid
+            return {"response": (
+                f"Process {pid}: {out}\n\n"
+                f"Type  confirm kill {pid}  to terminate it, or  cancel  to abort."
+            )}
+        except subprocess.CalledProcessError:
+            return {"response": f"No process found with PID {pid}."}
+
+    confirm_kill_m = re.match(r'^confirm\s+kill\s+(\d+)$', s)
+    if confirm_kill_m:
+        pid = confirm_kill_m.group(1)
+        if _pending_kill != pid:
+            return {"response": f"No pending kill for PID {pid}. Run  kill process {pid}  first."}
+        _pending_kill = None
+        import subprocess, signal
+        try:
+            subprocess.run(["kill", "-TERM", pid], check=True)
+            return {"response": f"SIGTERM sent to process {pid}."}
+        except subprocess.CalledProcessError:
+            return {"response": f"Failed to kill PID {pid}. Process may have already exited or requires elevated privileges."}
+
     # ── Free-form questions → LLM (before intent detection) ───────────────────
     _Q_WORDS = ("how ", "why ", "what ", "when ", "where ", "can ", "should ",
                 "is ", "are ", "does ", "will ", "explain ", "tell me", "describe ")
@@ -432,6 +516,57 @@ def route_message(message: str) -> Dict[str, str]:
                 ),
             )
             return {"response": answer}
+
+    _svc_m = re.match(r'^(?:show|list|search)\s+services?\s+(.+)$', s)
+    _svc_filter = _svc_m.group(1).strip() if _svc_m else None
+    if s in ("show services", "list services") or _svc_m:
+        import subprocess
+        try:
+            names_out = subprocess.check_output(
+                ["systemctl", "list-units", "--type=service", "--all",
+                 "--no-pager", "--plain", "--no-legend"],
+                text=True, timeout=10
+            )
+            names = [l.split()[0] for l in names_out.strip().splitlines() if l.strip()]
+            if not names:
+                return {"response": "No services found."}
+
+            props_out = subprocess.check_output(
+                ["systemctl", "show", "--property=Id,ActiveState,SubState,MainPID"] + names,
+                text=True, timeout=15
+            )
+            pid_map = {}
+            current = {}
+            for line in props_out.splitlines():
+                if "=" in line:
+                    k, _, v = line.partition("=")
+                    current[k] = v
+                elif not line.strip() and current.get("Id"):
+                    pid_map[current["Id"]] = current
+                    current = {}
+            if current.get("Id"):
+                pid_map[current["Id"]] = current
+
+            lines = []
+            for line in names_out.strip().splitlines():
+                parts = line.split()
+                if len(parts) >= 4:
+                    name, active, sub = parts[0], parts[2], parts[3]
+                    props = pid_map.get(name, {})
+                    pid = props.get("MainPID", "0")
+                    if pid == "0":
+                        continue
+                    if _svc_filter and _svc_filter not in name:
+                        continue
+                    lines.append(f"  {name:<45} {active}/{sub:<10}  PID: {pid}")
+            if not lines:
+                label = f"No services matching '{_svc_filter}'." if _svc_filter else "No services found."
+                return {"response": label}
+            if _svc_filter:
+                return {"response": f"Services matching '{_svc_filter}' ({len(lines)} found):\n" + "\n".join(lines)}
+            return {"response": f"Services ({len(lines)} total):\n" + "\n".join(lines) + "\n\nTip: type  show services <keyword>  to filter  e.g. show services ssh"}
+        except Exception as e:
+            return {"response": f"Could not list services: {e}"}
 
     # ── Intent detection ───────────────────────────────────────────────────────
     intent = _detect_intent(s)
@@ -539,6 +674,27 @@ def route_message(message: str) -> Dict[str, str]:
             lines.append(f"  run {rb['name']} — {rb['description']}")
         return {"response": "\n".join(lines)}
 
+    if s in ("show llm config", "llm config", "llm status"):
+        if caller_role != "admin":
+            return {"response": "Access denied. This command is available to admin users only."}
+        llm_provider = cfg.get("llm_provider", "none")
+        llm_model_cfg = cfg.get("llm_model", "")
+        from .llm import _DEFAULT_MODELS, is_configured as _llm_ok
+        llm_model_display = llm_model_cfg or _DEFAULT_MODELS.get(llm_provider, "-")
+        llm_key = cfg.get("llm_api_key", "")
+        llm_key_display = ("*" * 6 + llm_key[-4:]) if len(llm_key) > 4 else ("(not set)" if not llm_key else llm_key)
+        status = "Active" if _llm_ok() else "Not configured"
+        lines = [
+            "LLM Configuration (admin only)",
+            "",
+            f"  Status:    {status}",
+            f"  Provider:  {llm_provider}",
+            f"  Model:     {llm_model_display}",
+            f"  API Key:   {llm_key_display}",
+            f"  Ollama URL:{cfg.get('ollama_url', 'http://localhost:11434')}",
+        ]
+        return {"response": "\n".join(lines)}
+
     if intent == "config":
         webhook = cfg.get("slack_webhook", "")
         webhook_display = webhook if webhook else "(not configured)"
@@ -634,6 +790,39 @@ def route_message(message: str) -> Dict[str, str]:
         return {"response": "\n".join(lines)}
 
     if intent == "dns":
+        dns_m = re.match(r'^check\s+dns\s+([\w\.\-]+)$', s)
+        if dns_m:
+            domain = dns_m.group(1)
+            import socket, time
+            try:
+                import dns.resolver
+            except ImportError:
+                return {"response": "dnspython not installed. Run: pip install dnspython"}
+            lines = [f"DNS details for {domain}:"]
+            record_types = ["A", "AAAA", "MX", "NS", "TXT", "CNAME"]
+            for rtype in record_types:
+                try:
+                    answers = dns.resolver.resolve(domain, rtype, lifetime=6)
+                    lines.append(f"\n  {rtype} records:")
+                    for r in answers:
+                        lines.append(f"    {r.to_text()}  (TTL: {answers.rrset.ttl}s)")
+                except dns.resolver.NoAnswer:
+                    pass
+                except dns.resolver.NXDOMAIN:
+                    return {"response": f"Domain not found: {domain}"}
+                except Exception:
+                    pass
+            try:
+                start = time.time()
+                ip = socket.gethostbyname(domain)
+                latency = round((time.time() - start) * 1000, 2)
+                lines.append(f"\n  Resolved IP: {ip}  (latency: {latency}ms)")
+            except Exception as e:
+                lines.append(f"\n  Resolution failed: {e}")
+            if len(lines) == 1:
+                return {"response": f"No DNS records found for {domain}."}
+            return {"response": "\n".join(lines)}
+
         dns_results = check_dns()
         lines = ["DNS resolution check:"]
         for r in dns_results:

@@ -332,7 +332,7 @@ def get_audit_endpoint(
 @app.post("/chatops/message")
 def chatops_message(msg: ChatMessage, user=Depends(_require_role("operator"))):
     save_message("user", msg.message)
-    result = route_message(msg.message)
+    result = route_message(msg.message, caller_role=user.get("role", "operator"))
     save_message("bot", result.get("response", ""))
     add_audit(user["sub"], msg.message, (result.get("response") or "")[:200])
     return result

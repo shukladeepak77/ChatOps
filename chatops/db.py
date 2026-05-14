@@ -232,6 +232,17 @@ def get_metric_stats(metric: str, since_hours: int = 24, node: str = None) -> di
 def create_user(username: str, password_hash: str, role: str = "operator") -> bool:
     try:
         with _conn() as conn:
+            existing = conn.execute(
+                "SELECT id, active FROM users WHERE username=?", (username,)
+            ).fetchone()
+            if existing:
+                if not existing["active"]:
+                    conn.execute(
+                        "UPDATE users SET password_hash=?, role=?, active=1 WHERE username=?",
+                        (password_hash, role, username),
+                    )
+                    return True
+                return False
             conn.execute(
                 "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
                 (username, password_hash, role),
@@ -239,6 +250,12 @@ def create_user(username: str, password_hash: str, role: str = "operator") -> bo
         return True
     except sqlite3.IntegrityError:
         return False
+
+
+def delete_user(username: str) -> bool:
+    with _conn() as conn:
+        cur = conn.execute("DELETE FROM users WHERE username=?", (username,))
+    return cur.rowcount > 0
 
 
 def get_user(username: str) -> dict | None:
