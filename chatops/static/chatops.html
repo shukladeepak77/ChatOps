@@ -467,6 +467,78 @@
 
     /* ── Scrollbar global ── */
     * { scrollbar-width: thin; scrollbar-color: var(--border2) transparent; }
+
+    /* ── Modal System ── */
+    .modal-backdrop {
+      display: none; position: fixed; inset: 0; z-index: 800;
+      background: rgba(0,0,0,.55); backdrop-filter: blur(4px);
+      align-items: center; justify-content: center;
+    }
+    .modal-backdrop.active { display: flex; }
+    .modal-box {
+      background: linear-gradient(160deg, #1e293b 0%, #0f172a 100%);
+      border: 1px solid rgba(99,102,241,.3);
+      border-radius: 16px; width: 480px; max-width: 94vw; max-height: 88vh;
+      display: flex; flex-direction: column;
+      box-shadow: 0 32px 80px rgba(0,0,0,.7), 0 0 0 1px rgba(99,102,241,.1);
+      animation: modalIn .18s ease;
+    }
+    .modal-box.modal-wide { width: 700px; }
+    @keyframes modalIn { from { opacity:0; transform:scale(.95) translateY(-10px); } to { opacity:1; transform:none; } }
+    .modal-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid rgba(99,102,241,.18);
+      background: linear-gradient(90deg, rgba(99,102,241,.1), transparent);
+      border-radius: 16px 16px 0 0; flex-shrink: 0;
+    }
+    .modal-icon { font-size: 1.2rem; }
+    .modal-title { font-size: 1rem; font-weight: 700; color: #e2e8f0; flex: 1; }
+    .modal-close { background: none; border: none; color: var(--text3); font-size: 1.1rem; cursor: pointer; padding: 2px 6px; border-radius: 5px; transition: all .12s; }
+    .modal-close:hover { background: rgba(255,255,255,.1); color: var(--text); }
+    .modal-body { padding: 20px; overflow-y: auto; flex: 1; }
+    .modal-footer { padding: 14px 20px; border-top: 1px solid rgba(99,102,241,.14); display: flex; gap: 8px; justify-content: flex-end; flex-shrink: 0; }
+    .m-field { margin-bottom: 14px; }
+    .m-field label { display: block; font-size: .74rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; }
+    .m-field input, .m-field select, .m-field textarea {
+      width: 100%; padding: 9px 12px; border: 1px solid rgba(99,102,241,.25);
+      border-radius: 8px; background: rgba(255,255,255,.05); color: #e2e8f0;
+      font-size: .88rem; outline: none; font-family: inherit; transition: all .15s;
+    }
+    .m-field input:focus, .m-field select:focus, .m-field textarea:focus { border-color: rgba(99,102,241,.6); box-shadow: 0 0 0 3px rgba(99,102,241,.12); background: rgba(255,255,255,.07); }
+    .m-field textarea { resize: vertical; min-height: 80px; }
+    .m-field select option { background: #1e293b; }
+    .m-row { display: flex; gap: 12px; }
+    .m-row .m-field { flex: 1; }
+    .m-btn { padding: 9px 20px; border-radius: 8px; font-size: .86rem; font-weight: 700; cursor: pointer; border: none; transition: all .15s; }
+    .m-btn-primary { background: linear-gradient(135deg, #4f46e5, #7c3aed); color: #fff; box-shadow: 0 4px 14px rgba(79,70,229,.35); }
+    .m-btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(79,70,229,.45); }
+    .m-btn-secondary { background: rgba(255,255,255,.08); color: #cbd5e1; border: 1px solid rgba(255,255,255,.12); }
+    .m-btn-secondary:hover { background: rgba(255,255,255,.14); color: #fff; }
+    .m-btn-danger { background: linear-gradient(135deg, #dc2626, #ef4444); color: #fff; box-shadow: 0 4px 14px rgba(220,38,38,.3); }
+    .m-btn-danger:hover { transform: translateY(-1px); }
+    .m-btn-success { background: linear-gradient(135deg, #059669, #10b981); color: #fff; box-shadow: 0 4px 14px rgba(5,150,105,.3); }
+    .m-result { margin-top: 12px; padding: 12px 14px; border-radius: 8px; font-size: .84rem; line-height: 1.6; white-space: pre-wrap; display: none; }
+    .m-result.ok  { background: rgba(16,185,129,.12); border: 1px solid rgba(16,185,129,.3); color: #6ee7b7; }
+    .m-result.err { background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.3); color: #fca5a5; }
+    .m-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    .m-table th { text-align: left; padding: 7px 10px; font-size: .7rem; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid rgba(99,102,241,.2); }
+    .m-table td { padding: 9px 10px; border-bottom: 1px solid rgba(255,255,255,.05); color: #cbd5e1; vertical-align: top; }
+    .m-table tr:hover td { background: rgba(255,255,255,.03); }
+    .m-badge { display: inline-block; font-size: .65rem; font-weight: 700; padding: 2px 7px; border-radius: 6px; text-transform: uppercase; letter-spacing: .04em; }
+    .m-badge-red    { background: rgba(239,68,68,.2);  color: #fca5a5; border: 1px solid rgba(239,68,68,.3); }
+    .m-badge-yellow { background: rgba(234,179,8,.15); color: #fde047; border: 1px solid rgba(234,179,8,.3); }
+    .m-badge-green  { background: rgba(16,185,129,.15);color: #6ee7b7; border: 1px solid rgba(16,185,129,.3); }
+    .m-badge-blue   { background: rgba(99,102,241,.15); color: #a5b4fc; border: 1px solid rgba(99,102,241,.3); }
+    .m-badge-gray   { background: rgba(100,116,139,.2); color: #94a3b8; border: 1px solid rgba(100,116,139,.3); }
+    .m-empty { text-align: center; color: #475569; padding: 28px; font-size: .88rem; }
+    .m-divider { border: none; border-top: 1px solid rgba(99,102,241,.15); margin: 14px 0; }
+    .m-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .m-info-card { background: rgba(255,255,255,.04); border: 1px solid rgba(99,102,241,.15); border-radius: 8px; padding: 12px 14px; }
+    .m-info-label { font-size: .68rem; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+    .m-info-value { font-size: .95rem; font-weight: 700; color: #e2e8f0; }
+    .m-spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(99,102,241,.3); border-top-color: #6366f1; border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: 6px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -511,6 +583,218 @@
   </div>
 </header>
 
+<!-- ══════════════════════════════════════════════════════════ MODALS ══ -->
+
+<!-- Create Ticket -->
+<div class="modal-backdrop" id="modal-create-ticket">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-icon">🎫</span><span class="modal-title">Create Ticket</span><button class="modal-close" onclick="closeModal('modal-create-ticket')">✕</button></div>
+    <div class="modal-body">
+      <div class="m-field"><label>Title *</label><input id="ct-title" type="text" placeholder="Brief description of the issue" /></div>
+      <div class="m-row">
+        <div class="m-field"><label>Priority</label>
+          <select id="ct-priority"><option value="medium">Medium</option><option value="high">High</option><option value="low">Low</option></select>
+        </div>
+        <div class="m-field"><label>Node</label>
+          <select id="ct-node"><option value="local">local</option></select>
+        </div>
+      </div>
+      <div class="m-field"><label>Description</label><textarea id="ct-desc" placeholder="Additional details (optional)"></textarea></div>
+      <div class="m-result" id="ct-result"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="m-btn m-btn-secondary" onclick="closeModal('modal-create-ticket')">Cancel</button>
+      <button class="m-btn m-btn-primary" onclick="submitCreateTicket()">🎫 Create Ticket</button>
+    </div>
+  </div>
+</div>
+
+<!-- Show Tickets -->
+<div class="modal-backdrop" id="modal-show-tickets">
+  <div class="modal-box modal-wide">
+    <div class="modal-header"><span class="modal-icon">📋</span><span class="modal-title">Tickets</span>
+      <select id="st-filter" onchange="loadTicketsModal()" style="font-size:.78rem;padding:3px 8px;border-radius:6px;border:1px solid rgba(99,102,241,.3);background:rgba(255,255,255,.06);color:#e2e8f0;margin-right:auto;">
+        <option value="open">Open</option><option value="all">All</option>
+      </select>
+      <button class="modal-close" onclick="closeModal('modal-show-tickets')">✕</button>
+    </div>
+    <div class="modal-body" id="st-body"><div class="m-empty"><span class="m-spinner"></span> Loading…</div></div>
+    <div class="modal-footer"><button class="m-btn m-btn-secondary" onclick="closeModal('modal-show-tickets')">Close</button><button class="m-btn m-btn-primary" onclick="openModal('modal-create-ticket');closeModal('modal-show-tickets')">➕ New Ticket</button></div>
+  </div>
+</div>
+
+<!-- Restart Service -->
+<div class="modal-backdrop" id="modal-restart-service">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-icon">🔄</span><span class="modal-title">Restart Service</span><button class="modal-close" onclick="closeModal('modal-restart-service')">✕</button></div>
+    <div class="modal-body">
+      <div class="m-field"><label>Service Name *</label><input id="rs-name" type="text" placeholder="e.g. nginx, postgresql, redis" list="rs-services-list" /><datalist id="rs-services-list"></datalist></div>
+      <div class="m-field"><label>Node</label><select id="rs-node"><option value="local">local</option></select></div>
+      <div style="background:rgba(234,179,8,.08);border:1px solid rgba(234,179,8,.25);border-radius:8px;padding:10px 12px;font-size:.82rem;color:#fde047;">⚠️ This will restart the service immediately. Confirm the name carefully.</div>
+      <div class="m-result" id="rs-result"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="m-btn m-btn-secondary" onclick="closeModal('modal-restart-service')">Cancel</button>
+      <button class="m-btn m-btn-danger" onclick="submitRestartService()">🔄 Restart</button>
+    </div>
+  </div>
+</div>
+
+<!-- Service Status -->
+<div class="modal-backdrop" id="modal-service-status">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-icon">🔎</span><span class="modal-title">Service Status</span><button class="modal-close" onclick="closeModal('modal-service-status')">✕</button></div>
+    <div class="modal-body">
+      <div class="m-field"><label>Service Name *</label><input id="ss-name" type="text" placeholder="e.g. nginx, ssh, docker" /></div>
+      <div class="m-field"><label>Node</label><select id="ss-node"><option value="local">local</option></select></div>
+      <div class="m-result" id="ss-result"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="m-btn m-btn-secondary" onclick="closeModal('modal-service-status')">Cancel</button>
+      <button class="m-btn m-btn-primary" onclick="submitServiceStatus()">🔎 Check Status</button>
+    </div>
+  </div>
+</div>
+
+<!-- DNS Lookup -->
+<div class="modal-backdrop" id="modal-dns">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-icon">🔍</span><span class="modal-title">DNS Lookup</span><button class="modal-close" onclick="closeModal('modal-dns')">✕</button></div>
+    <div class="modal-body">
+      <div class="m-field"><label>Domain *</label><input id="dns-domain" type="text" placeholder="e.g. google.com, api.example.com" /></div>
+      <div class="m-result" id="dns-result"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="m-btn m-btn-secondary" onclick="closeModal('modal-dns')">Cancel</button>
+      <button class="m-btn m-btn-primary" onclick="submitDNS()">🔍 Lookup</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add User -->
+<div class="modal-backdrop" id="modal-add-user">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-icon">👤</span><span class="modal-title">Add User</span><button class="modal-close" onclick="closeModal('modal-add-user')">✕</button></div>
+    <div class="modal-body">
+      <div class="m-row">
+        <div class="m-field"><label>Username *</label><input id="au-user" type="text" placeholder="username" /></div>
+        <div class="m-field"><label>Password *</label><input id="au-pass" type="password" placeholder="password" /></div>
+      </div>
+      <div class="m-field"><label>Role</label>
+        <select id="au-role">
+          <option value="viewer">Viewer — read-only</option>
+          <option value="operator" selected>Operator — run commands</option>
+          <option value="developer">Developer — run tests</option>
+          <option value="admin">Admin — full access</option>
+        </select>
+      </div>
+      <div class="m-result" id="au-result"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="m-btn m-btn-secondary" onclick="closeModal('modal-add-user')">Cancel</button>
+      <button class="m-btn m-btn-primary" onclick="submitAddUser()">👤 Create User</button>
+    </div>
+  </div>
+</div>
+
+<!-- List Users -->
+<div class="modal-backdrop" id="modal-list-users">
+  <div class="modal-box modal-wide">
+    <div class="modal-header"><span class="modal-icon">👥</span><span class="modal-title">User Management</span><button class="modal-close" onclick="closeModal('modal-list-users')">✕</button></div>
+    <div class="modal-body" id="lu-body"><div class="m-empty"><span class="m-spinner"></span> Loading…</div></div>
+    <div class="modal-footer"><button class="m-btn m-btn-secondary" onclick="closeModal('modal-list-users')">Close</button><button class="m-btn m-btn-primary" onclick="openModal('modal-add-user');closeModal('modal-list-users')">➕ Add User</button></div>
+  </div>
+</div>
+
+<!-- Add Node -->
+<div class="modal-backdrop" id="modal-add-node">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-icon">🖥️</span><span class="modal-title">Add Node</span><button class="modal-close" onclick="closeModal('modal-add-node')">✕</button></div>
+    <div class="modal-body">
+      <div class="m-field"><label>Node Name *</label><input id="an-name" type="text" placeholder="e.g. web-01, db-primary" /></div>
+      <div class="m-field"><label>SSH Target *</label><input id="an-host" type="text" placeholder="user@hostname-or-ip" /></div>
+      <div class="m-field"><label>SSH Key Path (optional)</label><input id="an-key" type="text" placeholder="~/.ssh/id_rsa" /></div>
+      <div class="m-result" id="an-result"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="m-btn m-btn-secondary" onclick="closeModal('modal-add-node')">Cancel</button>
+      <button class="m-btn m-btn-primary" onclick="submitAddNode()">🖥️ Add Node</button>
+    </div>
+  </div>
+</div>
+
+<!-- List Nodes -->
+<div class="modal-backdrop" id="modal-list-nodes">
+  <div class="modal-box modal-wide">
+    <div class="modal-header"><span class="modal-icon">🖥️</span><span class="modal-title">Nodes</span><button class="modal-close" onclick="closeModal('modal-list-nodes')">✕</button></div>
+    <div class="modal-body" id="ln-body"><div class="m-empty"><span class="m-spinner"></span> Loading…</div></div>
+    <div class="modal-footer"><button class="m-btn m-btn-secondary" onclick="closeModal('modal-list-nodes')">Close</button><button class="m-btn m-btn-primary" onclick="openModal('modal-add-node');closeModal('modal-list-nodes')">➕ Add Node</button></div>
+  </div>
+</div>
+
+<!-- Ack All Alerts Confirmation -->
+<div class="modal-backdrop" id="modal-ack-all">
+  <div class="modal-box" style="width:400px">
+    <div class="modal-header"><span class="modal-icon">✅</span><span class="modal-title">Acknowledge All Alerts</span><button class="modal-close" onclick="closeModal('modal-ack-all')">✕</button></div>
+    <div class="modal-body">
+      <p style="color:#cbd5e1;font-size:.9rem;line-height:1.6;">This will acknowledge <strong style="color:#e2e8f0">all unacknowledged alerts</strong>. They will be marked as reviewed and removed from the unacked queue.</p>
+      <div class="m-result" id="ack-result"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="m-btn m-btn-secondary" onclick="closeModal('modal-ack-all')">Cancel</button>
+      <button class="m-btn m-btn-success" onclick="submitAckAll()">✅ Acknowledge All</button>
+    </div>
+  </div>
+</div>
+
+<!-- Run Runbook -->
+<div class="modal-backdrop" id="modal-run-runbook">
+  <div class="modal-box" style="width:420px">
+    <div class="modal-header"><span class="modal-icon">📋</span><span class="modal-title">Run Runbook</span><button class="modal-close" onclick="closeModal('modal-run-runbook')">✕</button></div>
+    <div class="modal-body">
+      <div class="m-field"><label>Runbook</label>
+        <select id="rb-name">
+          <option value="disk_breakdown">disk_breakdown — show disk usage by directory</option>
+          <option value="large_logs">large_logs — find large log files</option>
+          <option value="listening_services">listening_services — list all listening ports</option>
+          <option value="clear_tmp">clear_tmp — clean up /tmp directory</option>
+          <option value="flush_cache">flush_cache — flush system page cache</option>
+          <option value="rotate_logs">rotate_logs — rotate application logs</option>
+        </select>
+      </div>
+      <div class="m-row">
+        <div class="m-field"><label>Mode</label>
+          <select id="rb-mode"><option value="run">Run (execute)</option><option value="dry run">Dry Run (preview)</option></select>
+        </div>
+        <div class="m-field"><label>Node</label><select id="rb-node"><option value="local">local</option></select></div>
+      </div>
+      <div class="m-result" id="rb-result"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="m-btn m-btn-secondary" onclick="closeModal('modal-run-runbook')">Cancel</button>
+      <button class="m-btn m-btn-primary" onclick="submitRunRunbook()">▶ Execute</button>
+    </div>
+  </div>
+</div>
+
+<!-- RCA Draft -->
+<div class="modal-backdrop" id="modal-rca">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-icon">🔬</span><span class="modal-title">RCA Draft</span><button class="modal-close" onclick="closeModal('modal-rca')">✕</button></div>
+    <div class="modal-body">
+      <div class="m-field"><label>Alert ID *</label><input id="rca-id" type="number" placeholder="Enter alert ID (e.g. 42)" min="1" /></div>
+      <p style="color:#64748b;font-size:.8rem;">AI will generate a full Root Cause Analysis including summary, root cause, timeline, and recommended actions.</p>
+      <div class="m-result" id="rca-result"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="m-btn m-btn-secondary" onclick="closeModal('modal-rca')">Cancel</button>
+      <button class="m-btn m-btn-primary" onclick="submitRCA()">🔬 Generate RCA</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+
 <!-- ── APP MENU BAR ── -->
 <div id="app-menubar">
 
@@ -540,7 +824,7 @@
       <div class="drop-item" onclick="menuCmd('check ip')"><span class="di">🌐</span> Check IP</div>
       <div class="drop-item" onclick="menuCmd('check routes')"><span class="di">🗺</span> Check Routes</div>
       <div class="drop-item" onclick="menuCmd('check network')"><span class="di">📡</span> Network Stats</div>
-      <div class="drop-item" onclick="menuCmd('check dns')"><span class="di">🔍</span> Check DNS</div>
+      <div class="drop-item" onclick="openModal('modal-dns');closeAllMenus()"><span class="di">🔍</span> DNS Lookup…</div>
       <div class="drop-item" onclick="menuCmd('check connections')"><span class="di">🔗</span> Connections</div>
     </div>
   </div>
@@ -550,11 +834,11 @@
     <button class="menu-trigger" onclick="toggleMenu('dd-services')">Services <span class="arrow">▼</span></button>
     <div class="dropdown-menu" id="dd-services">
       <div class="drop-label">Check</div>
-      <div class="drop-item" onclick="menuCmd('service status ', false)"><span class="di">🔎</span> Service Status…</div>
+      <div class="drop-item" onclick="openModal('modal-service-status');closeAllMenus()"><span class="di">🔎</span> Service Status…</div>
       <div class="drop-item" onclick="menuCmd('check failed services')"><span class="di">💥</span> Failed Services</div>
       <div class="drop-sep"></div>
       <div class="drop-label">Actions</div>
-      <div class="drop-item" onclick="menuCmd('restart ', false)"><span class="di">🔄</span> Restart Service…</div>
+      <div class="drop-item" onclick="openModal('modal-restart-service');closeAllMenus()"><span class="di">🔄</span> Restart Service…</div>
       <div class="drop-item" onclick="menuCmd('cancel')"><span class="di">✕</span> Cancel Pending</div>
     </div>
   </div>
@@ -568,7 +852,7 @@
       <div class="drop-item" onclick="menuCmd('show unacked alerts')"><span class="di">🔕</span> Unacknowledged</div>
       <div class="drop-item" onclick="menuCmd('show predictive alerts')"><span class="di">🔮</span> Predictive Alerts</div>
       <div class="drop-sep"></div>
-      <div class="drop-item" onclick="menuCmd('ack all')"><span class="di">✅</span> Acknowledge All</div>
+      <div class="drop-item" onclick="openModal('modal-ack-all');closeAllMenus()"><span class="di">✅</span> Acknowledge All</div>
       <div class="drop-sep"></div>
       <div class="drop-item" onclick="switchTab('alerts', document.querySelector('.tab-btn[data-tab=\\'alerts\\']')); loadAlerts(); closeAllMenus();"><span class="di">📋</span> Open Alerts Panel</div>
     </div>
@@ -581,12 +865,12 @@
       <div class="drop-item" onclick="menuCmd('list runbooks')"><span class="di">📚</span> List Runbooks</div>
       <div class="drop-sep"></div>
       <div class="drop-label">Run</div>
-      <div class="drop-item" onclick="menuCmd('run clear_tmp')"><span class="di">🗑</span> Clear /tmp</div>
-      <div class="drop-item" onclick="menuCmd('run disk_breakdown')"><span class="di">💾</span> Disk Breakdown</div>
-      <div class="drop-item" onclick="menuCmd('run large_logs')"><span class="di">📄</span> Large Logs</div>
-      <div class="drop-item" onclick="menuCmd('run listening_services')"><span class="di">👂</span> Listening Services</div>
-      <div class="drop-item" onclick="menuCmd('run flush_cache')"><span class="di">💨</span> Flush Cache</div>
-      <div class="drop-item" onclick="menuCmd('run rotate_logs')"><span class="di">🔁</span> Rotate Logs</div>
+      <div class="drop-item" onclick="openRunbookModal('disk_breakdown');closeAllMenus()"><span class="di">💾</span> Disk Breakdown</div>
+      <div class="drop-item" onclick="openRunbookModal('large_logs');closeAllMenus()"><span class="di">📄</span> Large Logs</div>
+      <div class="drop-item" onclick="openRunbookModal('listening_services');closeAllMenus()"><span class="di">👂</span> Listening Services</div>
+      <div class="drop-item" onclick="openRunbookModal('clear_tmp');closeAllMenus()"><span class="di">🗑</span> Clear /tmp</div>
+      <div class="drop-item" onclick="openRunbookModal('flush_cache');closeAllMenus()"><span class="di">💨</span> Flush Cache</div>
+      <div class="drop-item" onclick="openRunbookModal('rotate_logs');closeAllMenus()"><span class="di">🔁</span> Rotate Logs</div>
     </div>
   </div>
 
@@ -595,12 +879,12 @@
     <button class="menu-trigger" onclick="toggleMenu('dd-incidents')">Incidents <span class="arrow">▼</span></button>
     <div class="dropdown-menu" id="dd-incidents">
       <div class="drop-label">Tickets</div>
-      <div class="drop-item" onclick="menuCmd('show tickets')"><span class="di">🎫</span> Show Tickets</div>
-      <div class="drop-item" onclick="menuCmd('create ticket')"><span class="di">➕</span> Create Ticket</div>
-      <div class="drop-item" onclick="menuCmd('show all tickets')"><span class="di">📋</span> All Tickets</div>
+      <div class="drop-item" onclick="loadTicketsModal('open');openModal('modal-show-tickets');closeAllMenus()"><span class="di">🎫</span> Show Tickets</div>
+      <div class="drop-item" onclick="openModal('modal-create-ticket');closeAllMenus()"><span class="di">➕</span> Create Ticket</div>
+      <div class="drop-item" onclick="loadTicketsModal('all');openModal('modal-show-tickets');closeAllMenus()"><span class="di">📋</span> All Tickets</div>
       <div class="drop-sep"></div>
       <div class="drop-label">Analysis</div>
-      <div class="drop-item" onclick="menuCmd('rca ', false)"><span class="di">🔬</span> RCA Draft…</div>
+      <div class="drop-item" onclick="openModal('modal-rca');closeAllMenus()"><span class="di">🔬</span> RCA Draft…</div>
       <div class="drop-item" onclick="menuCmd('show predictive alerts')"><span class="di">🔮</span> Predictive Alerts</div>
     </div>
   </div>
@@ -625,12 +909,12 @@
     <button class="menu-trigger" onclick="toggleMenu('dd-admin')">Admin <span class="arrow">▼</span></button>
     <div class="dropdown-menu" id="dd-admin">
       <div class="drop-label">Users</div>
-      <div class="drop-item" onclick="menuCmd('list users')"><span class="di">👥</span> List Users</div>
-      <div class="drop-item" onclick="menuCmd('add user ', false)"><span class="di">➕</span> Add User…</div>
+      <div class="drop-item" onclick="loadUsersModal();openModal('modal-list-users');closeAllMenus()"><span class="di">👥</span> List Users</div>
+      <div class="drop-item" onclick="openModal('modal-add-user');closeAllMenus()"><span class="di">➕</span> Add User…</div>
       <div class="drop-sep"></div>
       <div class="drop-label">Nodes</div>
-      <div class="drop-item" onclick="menuCmd('list nodes')"><span class="di">🖥</span> List Nodes</div>
-      <div class="drop-item" onclick="menuCmd('add node ', false)"><span class="di">➕</span> Add Node…</div>
+      <div class="drop-item" onclick="loadNodesModal();openModal('modal-list-nodes');closeAllMenus()"><span class="di">🖥</span> List Nodes</div>
+      <div class="drop-item" onclick="openModal('modal-add-node');closeAllMenus()"><span class="di">➕</span> Add Node…</div>
       <div class="drop-sep"></div>
       <div class="drop-label">System</div>
       <div class="drop-item" onclick="menuCmd('show system config')"><span class="di">⚙️</span> System Config</div>
@@ -1115,6 +1399,258 @@ function menuCmd(cmd, send = true) {
     input.setSelectionRange(cmd.length, cmd.length);
   }
 }
+
+// ── Modal System ──────────────────────────────────────────────────────────────
+function openModal(id) {
+  document.getElementById(id).classList.add('active');
+  // Populate node selects
+  const selects = document.querySelectorAll(`#${id} select[id$="-node"]`);
+  selects.forEach(sel => {
+    const cur = sel.value;
+    sel.innerHTML = '<option value="local">local</option>';
+    (_nodesList||[]).forEach(n => {
+      const o = document.createElement('option');
+      o.value = n.name; o.textContent = n.name;
+      if (n.name === cur) o.selected = true;
+      sel.appendChild(o);
+    });
+  });
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('active');
+  // Reset result divs
+  const r = document.querySelector(`#${id} .m-result`);
+  if (r) { r.style.display='none'; r.className='m-result'; r.textContent=''; }
+}
+function showModalResult(elId, msg, isOk) {
+  const el = document.getElementById(elId);
+  el.textContent = msg;
+  el.className = 'm-result ' + (isOk ? 'ok' : 'err');
+  el.style.display = 'block';
+}
+// Sync result to chat window
+function syncToChat(msg) {
+  const chatBtn = document.querySelector('.tab-btn[data-tab="chat"]');
+  addBubble(msg, 'bot');
+}
+
+// ── Create Ticket ─────────────────────────────────────────────────────────────
+async function submitCreateTicket() {
+  const title = document.getElementById('ct-title').value.trim();
+  if (!title) { showModalResult('ct-result','Title is required.',false); return; }
+  const priority = document.getElementById('ct-priority').value;
+  const desc = document.getElementById('ct-desc').value.trim();
+  const cmd = `create ticket ${title} priority ${priority}${desc ? ' | ' + desc : ''}`;
+  try {
+    const res = await authFetch('/chatops/message', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({message: cmd})});
+    const data = await res.json();
+    showModalResult('ct-result', data.response, true);
+    syncToChat(`🎫 Ticket created: "${title}" [${priority}]\n${data.response}`);
+    document.getElementById('ct-title').value = '';
+    document.getElementById('ct-desc').value = '';
+  } catch(e) { showModalResult('ct-result', 'Error: ' + e.message, false); }
+}
+
+// ── Show Tickets ──────────────────────────────────────────────────────────────
+async function loadTicketsModal(filter) {
+  if (filter) document.getElementById('st-filter').value = filter;
+  const f = document.getElementById('st-filter').value;
+  const body = document.getElementById('st-body');
+  body.innerHTML = '<div class="m-empty"><span class="m-spinner"></span> Loading…</div>';
+  try {
+    const res = await authFetch('/chatops/message', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({message: f === 'all' ? 'show all tickets' : 'show tickets'})});
+    const data = await res.json();
+    const text = data.response || '';
+    // Parse ticket lines and render as table
+    const lines = text.split('\n').filter(l => l.trim());
+    const rows = lines.filter(l => /^#\d+/.test(l.trim()) || /Ticket #/.test(l));
+    if (!rows.length) { body.innerHTML = `<div class="m-empty">${text || 'No tickets found.'}</div>`; return; }
+    let html = '<table class="m-table"><thead><tr><th>#</th><th>Title</th><th>Priority</th><th>Status</th><th>Created</th></tr></thead><tbody>';
+    lines.forEach(line => {
+      const m = line.match(/^#(\d+)\s+\[(\w+)\]\s+\[(\w+)\]\s+(.+?)(?:\s+—\s+(.+))?$/);
+      if (m) {
+        const [,id,status,priority,title,date] = m;
+        const sc = status.toLowerCase()==='open'?'m-badge-green':status.toLowerCase()==='closed'?'m-badge-gray':'m-badge-blue';
+        const pc = priority.toLowerCase()==='high'?'m-badge-red':priority.toLowerCase()==='medium'?'m-badge-yellow':'m-badge-blue';
+        html += `<tr><td><strong>#${id}</strong></td><td>${title}</td><td><span class="m-badge ${pc}">${priority}</span></td><td><span class="m-badge ${sc}">${status}</span></td><td style="color:#64748b;font-size:.78rem">${date||''}</td></tr>`;
+      } else if (line.trim()) {
+        html += `<tr><td colspan="5" style="color:#94a3b8;font-size:.8rem">${line}</td></tr>`;
+      }
+    });
+    html += '</tbody></table>';
+    body.innerHTML = html;
+  } catch(e) { body.innerHTML = `<div class="m-empty" style="color:#fca5a5">Error: ${e.message}</div>`; }
+}
+
+// ── Restart Service ───────────────────────────────────────────────────────────
+async function submitRestartService() {
+  const name = document.getElementById('rs-name').value.trim();
+  if (!name) { showModalResult('rs-result','Service name is required.',false); return; }
+  const node = document.getElementById('rs-node').value;
+  const cmd = node === 'local' ? `restart ${name}` : `restart ${name} on ${node}`;
+  try {
+    const res = await authFetch('/chatops/message', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({message: cmd})});
+    const data = await res.json();
+    const ok = !data.response.toLowerCase().includes('error') && !data.response.toLowerCase().includes('failed');
+    showModalResult('rs-result', data.response, ok);
+    syncToChat(`🔄 Restart ${name}${node!=='local'?' on '+node:''}: ${data.response}`);
+  } catch(e) { showModalResult('rs-result','Error: '+e.message,false); }
+}
+
+// ── Service Status ────────────────────────────────────────────────────────────
+async function submitServiceStatus() {
+  const name = document.getElementById('ss-name').value.trim();
+  if (!name) { showModalResult('ss-result','Service name is required.',false); return; }
+  const node = document.getElementById('ss-node').value;
+  const cmd = node === 'local' ? `service status ${name}` : `service status ${name} on ${node}`;
+  try {
+    const res = await authFetch('/chatops/message', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({message: cmd})});
+    const data = await res.json();
+    const ok = data.response.toLowerCase().includes('active') || data.response.toLowerCase().includes('running');
+    showModalResult('ss-result', data.response, ok);
+    syncToChat(`🔎 ${name} status: ${data.response}`);
+  } catch(e) { showModalResult('ss-result','Error: '+e.message,false); }
+}
+
+// ── DNS Lookup ────────────────────────────────────────────────────────────────
+async function submitDNS() {
+  const domain = document.getElementById('dns-domain').value.trim();
+  if (!domain) { showModalResult('dns-result','Domain is required.',false); return; }
+  try {
+    const res = await authFetch('/chatops/message', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({message: `check dns ${domain}`})});
+    const data = await res.json();
+    showModalResult('dns-result', data.response, true);
+    syncToChat(`🔍 DNS ${domain}: ${data.response}`);
+  } catch(e) { showModalResult('dns-result','Error: '+e.message,false); }
+}
+
+// ── Add User ──────────────────────────────────────────────────────────────────
+async function submitAddUser() {
+  const user = document.getElementById('au-user').value.trim();
+  const pass = document.getElementById('au-pass').value.trim();
+  const role = document.getElementById('au-role').value;
+  if (!user || !pass) { showModalResult('au-result','Username and password are required.',false); return; }
+  try {
+    const res = await authFetch('/chatops/message', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({message: `add user ${user} ${pass} ${role}`})});
+    const data = await res.json();
+    const ok = data.response.toLowerCase().includes('created') || data.response.toLowerCase().includes('added');
+    showModalResult('au-result', data.response, ok);
+    if (ok) syncToChat(`👤 User created: ${user} (${role})`);
+    document.getElementById('au-user').value = '';
+    document.getElementById('au-pass').value = '';
+  } catch(e) { showModalResult('au-result','Error: '+e.message,false); }
+}
+
+// ── List Users ────────────────────────────────────────────────────────────────
+async function loadUsersModal() {
+  const body = document.getElementById('lu-body');
+  body.innerHTML = '<div class="m-empty"><span class="m-spinner"></span> Loading…</div>';
+  try {
+    const res = await authFetch('/chatops/auth/users');
+    const data = await res.json();
+    const users = data.users || [];
+    if (!users.length) { body.innerHTML = '<div class="m-empty">No users found.</div>'; return; }
+    let html = '<table class="m-table"><thead><tr><th>Username</th><th>Role</th><th>Status</th></tr></thead><tbody>';
+    users.forEach(u => {
+      const rc = u.role==='admin'?'m-badge-red':u.role==='developer'?'m-badge-yellow':u.role==='operator'?'m-badge-blue':'m-badge-gray';
+      const sc = u.active!==false?'m-badge-green':'m-badge-gray';
+      html += `<tr><td><strong>${u.username}</strong></td><td><span class="m-badge ${rc}">${u.role}</span></td><td><span class="m-badge ${sc}">${u.active!==false?'Active':'Inactive'}</span></td></tr>`;
+    });
+    html += '</tbody></table>';
+    body.innerHTML = html;
+  } catch(e) { body.innerHTML = `<div class="m-empty" style="color:#fca5a5">Error: ${e.message}</div>`; }
+}
+
+// ── Add Node ──────────────────────────────────────────────────────────────────
+async function submitAddNode() {
+  const name = document.getElementById('an-name').value.trim();
+  const host = document.getElementById('an-host').value.trim();
+  if (!name || !host) { showModalResult('an-result','Name and SSH target are required.',false); return; }
+  try {
+    const res = await authFetch('/chatops/message', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({message: `add node ${name} ${host}`})});
+    const data = await res.json();
+    const ok = !data.response.toLowerCase().includes('error');
+    showModalResult('an-result', data.response, ok);
+    if (ok) syncToChat(`🖥️ Node added: ${name} → ${host}`);
+    if (ok) { document.getElementById('an-name').value=''; document.getElementById('an-host').value=''; }
+  } catch(e) { showModalResult('an-result','Error: '+e.message,false); }
+}
+
+// ── List Nodes ────────────────────────────────────────────────────────────────
+async function loadNodesModal() {
+  const body = document.getElementById('ln-body');
+  body.innerHTML = '<div class="m-empty"><span class="m-spinner"></span> Loading…</div>';
+  try {
+    const res = await authFetch('/chatops/nodes');
+    const data = await res.json();
+    const nodes = data.nodes || [];
+    if (!nodes.length) { body.innerHTML = '<div class="m-empty">No remote nodes configured.</div>'; return; }
+    let html = '<table class="m-table"><thead><tr><th>Name</th><th>Host</th><th>User</th></tr></thead><tbody>';
+    nodes.forEach(n => {
+      if (n.name === 'local') return;
+      html += `<tr><td><strong>${n.name}</strong></td><td>${n.host||'—'}</td><td>${n.user||'—'}</td></tr>`;
+    });
+    html += '</tbody></table>';
+    body.innerHTML = html;
+  } catch(e) { body.innerHTML = `<div class="m-empty" style="color:#fca5a5">Error: ${e.message}</div>`; }
+}
+
+// ── Ack All ───────────────────────────────────────────────────────────────────
+async function submitAckAll() {
+  try {
+    const res = await authFetch('/chatops/message', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({message: 'ack all'})});
+    const data = await res.json();
+    showModalResult('ack-result', data.response, true);
+    syncToChat('✅ ' + data.response);
+    loadAlerts();
+  } catch(e) { showModalResult('ack-result','Error: '+e.message,false); }
+}
+
+// ── Run Runbook ───────────────────────────────────────────────────────────────
+function openRunbookModal(name) {
+  document.getElementById('rb-name').value = name;
+  openModal('modal-run-runbook');
+}
+async function submitRunRunbook() {
+  const name = document.getElementById('rb-name').value;
+  const mode = document.getElementById('rb-mode').value;
+  const node = document.getElementById('rb-node').value;
+  const nodeStr = node !== 'local' ? ` on ${node}` : '';
+  const cmd = `${mode} ${name}${nodeStr}`;
+  const btn = document.querySelector('#modal-run-runbook .m-btn-primary');
+  btn.disabled = true; btn.innerHTML = '<span class="m-spinner"></span> Running…';
+  try {
+    const res = await authFetch('/chatops/message', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({message: cmd})});
+    const data = await res.json();
+    showModalResult('rb-result', data.response, true);
+    syncToChat(`📋 Runbook ${name} (${mode}): \n${data.response}`);
+  } catch(e) { showModalResult('rb-result','Error: '+e.message,false); }
+  finally { btn.disabled=false; btn.innerHTML='▶ Execute'; }
+}
+
+// ── RCA ───────────────────────────────────────────────────────────────────────
+async function submitRCA() {
+  const id = document.getElementById('rca-id').value.trim();
+  if (!id) { showModalResult('rca-result','Alert ID is required.',false); return; }
+  const btn = document.querySelector('#modal-rca .m-btn-primary');
+  btn.disabled=true; btn.innerHTML='<span class="m-spinner"></span> Generating…';
+  try {
+    const res = await authFetch('/chatops/message', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({message: `rca ${id}`})});
+    const data = await res.json();
+    showModalResult('rca-result', data.response, true);
+    syncToChat(`🔬 RCA for alert #${id}:\n${data.response}`);
+  } catch(e) { showModalResult('rca-result','Error: '+e.message,false); }
+  finally { btn.disabled=false; btn.innerHTML='🔬 Generate RCA'; }
+}
+
+// Close modal on backdrop click
+document.querySelectorAll('.modal-backdrop').forEach(el => {
+  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('active'); });
+});
+// Close modal on Escape key
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.querySelectorAll('.modal-backdrop.active').forEach(el => el.classList.remove('active'));
+});
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
 function switchTab(name, btn) {

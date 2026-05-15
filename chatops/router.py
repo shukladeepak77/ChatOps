@@ -794,7 +794,7 @@ def route_message(message: str, caller_role: str = "operator", _nlu_depth: int =
             title = title[:pri_m.start()].strip()
         from .db import ticket_create
         tid = ticket_create(title=title, priority=priority, created_by=caller_role)
-        return {"response": f"Ticket #{tid} created: **{title}** [{priority.upper()}]\nUse `show ticket {tid}` to view details."}
+        return {"response": f"Ticket #{tid} created: **{title}** [{priority.upper()}]\nUse `show ticket {tid}` to view details, or open **Incidents → Show Tickets** from the menu."}
 
     close_ticket_m = re.match(r'^close\s+ticket\s+(\d+)$', s)
     if close_ticket_m:
