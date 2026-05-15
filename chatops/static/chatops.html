@@ -6,242 +6,645 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Inter, Arial, sans-serif; background: #f0f2f5; color: #111; height: 100vh; display: flex; flex-direction: column; }
+    :root {
+      /* Warm dark purple-gray — no blue at all */
+      --bg:      #17151f;
+      --surface: #201d2e;
+      --surface2:#2b2840;
+      --surface3:#363254;
+      --border:  rgba(167,139,250,0.18);
+      --border2: rgba(167,139,250,0.38);
+      --text:    #f0ebff;
+      --text2:   #c4b5d8;
+      --text3:   #7d6a96;
+      --accent:  #a78bfa;
+      --accent2: #e879f9;
+      --green:   #34d399;
+      --yellow:  #fbbf24;
+      --red:     #f87171;
+      --pink:    #f472b6;
+      --cyan:    #22d3ee;
+      /* glow colours */
+      --glow-blue:   rgba(167,139,250,.32);
+      --glow-purple: rgba(232,121,249,.28);
+      --glow-green:  rgba(52,211,153,.24);
+      --glow-red:    rgba(248,113,113,.28);
+      --glow-yellow: rgba(251,191,36,.24);
+    }
+
+    /* ── Base ── */
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    /* subtle dot-grid texture */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background-image: radial-gradient(circle, rgba(167,139,250,.1) 1px, transparent 1px);
+      background-size: 26px 26px;
+    }
+    /* atmospheric glow blobs */
+    body::after {
+      content: '';
+      position: fixed; pointer-events: none; z-index: 0;
+      width: 800px; height: 600px; top: -150px; left: -200px;
+      background: radial-gradient(ellipse, rgba(77,159,255,.14) 0%, transparent 65%);
+    }
+    header, #app-menubar, .tab-content { position: relative; z-index: 1; }
 
     /* ── Header ── */
-    header { background: #1e3a8a; color: #fff; padding: 12px 20px; display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+    header {
+      background: linear-gradient(135deg, #1e1b2e 0%, #271f3d 100%);
+      border-bottom: 1px solid rgba(167,139,250,.28);
+      box-shadow: 0 1px 24px rgba(0,0,0,.5), 0 0 0 1px rgba(167,139,250,.08), 0 2px 12px rgba(167,139,250,.08);
+      padding: 0 18px;
+      display: flex; align-items: center; height: 52px; flex-shrink: 0; gap: 14px;
+    }
+    .header-logo-icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, #7c3aed 0%, #d946ef 100%);
+      border-radius: 8px; display: flex; align-items: center; justify-content: center;
+      font-size: 16px; flex-shrink: 0;
+      box-shadow: 0 0 16px var(--glow-blue);
+    }
     .header-brand { display: flex; flex-direction: column; gap: 2px; }
-    header h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: .02em; line-height: 1; }
-    .header-hint { font-size: .7rem; color: rgba(255,255,255,.6); letter-spacing: .01em; }
-    nav { display: flex; gap: 4px; margin-left: auto; }
-    nav button {
-      background: transparent; border: 1px solid rgba(255,255,255,.35); color: #fff;
-      padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: .85rem;
-      display: flex; align-items: center; gap: 6px; transition: background .15s;
+    .header-title {
+      font-size: .97rem; font-weight: 800; line-height: 1; letter-spacing: -.02em;
+      background: linear-gradient(90deg, #ffffff 0%, #e9d5ff 45%, #f9a8d4 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      filter: drop-shadow(0 0 8px rgba(233,213,255,.45));
     }
-    nav button:hover { background: rgba(255,255,255,.15); }
-    nav button.active { background: rgba(255,255,255,.25); border-color: #fff; font-weight: 600; }
-    .badge {
-      background: #ef4444; color: #fff; border-radius: 9px;
-      font-size: .7rem; font-weight: 700; padding: 1px 6px; min-width: 18px; text-align: center;
+    .header-hint { font-size: .63rem; color: #c4b5d8; letter-spacing: .02em; }
+    .header-pills { display: flex; gap: 5px; margin-left: 14px; }
+    .header-pill { font-size: .6rem; font-weight: 700; padding: 2px 8px; border-radius: 10px; border: 1px solid; white-space: nowrap; letter-spacing: .03em; }
+    .pill-green  { background: rgba(52,211,153,.22);  color: #6effd6; border-color: rgba(52,211,153,.55);  box-shadow: 0 0 10px rgba(52,211,153,.28); text-shadow: 0 0 6px rgba(52,211,153,.5); }
+    .pill-blue   { background: rgba(167,139,250,.22);  color: #f0e6ff; border-color: rgba(167,139,250,.55); box-shadow: 0 0 10px rgba(167,139,250,.28); text-shadow: 0 0 6px rgba(167,139,250,.5); }
+    .pill-purple { background: rgba(232,121,249,.18); color: #fce7ff; border-color: rgba(232,121,249,.45); box-shadow: 0 0 10px rgba(232,121,249,.22); text-shadow: 0 0 6px rgba(232,121,249,.45); }
+    .header-spacer { flex: 1; }
+    .user-info { display: flex; align-items: center; gap: 8px; padding: 5px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; }
+    .user-avatar {
+      width: 26px; height: 26px; border-radius: 50%;
+      background: linear-gradient(135deg, #9333ea, #7c3aed);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .72rem; font-weight: 800; flex-shrink: 0;
+      box-shadow: 0 0 10px var(--glow-purple);
     }
+    #user-display { font-size: .82rem; font-weight: 700; color: #f0ebff; }
+    .user-role-badge { font-size: .6rem; font-weight: 700; padding: 2px 7px; border-radius: 8px; background: rgba(192,132,252,.28); color: #f0e6ff; text-transform: uppercase; letter-spacing: .05em; border: 1px solid rgba(192,132,252,.45); box-shadow: 0 0 8px rgba(192,132,252,.2); }
+    #logout-btn { padding: 4px 10px; background: transparent; border: 1px solid var(--border2); color: var(--text2); border-radius: 6px; cursor: pointer; font-size: .72rem; transition: all .15s; }
+    #logout-btn:hover { background: var(--surface3); color: #f0ebff; }
+    .badge { background: var(--red); color: #fff; border-radius: 9px; font-size: .6rem; font-weight: 700; padding: 1px 5px; min-width: 16px; text-align: center; box-shadow: 0 0 8px var(--glow-red); }
     .badge:empty { display: none; }
+
+    /* ── App Menu Bar ── */
+    #app-menubar {
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      box-shadow: 0 2px 12px rgba(0,0,0,.25);
+      display: flex; align-items: stretch; flex-shrink: 0;
+      padding: 0 10px; height: 40px; gap: 2px;
+      position: relative; z-index: 100;
+    }
+    .menu-group { position: relative; }
+    .menu-trigger {
+      display: flex; align-items: center; gap: 5px;
+      padding: 0 12px; height: 40px;
+      background: transparent; border: none; color: #e2d9f3;
+      font-size: .8rem; font-weight: 600; cursor: pointer;
+      border-radius: 5px; white-space: nowrap; transition: all .12s;
+    }
+    .menu-trigger:hover  { background: var(--surface3); color: #ffffff; text-shadow: 0 0 8px rgba(233,213,255,.5); }
+    .menu-trigger.open   { background: var(--surface3); color: #f0e6ff; text-shadow: 0 0 10px rgba(167,139,250,.6); }
+    .menu-trigger .arrow { font-size: .48rem; opacity: .7; transition: transform .12s; margin-top: 1px; }
+    .menu-trigger.open .arrow { transform: rotate(180deg); opacity: 1; }
+    .dropdown-menu {
+      display: none; position: absolute; top: calc(100% + 4px); left: 0;
+      min-width: 220px;
+      background: var(--surface2); border: 1px solid var(--border2);
+      border-radius: 10px; box-shadow: 0 20px 60px rgba(0,0,0,.55), 0 0 0 1px rgba(167,139,250,.06);
+      padding: 5px; z-index: 500;
+      animation: dropIn .12s ease;
+    }
+    @keyframes dropIn { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
+    .dropdown-menu.open { display: block; }
+    .drop-item {
+      display: flex; align-items: center; gap: 9px;
+      padding: 8px 12px; border-radius: 6px;
+      cursor: pointer; font-size: .8rem; color: var(--text2);
+      transition: all .1s; white-space: nowrap;
+    }
+    .drop-item:hover { background: var(--surface3); color: var(--text); }
+    .drop-item:hover .di { filter: drop-shadow(0 0 4px rgba(167,139,250,.6)); }
+    .drop-item .di { font-size: .88rem; width: 19px; text-align: center; flex-shrink: 0; }
+    .drop-item .dk { font-size: .67rem; color: var(--text3); font-family: monospace; background: rgba(0,0,0,.3); padding: 1px 5px; border-radius: 3px; margin-left: auto; border: 1px solid var(--border); }
+    .drop-sep { height: 1px; background: var(--border); margin: 4px 10px; }
+    .drop-label { font-size: .63rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--text3); padding: 6px 12px 2px; }
+
+    /* Tab buttons */
+    .menubar-tabs { display: flex; align-items: center; gap: 2px; margin-left: auto; padding-left: 10px; border-left: 1px solid var(--border); }
+    .tab-btn {
+      display: flex; align-items: center; gap: 5px;
+      padding: 5px 12px; background: transparent;
+      border: 1px solid transparent; color: #b8a8d4;
+      font-size: .78rem; font-weight: 500; cursor: pointer;
+      border-radius: 6px; transition: all .12s; white-space: nowrap;
+    }
+    .tab-btn:hover { background: var(--surface3); color: #e9d5ff; }
+    .tab-btn.active {
+      background: linear-gradient(135deg, rgba(167,139,250,.25), rgba(232,121,249,.15));
+      border-color: rgba(167,139,250,.55); color: #ffffff; font-weight: 700;
+      box-shadow: 0 0 14px rgba(167,139,250,.25), inset 0 1px 0 rgba(255,255,255,.08);
+      text-shadow: 0 0 10px rgba(233,213,255,.6);
+    }
 
     /* ── Tabs ── */
     .tab-content { display: none; flex: 1; overflow: hidden; }
     .tab-content.active { display: flex; flex-direction: column; }
 
-    /* ── Chat tab ── */
-    #tab-chat { padding: 16px; gap: 12px; }
+    /* ── Chat ── */
+    #tab-chat { padding: 14px; gap: 10px; background: var(--bg); }
     #chat-window {
-      flex: 1; background: #fff; border-radius: 12px; border: 1px solid #e5e7eb;
-      overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px;
+      flex: 1;
+      background: linear-gradient(160deg, #2e2a45 0%, #252038 100%);
+      border: 1px solid var(--border);
+      border-radius: 14px; overflow-y: auto; padding: 16px;
+      display: flex; flex-direction: column; gap: 10px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.03), 0 4px 20px rgba(0,0,0,.3);
     }
+    #chat-window::-webkit-scrollbar { width: 4px; }
+    #chat-window::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
     .bubble {
-      max-width: 72%; padding: 10px 14px; border-radius: 16px; font-size: .88rem;
-      line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+      max-width: 76%; padding: 11px 15px; border-radius: 18px;
+      font-size: .875rem; line-height: 1.65; white-space: pre-wrap; word-break: break-word;
     }
-    .bubble.user { align-self: flex-end; background: #1e90ff; color: #fff; border-bottom-right-radius: 4px; }
-    .bubble.bot  { align-self: flex-start; background: #f3f4f6; color: #111; border-bottom-left-radius: 4px; }
-    .bubble.bot.critical { background: #fee2e2; }
-    .bubble.bot.warning  { background: #fef9c3; }
-    #chat-input-row { display: flex; gap: 8px; }
-    #chat-input { flex: 1; padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 8px; font-size: .9rem; }
-    #chat-send { padding: 10px 20px; background: #1e3a8a; color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; }
-    #chat-send:hover { background: #1e40af; }
-    #chat-clear { padding: 10px 14px; background: #dcfce7; color: #15803d; border: 1px solid #86efac; border-radius: 8px; cursor: pointer; font-size: .85rem; font-weight: 500; }
-    #chat-clear:hover { background: #bbf7d0; border-color: #4ade80; }
-    #upload-label { padding: 10px 14px; background: #eff6ff; color: #1d4ed8; border: 1px solid #93c5fd; border-radius: 8px; cursor: pointer; font-size: .85rem; font-weight: 500; user-select: none; white-space: nowrap; }
-    #upload-label:hover { background: #dbeafe; border-color: #60a5fa; }
-    .bubble.pending { color: #9ca3af; font-style: italic; }
+    .bubble.user {
+      align-self: flex-end;
+      background: linear-gradient(135deg, #7c3aed 0%, #d946ef 100%);
+      color: #fff; border-bottom-right-radius: 5px;
+      box-shadow: 0 4px 18px var(--glow-blue), 0 1px 0 rgba(255,255,255,.1) inset;
+    }
+    .bubble.bot {
+      align-self: flex-start;
+      background: #38324f;
+      color: var(--text); border-bottom-left-radius: 5px;
+      border: 1px solid rgba(167,139,250,0.25);
+      box-shadow: 0 2px 10px rgba(0,0,0,.2);
+    }
+    .bubble.bot.critical { background: rgba(240,96,96,.12); border-color: rgba(240,96,96,.35); color: #fca5a5; box-shadow: 0 2px 12px var(--glow-red); }
+    .bubble.bot.warning  { background: rgba(245,166,35,.1); border-color: rgba(245,166,35,.35); color: #fcd34d; box-shadow: 0 2px 12px var(--glow-yellow); }
+    .bubble.pending { color: var(--text3); font-style: italic; }
 
-    /* ── Alerts tab ── */
-    #tab-alerts { padding: 16px; gap: 12px; }
-    .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; }
-    .filter-bar button {
-      padding: 5px 12px; border-radius: 20px; border: 1px solid #d1d5db;
-      background: #fff; cursor: pointer; font-size: .82rem; color: #374151;
+    #chat-input-row { display: flex; gap: 8px; align-items: center; }
+    #chat-input {
+      flex: 1; padding: 11px 17px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 11px; color: var(--text); font-size: .88rem; outline: none;
+      transition: all .18s;
+      box-shadow: 0 2px 8px rgba(0,0,0,.2);
     }
-    .filter-bar button.active { background: #1e3a8a; color: #fff; border-color: #1e3a8a; }
-    #alerts-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+    #chat-input::placeholder { color: var(--text3); }
+    #chat-input:focus { border-color: rgba(167,139,250,.6); box-shadow: 0 0 0 3px rgba(167,139,250,.12), 0 2px 8px rgba(0,0,0,.2); }
+    #chat-send {
+      padding: 11px 24px;
+      background: linear-gradient(135deg, #7c3aed 0%, #d946ef 100%);
+      color: #fff; border: none; border-radius: 11px;
+      font-weight: 700; font-size: .88rem; cursor: pointer;
+      box-shadow: 0 4px 18px var(--glow-blue); transition: all .15s;
+      letter-spacing: .01em;
+    }
+    #chat-send:hover { transform: translateY(-2px); box-shadow: 0 8px 24px var(--glow-blue); }
+    #chat-send:disabled { opacity: .4; transform: none; cursor: not-allowed; }
+    #chat-clear { padding: 11px 14px; background: var(--surface2); color: var(--text3); border: 1px solid var(--border); border-radius: 11px; cursor: pointer; font-size: .82rem; font-weight: 500; transition: all .15s; }
+    #chat-clear:hover { background: var(--surface3); color: var(--text2); }
+    #upload-label { padding: 11px 14px; background: var(--surface2); color: var(--text3); border: 1px solid var(--border); border-radius: 11px; cursor: pointer; font-size: .82rem; font-weight: 500; user-select: none; white-space: nowrap; transition: all .15s; }
+    #upload-label:hover { background: var(--surface3); color: var(--text2); }
+
+    /* ── Alerts ── */
+    #tab-alerts { padding: 14px; gap: 10px; background: var(--bg); }
+    .filter-bar { display: flex; gap: 6px; flex-wrap: wrap; }
+    .filter-bar button { padding: 5px 14px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface2); color: var(--text3); cursor: pointer; font-size: .77rem; transition: all .15s; }
+    .filter-bar button:hover { background: var(--surface3); color: var(--text2); }
+    .filter-bar button.active { background: linear-gradient(135deg,rgba(167,139,250,.2),rgba(192,132,252,.15)); color: #d8b4fe; border-color: rgba(167,139,250,.45); box-shadow: 0 0 10px rgba(167,139,250,.1); }
+    #alerts-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 7px; }
+    #alerts-list::-webkit-scrollbar { width: 4px; }
+    #alerts-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
     .alert-card {
-      background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
-      padding: 12px 16px; display: flex; align-items: center; gap: 12px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 11px;
+      padding: 11px 15px; display: flex; align-items: center; gap: 11px;
+      transition: all .15s;
     }
-    .alert-card.critical { border-left: 4px solid #ef4444; }
-    .alert-card.warning  { border-left: 4px solid #f59e0b; }
-    .alert-card.info     { border-left: 4px solid #3b82f6; }
-    .sev-badge {
-      font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 4px; white-space: nowrap;
-    }
-    .sev-badge.critical { background: #fee2e2; color: #b91c1c; }
-    .sev-badge.warning  { background: #fef3c7; color: #92400e; }
-    .sev-badge.info     { background: #dbeafe; color: #1d4ed8; }
-    .alert-msg  { flex: 1; font-size: .88rem; }
-    .alert-time { font-size: .75rem; color: #9ca3af; white-space: nowrap; }
-    .ack-btn {
-      padding: 4px 10px; border-radius: 6px; border: 1px solid #d1d5db;
-      background: #fff; cursor: pointer; font-size: .78rem; color: #374151;
-    }
-    .ack-btn:hover { background: #f3f4f6; }
-    .acked-tag { font-size: .75rem; color: #10b981; font-weight: 600; }
-    .empty-state { color: #9ca3af; text-align: center; padding: 40px; font-size: .9rem; }
+    .alert-card:hover { background: var(--surface2); transform: translateX(2px); }
+    .alert-card.critical { border-left: 3px solid var(--red); }
+    .alert-card.critical:hover { box-shadow: 0 4px 16px var(--glow-red); }
+    .alert-card.warning  { border-left: 3px solid var(--yellow); }
+    .alert-card.warning:hover  { box-shadow: 0 4px 16px var(--glow-yellow); }
+    .alert-card.info     { border-left: 3px solid var(--accent); }
+    .sev-badge { font-size: .67rem; font-weight: 700; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
+    .sev-badge.critical { background: rgba(240,96,96,.2);  color: #fca5a5; }
+    .sev-badge.warning  { background: rgba(245,166,35,.2); color: #fcd34d; }
+    .sev-badge.info     { background: rgba(167,139,250,.2); color: #d8b4fe; }
+    .alert-msg  { flex: 1; font-size: .84rem; color: var(--text2); }
+    .alert-time { font-size: .71rem; color: var(--text3); white-space: nowrap; }
+    .ack-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text3); cursor: pointer; font-size: .73rem; transition: all .15s; }
+    .ack-btn:hover { background: rgba(45,212,160,.15); color: var(--green); border-color: rgba(45,212,160,.4); }
+    .acked-tag { font-size: .71rem; color: var(--green); font-weight: 600; }
+    .empty-state { color: var(--text3); text-align: center; padding: 40px; font-size: .88rem; }
 
-    /* ── Node selector bar ── */
-    .node-bar { display: flex; align-items: center; gap: 10px; padding-bottom: 10px; }
-    .node-bar label { font-size: .82rem; color: #6b7280; font-weight: 500; white-space: nowrap; }
-    .node-select { padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: .85rem; background: #fff; min-width: 160px; }
+    /* ── Node selector ── */
+    .node-bar { display: flex; align-items: center; gap: 8px; padding-bottom: 10px; }
+    .node-bar label { font-size: .77rem; color: var(--text3); font-weight: 500; white-space: nowrap; }
+    .node-select { padding: 5px 10px; border: 1px solid var(--border); border-radius: 7px; font-size: .82rem; background: var(--surface2); color: var(--text2); min-width: 160px; outline: none; }
+    .node-select:focus { border-color: rgba(167,139,250,.5); }
 
-    /* ── Node info card (Config tab, remote node) ── */
-    .node-info-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; max-width: 560px; }
-    .node-info-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 18px; color: #111; }
-    .node-info-row { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid #f3f4f6; gap: 12px; }
-    .node-info-row:last-child { border-bottom: none; }
-    .node-info-label { width: 80px; font-size: .82rem; color: #6b7280; font-weight: 500; }
-    .node-info-value { flex: 1; font-size: .88rem; color: #111; font-family: monospace; }
-
-    /* ── Metrics tab ── */
-    #tab-metrics { padding: 16px; gap: 16px; overflow-y: auto; }
-    .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+    /* ── Metrics ── */
+    #tab-metrics { padding: 14px; gap: 14px; overflow-y: auto; background: var(--bg); }
+    #tab-metrics::-webkit-scrollbar { width: 4px; }
+    #tab-metrics::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+    .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
     .chart-card {
-      background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px;
+      background: linear-gradient(160deg, var(--surface) 0%, #17151f 100%);
+      border: 1px solid var(--border); border-radius: 14px; padding: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.25);
+      position: relative; overflow: hidden;
     }
-    .chart-card h3 { font-size: .9rem; color: #374151; margin-bottom: 10px; }
+    .chart-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background: linear-gradient(90deg, var(--accent), var(--accent2)); opacity:.6; }
+    .chart-card h3 { font-size: .72rem; color: var(--text3); margin-bottom: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
     .chart-card canvas { width: 100% !important; height: 180px !important; }
+
     .metric-summary { display: flex; gap: 12px; flex-wrap: wrap; }
     .metric-tile {
-      flex: 1; min-width: 140px; background: #fff; border: 1px solid #e5e7eb;
-      border-radius: 12px; padding: 16px; text-align: center;
+      flex: 1; min-width: 150px;
+      background: linear-gradient(160deg, var(--surface2) 0%, var(--surface) 100%);
+      border: 1px solid var(--border); border-radius: 14px;
+      padding: 18px 16px; text-align: center; position: relative; overflow: hidden;
+      transition: all .2s;
+      box-shadow: 0 4px 20px rgba(0,0,0,.25);
     }
-    .metric-tile .label { font-size: .78rem; color: #6b7280; margin-bottom: 4px; }
-    .metric-tile .value { font-size: 1.6rem; font-weight: 700; }
-    .metric-tile .status { font-size: .75rem; font-weight: 600; margin-top: 4px; }
-    .metric-tile .status.ok       { color: #10b981; }
-    .metric-tile .status.warning  { color: #f59e0b; }
-    .metric-tile .status.critical { color: #ef4444; }
-    #metrics-refresh { align-self: flex-start; padding: 7px 16px; background: #1e3a8a; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: .85rem; }
-    #metrics-refresh:hover { background: #1e40af; }
+    .metric-tile:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,0,0,.3); }
+    .metric-tile::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background: linear-gradient(90deg, var(--tile-c,#a78bfa), var(--tile-c2,#c084fc)); }
+    .metric-tile::after { content:''; position:absolute; inset:0; background: radial-gradient(ellipse at 50% 0%, rgba(var(--tile-rgb,167,139,250),.08) 0%, transparent 65%); pointer-events:none; }
+    .metric-tile .label { font-size: .67rem; color: var(--text3); margin-bottom: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
+    .metric-tile .value { font-size: 2.1rem; font-weight: 800; line-height: 1; letter-spacing: -.03em; }
+    .metric-tile .status { font-size: .67rem; font-weight: 700; margin-top: 8px; text-transform: uppercase; letter-spacing: .05em; padding: 2px 8px; border-radius: 8px; display: inline-block; }
+    .metric-tile .status.ok       { color: var(--green); background: rgba(45,212,160,.12); }
+    .metric-tile .status.warning  { color: var(--yellow); background: rgba(245,166,35,.12); }
+    .metric-tile .status.critical { color: var(--red); background: rgba(240,96,96,.12); }
 
-    /* ── Config tab ── */
-    #tab-config { padding: 24px; overflow-y: auto; }
-    #tab-help { overflow-y: auto; }
-    #tab-kb { padding: 20px; overflow-y: auto; }
-    .kb-toolbar { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; align-items:center; }
-    .kb-toolbar input { flex:1; min-width:180px; padding:7px 12px; border:1px solid #d1d5db; border-radius:6px; font-size:.9rem; }
-    .kb-toolbar button { padding:7px 14px; border:none; border-radius:6px; cursor:pointer; font-size:.85rem; font-weight:500; }
-    .kb-card { background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:14px 16px; margin-bottom:10px; }
-    .kb-card-title { font-weight:600; color:#1e3a8a; font-size:.95rem; cursor:pointer; }
-    .kb-card-title:hover { text-decoration:underline; }
-    .kb-card-meta { font-size:.78rem; color:#9ca3af; margin-top:3px; }
-    .kb-card-tags { display:inline-block; background:#eff6ff; color:#1d4ed8; font-size:.72rem; padding:1px 7px; border-radius:10px; margin-right:4px; }
-    .kb-card-body { margin-top:10px; font-size:.85rem; color:#374151; white-space:pre-wrap; border-top:1px solid #f3f4f6; padding-top:10px; display:none; }
-    .kb-add-form { background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; padding:16px; margin-bottom:16px; display:none; }
-    .kb-add-form input, .kb-add-form textarea { width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #d1d5db; border-radius:6px; font-size:.88rem; margin-bottom:8px; font-family:inherit; }
-    .kb-add-form textarea { min-height:90px; resize:vertical; }
-    .kb-empty { color:#9ca3af; text-align:center; padding:40px; font-style:italic; }
-    .config-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; max-width: 560px; }
-    .config-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 18px; color: #111; }
-    .config-group { margin-bottom: 20px; }
-    .config-group label { display: block; font-size: .82rem; color: #6b7280; margin-bottom: 6px; font-weight: 500; }
+    #metrics-refresh { align-self: flex-start; padding: 6px 14px; background: var(--surface2); color: var(--text2); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-size: .8rem; transition: all .15s; }
+    #metrics-refresh:hover { background: var(--surface3); color: var(--text); }
+
+    /* ── Config ── */
+    #tab-config { padding: 20px; overflow-y: auto; background: var(--bg); }
+    #tab-config::-webkit-scrollbar { width: 4px; }
+    #tab-config::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+    .config-card {
+      background: linear-gradient(160deg, var(--surface) 0%, #17151f 100%);
+      border: 1px solid var(--border); border-radius: 14px; padding: 24px; max-width: 560px;
+      box-shadow: 0 4px 24px rgba(0,0,0,.25);
+    }
+    .config-card h3 { font-size: .92rem; font-weight: 700; margin-bottom: 18px; color: var(--text); }
+    .config-group { margin-bottom: 18px; }
+    .config-group label { display: block; font-size: .77rem; color: var(--text3); margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
     .config-row { display: flex; gap: 12px; }
     .config-row > div { flex: 1; }
-    .config-row > div span { font-size: .75rem; color: #9ca3af; }
-    .config-row input[type=number] {
-      width: 100%; padding: 7px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: .9rem;
-    }
-    .config-row input[type=number]:focus { outline: 2px solid #1e3a8a; border-color: transparent; }
+    .config-row > div span { font-size: .7rem; color: var(--text3); }
+    .config-row input[type=number] { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; font-size: .88rem; background: var(--surface2); color: var(--text); outline: none; transition: border-color .15s; }
+    .config-row input[type=number]:focus { border-color: rgba(167,139,250,.55); box-shadow: 0 0 0 2px rgba(167,139,250,.1); }
     .config-save {
-      padding: 10px 24px; background: #1e3a8a; color: #fff; border: none;
-      border-radius: 8px; font-weight: 600; cursor: pointer; font-size: .9rem; margin-top: 8px;
+      padding: 10px 24px;
+      background: linear-gradient(135deg, #7c3aed 0%, #d946ef 100%);
+      color: #fff; border: none; border-radius: 9px; font-weight: 700; cursor: pointer;
+      font-size: .88rem; margin-top: 6px; transition: all .15s;
+      box-shadow: 0 4px 16px var(--glow-blue);
     }
-    .config-save:hover { background: #1e40af; }
-    #config-msg { margin-top: 10px; font-size: .85rem; color: #10b981; height: 18px; }
+    .config-save:hover { transform: translateY(-2px); box-shadow: 0 8px 24px var(--glow-blue); }
+    #config-msg { margin-top: 10px; font-size: .82rem; color: var(--green); height: 18px; }
+    .cfg-text-input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; font-size: .85rem; background: var(--surface2); color: var(--text); outline: none; transition: border-color .15s; }
+    .cfg-text-input:focus { border-color: rgba(167,139,250,.55); }
+    .cfg-select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; font-size: .88rem; background: var(--surface2); color: var(--text); margin-top: 4px; outline: none; }
+    .cfg-select:focus { border-color: rgba(167,139,250,.55); }
+    .node-info-row { display: flex; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); gap: 12px; }
+    .node-info-row:last-child { border-bottom: none; }
+    .node-info-label { width: 80px; font-size: .78rem; color: var(--text3); font-weight: 500; }
+    .node-info-value { flex: 1; font-size: .84rem; color: var(--text2); font-family: monospace; }
 
-    /* ── Login overlay ── */
+    /* ── KB ── */
+    #tab-kb { padding: 20px; overflow-y: auto; background: var(--bg); }
+    #tab-kb::-webkit-scrollbar { width: 4px; }
+    #tab-kb::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+    .kb-toolbar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+    .kb-toolbar input { flex: 1; min-width: 180px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 7px; font-size: .86rem; background: var(--surface2); color: var(--text); outline: none; }
+    .kb-toolbar input:focus { border-color: rgba(167,139,250,.5); }
+    .kb-toolbar input::placeholder { color: var(--text3); }
+    .kb-toolbar button { padding: 8px 13px; border: none; border-radius: 7px; cursor: pointer; font-size: .8rem; font-weight: 600; }
+    .kb-card { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; padding: 13px 15px; margin-bottom: 9px; transition: all .15s; }
+    .kb-card:hover { background: var(--surface2); transform: translateX(2px); border-color: var(--border2); }
+    .kb-card-title { font-weight: 600; color: #c4b5fd; font-size: .9rem; cursor: pointer; }
+    .kb-card-title:hover { text-decoration: underline; }
+    .kb-card-meta { font-size: .73rem; color: var(--text3); margin-top: 3px; }
+    .kb-card-tags { display: inline-block; background: rgba(167,139,250,.14); color: #d8b4fe; font-size: .67rem; padding: 1px 7px; border-radius: 10px; margin-right: 4px; }
+    .kb-card-body { margin-top: 9px; font-size: .82rem; color: var(--text2); white-space: pre-wrap; border-top: 1px solid var(--border); padding-top: 9px; display: none; }
+    .kb-add-form { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; padding: 14px; margin-bottom: 14px; display: none; }
+    .kb-add-form input, .kb-add-form textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; font-size: .85rem; margin-bottom: 8px; font-family: inherit; background: var(--surface2); color: var(--text); outline: none; }
+    .kb-add-form input:focus, .kb-add-form textarea:focus { border-color: rgba(167,139,250,.5); }
+    .kb-add-form textarea { min-height: 90px; resize: vertical; }
+    .kb-empty { color: var(--text3); text-align: center; padding: 40px; font-style: italic; }
+
+    /* ── Help ── */
+    #tab-help { overflow-y: auto; background: var(--bg); }
+    #tab-help::-webkit-scrollbar { width: 4px; }
+    #tab-help::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+    .help-inner { max-width: 900px; margin: 0 auto; padding: 22px 18px; }
+    .help-section { margin-bottom: 24px; }
+    .help-section-hdr { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; padding-bottom: 7px; margin-bottom: 10px; border-bottom: 1px solid; display: flex; align-items: center; gap: 7px; }
+    .hdr-blue   { color: #c4b5fd; border-color: rgba(167,139,250,.3); }
+    .hdr-cyan   { color: #38bdf8; border-color: rgba(56,189,248,.3); }
+    .hdr-amber  { color: #fbbf24; border-color: rgba(251,191,36,.3); }
+    .hdr-pink   { color: #f472b6; border-color: rgba(244,114,182,.3); }
+    .hdr-orange { color: #fb923c; border-color: rgba(251,146,60,.3); }
+    .hdr-purple { color: #c084fc; border-color: rgba(192,132,252,.3); }
+    .hdr-slate  { color: var(--text3); border-color: var(--border); }
+    .help-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    .help-table thead tr { background: var(--surface2); }
+    .help-table thead th { text-align: left; padding: 6px 9px; font-size: .7rem; font-weight: 600; color: var(--text3); }
+    .help-table tbody tr { border-top: 1px solid var(--border); }
+    .help-table tbody tr:hover { background: var(--surface2); }
+    .help-table tbody td { padding: 8px 9px; color: var(--text2); vertical-align: top; }
+    .help-table tbody td:first-child { white-space: nowrap; }
+    code.cmd { font-family: monospace; font-size: .79rem; padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
+    .cmd-blue   { background: rgba(167,139,250,.14);  color: #d8b4fe; }
+    .cmd-cyan   { background: rgba(56,189,248,.12);  color: #7dd3fc; }
+    .cmd-amber  { background: rgba(251,191,36,.12);  color: #fcd34d; }
+    .cmd-pink   { background: rgba(244,114,182,.12); color: #f9a8d4; }
+    .cmd-orange { background: rgba(251,146,60,.12);  color: #fdba74; }
+    .cmd-purple { background: rgba(192,132,252,.12); color: #d8b4fe; }
+    .cmd-slate  { background: var(--surface2); color: var(--text2); }
+
+    /* ── Login ── */
     #login-overlay {
-      position: fixed; inset: 0; background: #f0f2f5;
+      position: fixed; inset: 0;
+      background: radial-gradient(ellipse at 40% 40%, #271e3c 0%, #17151f 70%);
       display: flex; align-items: center; justify-content: center; z-index: 1000;
+    }
+    #login-overlay::before {
+      content: '';
+      position: absolute; inset: 0;
+      background-image: radial-gradient(circle, rgba(167,139,250,.1) 1px, transparent 1px);
+      background-size: 26px 26px;
     }
     #login-overlay.hidden { display: none; }
     .login-card {
-      background: #fff; border-radius: 16px; border: 1px solid #e5e7eb;
-      padding: 40px; width: 360px; box-shadow: 0 4px 24px rgba(0,0,0,.08);
+      background: linear-gradient(160deg, #271e3c 0%, #201d2e 100%);
+      border-radius: 20px;
+      border: 1px solid var(--border2);
+      padding: 38px; width: 400px;
+      box-shadow: 0 32px 80px rgba(0,0,0,.7), 0 0 0 1px rgba(167,139,250,.08), 0 0 60px rgba(167,139,250,.06);
+      position: relative; overflow: hidden; z-index: 1;
     }
-    .login-card h2 { font-size: 1.4rem; font-weight: 700; color: #1e3a8a; margin-bottom: 6px; }
-    .login-card p { font-size: .82rem; color: #6b7280; margin-bottom: 28px; }
-    .login-field { margin-bottom: 16px; }
-    .login-field label { display: block; font-size: .8rem; color: #374151; font-weight: 500; margin-bottom: 6px; }
+    .login-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, #7c3aed, #d946ef, #f472b6);
+    }
+    .login-card::after {
+      content: ''; position: absolute;
+      width: 350px; height: 350px; top: -100px; right: -100px; border-radius: 50%;
+      background: radial-gradient(ellipse, rgba(192,132,252,.12), transparent 70%);
+      pointer-events: none;
+    }
+    .login-logo { display: flex; align-items: center; gap: 13px; margin-bottom: 24px; }
+    .login-logo-icon {
+      width: 44px; height: 44px; border-radius: 12px;
+      background: linear-gradient(135deg, #7c3aed, #d946ef);
+      display: flex; align-items: center; justify-content: center; font-size: 22px;
+      box-shadow: 0 0 24px var(--glow-blue);
+    }
+    .login-card h2 { font-size: 1.4rem; font-weight: 800; color: var(--text); margin-bottom: 3px; letter-spacing: -.02em; }
+    .login-subtitle { font-size: .8rem; color: var(--text3); margin-bottom: 28px; }
+    .login-field { margin-bottom: 15px; }
+    .login-field label { display: block; font-size: .76rem; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
     .login-field input {
-      width: 100%; padding: 10px 12px; border: 1px solid #d1d5db;
-      border-radius: 8px; font-size: .9rem; outline: none;
+      width: 100%; padding: 11px 14px; border: 1px solid var(--border); border-radius: 9px;
+      font-size: .92rem; background: rgba(255,255,255,.04); color: var(--text); outline: none;
+      transition: all .18s; backdrop-filter: blur(4px);
     }
-    .login-field input:focus { border-color: #1e3a8a; box-shadow: 0 0 0 2px #dbeafe; }
+    .login-field input:focus { border-color: rgba(167,139,250,.6); box-shadow: 0 0 0 3px rgba(167,139,250,.12); background: rgba(255,255,255,.06); }
+    .login-field input::placeholder { color: var(--text3); }
     #login-btn {
-      width: 100%; padding: 11px; background: #1e3a8a; color: #fff;
-      border: none; border-radius: 8px; font-size: .95rem; font-weight: 600; cursor: pointer; margin-top: 4px;
+      width: 100%; padding: 12px;
+      background: linear-gradient(135deg, #7c3aed 0%, #d946ef 100%);
+      color: #fff; border: none; border-radius: 9px;
+      font-size: .95rem; font-weight: 700; cursor: pointer; margin-top: 6px;
+      box-shadow: 0 4px 20px var(--glow-blue); transition: all .18s;
+      letter-spacing: .01em;
     }
-    #login-btn:hover { background: #1e40af; }
-    #login-error { color: #ef4444; font-size: .82rem; margin-top: 10px; min-height: 18px; }
-    /* ── User info in header ── */
-    .user-info { display: flex; align-items: center; gap: 10px; margin-left: 16px; padding-left: 16px; border-left: 1px solid rgba(255,255,255,.3); }
-    .user-role-badge { font-size: .7rem; font-weight: 700; padding: 2px 8px; border-radius: 10px; background: rgba(255,255,255,.2); color: #fff; }
-    #logout-btn { padding: 5px 12px; background: transparent; border: 1px solid rgba(255,255,255,.4); color: rgba(255,255,255,.9); border-radius: 6px; cursor: pointer; font-size: .8rem; }
-    #logout-btn:hover { background: rgba(255,255,255,.15); }
+    #login-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 28px var(--glow-blue); }
+    #login-error { color: #fca5a5; font-size: .8rem; margin-top: 10px; min-height: 18px; }
+
+    /* ── Scrollbar global ── */
+    * { scrollbar-width: thin; scrollbar-color: var(--border2) transparent; }
   </style>
 </head>
 <body>
 
-<!-- ── LOGIN OVERLAY ── -->
+<!-- ── LOGIN ── -->
 <div id="login-overlay">
   <div class="login-card">
-    <h2>ChatOps Console</h2>
-    <p>Sign in to access the operations dashboard</p>
-    <div class="login-field">
-      <label>Username</label>
-      <input id="login-username" type="text" placeholder="admin" autocomplete="username" />
+    <div class="login-logo">
+      <div class="login-logo-icon">⚡</div>
+      <div>
+        <div style="font-size:1.1rem;font-weight:700;color:var(--text)">ChatOps</div>
+        <div style="font-size:.7rem;color:var(--text3)">Infrastructure Console</div>
+      </div>
     </div>
-    <div class="login-field">
-      <label>Password</label>
-      <input id="login-password" type="password" placeholder="••••••••" autocomplete="current-password" />
-    </div>
+    <h2>Sign In</h2>
+    <p class="login-subtitle">Access the operations dashboard</p>
+    <div class="login-field"><label>Username</label><input id="login-username" type="text" placeholder="admin" autocomplete="username" /></div>
+    <div class="login-field"><label>Password</label><input id="login-password" type="password" placeholder="••••••••" autocomplete="current-password" /></div>
     <button id="login-btn" onclick="doLogin()">Sign In</button>
     <div id="login-error"></div>
   </div>
 </div>
 
+<!-- ── HEADER ── -->
 <header>
+  <div class="header-logo-icon">⚡</div>
   <div class="header-brand">
-    <h1>ChatOps &mdash; Intelligent Infrastructure Console</h1>
-    <span class="header-hint"><span style="color:#34d399;font-weight:600">AI-powered DevOps</span> <span style="color:rgba(255,255,255,.35)">&bull;</span> <span style="color:#60a5fa;font-weight:600">Real-time monitoring</span> <span style="color:rgba(255,255,255,.35)">&bull;</span> <span style="color:#f472b6;font-weight:600">Multi-node fleet</span> <span style="color:rgba(255,255,255,.35)">&bull;</span> <span style="color:#fbbf24;font-weight:600">LLM-assisted RCA</span> <span style="color:rgba(255,255,255,.35)">&bull;</span> type <b style="color:#fff">help</b> for all commands</span>
+    <div class="header-title">ChatOps Console</div>
+    <div class="header-hint">AI-powered infrastructure management</div>
   </div>
-  <nav>
-    <button class="active" data-tab="chat" onclick="switchTab('chat', this)">Chat</button>
-    <button data-tab="alerts" onclick="switchTab('alerts', this)">
-      Alerts <span id="alert-badge" class="badge"></span>
-    </button>
-    <button data-tab="metrics" onclick="switchTab('metrics', this)">Metrics</button>
-    <button data-tab="config" onclick="switchTab('config', this)">Config</button>
-    <button data-tab="kb" onclick="switchTab('kb', this); loadKB()">KB</button>
-    <button data-tab="help" onclick="switchTab('help', this)">Help</button>
-    <div class="user-info" id="user-info" style="display:none">
-      <span id="user-display"></span>
-      <span id="user-role-display" class="user-role-badge"></span>
-      <button id="logout-btn" onclick="logout()">Sign Out</button>
-    </div>
-  </nav>
+  <div class="header-pills">
+    <span class="header-pill pill-green">● Live</span>
+    <span class="header-pill pill-blue">Multi-Node</span>
+    <span class="header-pill pill-purple">AI-Assisted</span>
+  </div>
+  <div class="header-spacer"></div>
+  <div class="user-info" id="user-info" style="display:none">
+    <div class="user-avatar" id="user-avatar-initials">?</div>
+    <span id="user-display"></span>
+    <span id="user-role-display" class="user-role-badge"></span>
+    <button id="logout-btn" onclick="logout()">Sign Out</button>
+  </div>
 </header>
+
+<!-- ── APP MENU BAR ── -->
+<div id="app-menubar">
+
+  <!-- Monitor -->
+  <div class="menu-group">
+    <button class="menu-trigger" onclick="toggleMenu('dd-monitor')">Monitor <span class="arrow">▼</span></button>
+    <div class="dropdown-menu" id="dd-monitor">
+      <div class="drop-item" onclick="menuCmd('system health')"><span class="di">🏥</span> System Health</div>
+      <div class="drop-sep"></div>
+      <div class="drop-label">Resources</div>
+      <div class="drop-item" onclick="menuCmd('check disk')"><span class="di">💾</span> Check Disk<span class="dk">disk</span></div>
+      <div class="drop-item" onclick="menuCmd('check memory')"><span class="di">🧠</span> Check Memory<span class="dk">mem</span></div>
+      <div class="drop-item" onclick="menuCmd('check cpu')"><span class="di">⚙️</span> Check CPU<span class="dk">cpu</span></div>
+      <div class="drop-item" onclick="menuCmd('check uptime')"><span class="di">⏱</span> Check Uptime</div>
+      <div class="drop-sep"></div>
+      <div class="drop-label">Processes</div>
+      <div class="drop-item" onclick="menuCmd('top processes')"><span class="di">📊</span> Top Processes</div>
+      <div class="drop-item" onclick="menuCmd('check ports')"><span class="di">🔌</span> Check Ports</div>
+      <div class="drop-item" onclick="menuCmd('check failed services')"><span class="di">⚠️</span> Failed Services</div>
+    </div>
+  </div>
+
+  <!-- Network -->
+  <div class="menu-group">
+    <button class="menu-trigger" onclick="toggleMenu('dd-network')">Network <span class="arrow">▼</span></button>
+    <div class="dropdown-menu" id="dd-network">
+      <div class="drop-item" onclick="menuCmd('check ip')"><span class="di">🌐</span> Check IP</div>
+      <div class="drop-item" onclick="menuCmd('check routes')"><span class="di">🗺</span> Check Routes</div>
+      <div class="drop-item" onclick="menuCmd('check network')"><span class="di">📡</span> Network Stats</div>
+      <div class="drop-item" onclick="menuCmd('check dns')"><span class="di">🔍</span> Check DNS</div>
+      <div class="drop-item" onclick="menuCmd('check connections')"><span class="di">🔗</span> Connections</div>
+    </div>
+  </div>
+
+  <!-- Services -->
+  <div class="menu-group">
+    <button class="menu-trigger" onclick="toggleMenu('dd-services')">Services <span class="arrow">▼</span></button>
+    <div class="dropdown-menu" id="dd-services">
+      <div class="drop-label">Check</div>
+      <div class="drop-item" onclick="menuCmd('service status ', false)"><span class="di">🔎</span> Service Status…</div>
+      <div class="drop-item" onclick="menuCmd('check failed services')"><span class="di">💥</span> Failed Services</div>
+      <div class="drop-sep"></div>
+      <div class="drop-label">Actions</div>
+      <div class="drop-item" onclick="menuCmd('restart ', false)"><span class="di">🔄</span> Restart Service…</div>
+      <div class="drop-item" onclick="menuCmd('cancel')"><span class="di">✕</span> Cancel Pending</div>
+    </div>
+  </div>
+
+  <!-- Alerts -->
+  <div class="menu-group">
+    <button class="menu-trigger" onclick="toggleMenu('dd-alerts')">Alerts <span class="arrow">▼</span></button>
+    <div class="dropdown-menu" id="dd-alerts">
+      <div class="drop-item" onclick="menuCmd('show alerts')"><span class="di">🔔</span> Show All Alerts</div>
+      <div class="drop-item" onclick="menuCmd('show critical alerts')"><span class="di">🚨</span> Critical Only</div>
+      <div class="drop-item" onclick="menuCmd('show unacked alerts')"><span class="di">🔕</span> Unacknowledged</div>
+      <div class="drop-item" onclick="menuCmd('show predictive alerts')"><span class="di">🔮</span> Predictive Alerts</div>
+      <div class="drop-sep"></div>
+      <div class="drop-item" onclick="menuCmd('ack all')"><span class="di">✅</span> Acknowledge All</div>
+      <div class="drop-sep"></div>
+      <div class="drop-item" onclick="switchTab('alerts', document.querySelector('.tab-btn[data-tab=\\'alerts\\']')); loadAlerts(); closeAllMenus();"><span class="di">📋</span> Open Alerts Panel</div>
+    </div>
+  </div>
+
+  <!-- Runbooks -->
+  <div class="menu-group">
+    <button class="menu-trigger" onclick="toggleMenu('dd-runbooks')">Runbooks <span class="arrow">▼</span></button>
+    <div class="dropdown-menu" id="dd-runbooks">
+      <div class="drop-item" onclick="menuCmd('list runbooks')"><span class="di">📚</span> List Runbooks</div>
+      <div class="drop-sep"></div>
+      <div class="drop-label">Run</div>
+      <div class="drop-item" onclick="menuCmd('run clear_tmp')"><span class="di">🗑</span> Clear /tmp</div>
+      <div class="drop-item" onclick="menuCmd('run disk_breakdown')"><span class="di">💾</span> Disk Breakdown</div>
+      <div class="drop-item" onclick="menuCmd('run large_logs')"><span class="di">📄</span> Large Logs</div>
+      <div class="drop-item" onclick="menuCmd('run listening_services')"><span class="di">👂</span> Listening Services</div>
+      <div class="drop-item" onclick="menuCmd('run flush_cache')"><span class="di">💨</span> Flush Cache</div>
+      <div class="drop-item" onclick="menuCmd('run rotate_logs')"><span class="di">🔁</span> Rotate Logs</div>
+    </div>
+  </div>
+
+  <!-- Incidents -->
+  <div class="menu-group">
+    <button class="menu-trigger" onclick="toggleMenu('dd-incidents')">Incidents <span class="arrow">▼</span></button>
+    <div class="dropdown-menu" id="dd-incidents">
+      <div class="drop-label">Tickets</div>
+      <div class="drop-item" onclick="menuCmd('show tickets')"><span class="di">🎫</span> Show Tickets</div>
+      <div class="drop-item" onclick="menuCmd('create ticket')"><span class="di">➕</span> Create Ticket</div>
+      <div class="drop-item" onclick="menuCmd('show all tickets')"><span class="di">📋</span> All Tickets</div>
+      <div class="drop-sep"></div>
+      <div class="drop-label">Analysis</div>
+      <div class="drop-item" onclick="menuCmd('rca ', false)"><span class="di">🔬</span> RCA Draft…</div>
+      <div class="drop-item" onclick="menuCmd('show predictive alerts')"><span class="di">🔮</span> Predictive Alerts</div>
+    </div>
+  </div>
+
+  <!-- Analytics -->
+  <div class="menu-group">
+    <button class="menu-trigger" onclick="toggleMenu('dd-analytics')">Analytics <span class="arrow">▼</span></button>
+    <div class="dropdown-menu" id="dd-analytics">
+      <div class="drop-item" onclick="menuCmd('show analytics')"><span class="di">📈</span> Show Analytics</div>
+      <div class="drop-item" onclick="menuCmd('show prometheus metrics')"><span class="di">📊</span> Prometheus Metrics</div>
+      <div class="drop-sep"></div>
+      <div class="drop-label">Reports</div>
+      <div class="drop-item" onclick="menuCmd('download pdf report')"><span class="di">📥</span> Download PDF (7d)</div>
+      <div class="drop-item" onclick="menuCmd('show report')"><span class="di">📝</span> Daily Report</div>
+      <div class="drop-sep"></div>
+      <div class="drop-item" onclick="switchTab('metrics', document.querySelector('.tab-btn[data-tab=\\'metrics\\']')); loadMetrics(); closeAllMenus();"><span class="di">📡</span> Open Metrics Panel</div>
+    </div>
+  </div>
+
+  <!-- Admin -->
+  <div class="menu-group">
+    <button class="menu-trigger" onclick="toggleMenu('dd-admin')">Admin <span class="arrow">▼</span></button>
+    <div class="dropdown-menu" id="dd-admin">
+      <div class="drop-label">Users</div>
+      <div class="drop-item" onclick="menuCmd('list users')"><span class="di">👥</span> List Users</div>
+      <div class="drop-item" onclick="menuCmd('add user ', false)"><span class="di">➕</span> Add User…</div>
+      <div class="drop-sep"></div>
+      <div class="drop-label">Nodes</div>
+      <div class="drop-item" onclick="menuCmd('list nodes')"><span class="di">🖥</span> List Nodes</div>
+      <div class="drop-item" onclick="menuCmd('add node ', false)"><span class="di">➕</span> Add Node…</div>
+      <div class="drop-sep"></div>
+      <div class="drop-label">System</div>
+      <div class="drop-item" onclick="menuCmd('show system config')"><span class="di">⚙️</span> System Config</div>
+      <div class="drop-item" onclick="menuCmd('show audit log')"><span class="di">📜</span> Audit Log</div>
+      <div class="drop-item" onclick="menuCmd('test slack')"><span class="di">💬</span> Test Slack</div>
+      <div class="drop-sep"></div>
+      <div class="drop-item" onclick="menuCmd('run tests')"><span class="di">🧪</span> Run Tests</div>
+      <div class="drop-item" onclick="menuCmd('show test logs')"><span class="di">📋</span> Test Logs</div>
+    </div>
+  </div>
+
+  <!-- View Tabs (right side) -->
+  <div class="menubar-tabs">
+    <button class="tab-btn active" data-tab="chat" onclick="switchTab('chat', this)">💬 Chat</button>
+    <button class="tab-btn" data-tab="alerts" onclick="switchTab('alerts', this)">
+      🔔 Alerts <span id="alert-badge" class="badge"></span>
+    </button>
+    <button class="tab-btn" data-tab="metrics" onclick="switchTab('metrics', this)">📊 Metrics</button>
+    <button class="tab-btn" data-tab="config" onclick="switchTab('config', this)">⚙️ Config</button>
+    <button class="tab-btn" data-tab="kb" onclick="switchTab('kb', this); loadKB()">📚 KB</button>
+    <button class="tab-btn" data-tab="help" onclick="switchTab('help', this)">❓ Help</button>
+  </div>
+</div>
 
 <!-- ── CHAT ── -->
 <div id="tab-chat" class="tab-content active">
   <div id="chat-window"></div>
   <div id="chat-input-row">
-    <input id="chat-input" type="text" placeholder="Type help for the list of commands…" />
-    <button id="chat-clear" onclick="clearHistory()" title="Clear history">Clear</button>
-    <label id="upload-label" title="Upload a log file for analysis">
-      <span id="upload-label-text">&#128206; Upload Log</span>
+    <input id="chat-input" type="text" placeholder="Type a command or ask anything… (try: system health)" />
+    <button id="chat-clear" onclick="clearHistory()" title="Clear chat">Clear</button>
+    <label id="upload-label" title="Upload a log file for AI analysis">
+      <span id="upload-label-text">📎 Upload Log</span>
       <input id="file-input" type="file" accept=".log,.txt,.out,.csv" hidden />
     </label>
-    <button id="chat-send" onclick="sendMessage()">Send</button>
+    <button id="chat-send" onclick="sendMessage()">Send ↵</button>
   </div>
 </div>
 
@@ -267,7 +670,7 @@
     <select class="node-select" id="metrics-node-select" onchange="loadMetrics()"></select>
   </div>
   <div class="metric-summary" id="metric-summary"></div>
-  <button id="metrics-refresh" onclick="loadMetrics()">Refresh</button>
+  <button id="metrics-refresh" onclick="loadMetrics()">↺ Refresh</button>
   <div class="charts-grid">
     <div class="chart-card"><h3>Disk Usage %</h3><canvas id="chart-disk"></canvas></div>
     <div class="chart-card"><h3>Memory Usage %</h3><canvas id="chart-memory"></canvas></div>
@@ -307,51 +710,42 @@
     </div>
     <div class="config-group">
       <label>Health Check Interval (seconds)</label>
-      <div class="config-row">
-        <div><input type="number" id="cfg-interval" min="10" max="3600" /></div>
-      </div>
+      <div class="config-row"><div><input type="number" id="cfg-interval" min="10" max="3600" /></div></div>
     </div>
     <div class="config-group">
       <label>Slack Webhook URL</label>
-      <div class="config-row">
-        <div style="flex:3">
-          <input type="text" id="cfg-slack-webhook" placeholder="https://hooks.slack.com/services/…" style="width:100%;padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:.85rem;" />
-        </div>
-      </div>
-      <span style="font-size:.75rem;color:#9ca3af">Paste a Slack Incoming Webhook URL — CRITICAL alerts will be posted automatically.</span>
+      <div class="config-row"><div style="flex:3">
+        <input type="text" id="cfg-slack-webhook" class="cfg-text-input" placeholder="https://hooks.slack.com/services/…" />
+      </div></div>
+      <span style="font-size:.73rem;color:var(--text3)">CRITICAL alerts from all nodes are posted to this URL.</span>
     </div>
     <div class="config-group">
       <label>Alert Suppression (minutes)</label>
-      <div class="config-row">
-        <div><input type="number" id="cfg-suppress" min="1" max="1440" /></div>
-      </div>
+      <div class="config-row"><div><input type="number" id="cfg-suppress" min="1" max="1440" /></div></div>
     </div>
     <div class="config-group">
       <label>Daily Report</label>
       <div class="config-row">
         <div>
           <span>Enabled</span>
-          <select id="cfg-report-enabled" style="width:100%;padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:.9rem;margin-top:4px;">
+          <select id="cfg-report-enabled" class="cfg-select">
             <option value="false">Off</option>
             <option value="true">On</option>
           </select>
         </div>
-        <div>
-          <span>Hour (0–23)</span>
-          <input type="number" id="cfg-report-hour" min="0" max="23" />
-        </div>
+        <div><span>Hour (0–23)</span><input type="number" id="cfg-report-hour" min="0" max="23" /></div>
       </div>
-      <span style="font-size:.75rem;color:#9ca3af">Posts a daily summary to Slack at the configured hour (requires webhook).</span>
+      <span style="font-size:.73rem;color:var(--text3)">Posts a daily summary to Slack at the configured hour (requires webhook).</span>
     </div>
     <button class="config-save" onclick="saveConfig()">Save Settings</button>
     <div id="config-msg"></div>
   </div>
-  </div><!-- /config-local-panel -->
+  </div>
   <div id="config-node-panel" style="display:none">
-    <div class="config-card" style="max-width:560px">
+    <div class="config-card">
       <h3 id="node-info-title">Node</h3>
-      <div id="node-info-body" style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #f3f4f6;"></div>
-      <h3 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#111">Alert Thresholds <span id="node-cfg-badge" style="font-size:.72rem;font-weight:500;color:#6b7280;margin-left:6px"></span></h3>
+      <div id="node-info-body" style="margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border);"></div>
+      <h3 style="font-size:.92rem;font-weight:700;margin-bottom:14px;color:var(--text)">Alert Thresholds <span id="node-cfg-badge" style="font-size:.7rem;font-weight:500;color:var(--text3);margin-left:6px"></span></h3>
       <div class="config-group">
         <label>Disk (%)</label>
         <div class="config-row">
@@ -374,39 +768,39 @@
         </div>
       </div>
       <button class="config-save" onclick="saveNodeConfig()">Save Node Thresholds</button>
-      <div id="node-config-msg" style="margin-top:10px;font-size:.85rem;color:#10b981;height:18px;"></div>
-      <div style="margin-top:20px;padding-top:16px;border-top:1px solid #f3f4f6;">
-        <h3 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:#111">Slack Alerts</h3>
-        <p style="font-size:.83rem;color:#6b7280;margin-bottom:8px">A single global webhook is used for all nodes. Configure it under <strong>ChatOps Server</strong>.</p>
+      <div id="node-config-msg" style="margin-top:10px;font-size:.82rem;color:var(--green);height:18px;"></div>
+      <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border);">
+        <h3 style="font-size:.92rem;font-weight:700;margin-bottom:10px;color:var(--text)">Slack Alerts</h3>
+        <p style="font-size:.8rem;color:var(--text3);margin-bottom:8px">A single global webhook is used for all nodes. Configure it under <strong>ChatOps Server</strong>.</p>
         <div style="display:flex;align-items:center;gap:10px">
-          <span style="font-size:.82rem;color:#374151;white-space:nowrap">Webhook:</span>
-          <span id="node-slack-webhook-display" style="font-size:.8rem;color:#6b7280;font-family:monospace;word-break:break-all">—</span>
+          <span style="font-size:.8rem;color:var(--text3);white-space:nowrap">Webhook:</span>
+          <span id="node-slack-webhook-display" style="font-size:.78rem;color:var(--text3);font-family:monospace;word-break:break-all">—</span>
         </div>
       </div>
-      <p style="margin-top:12px;font-size:.78rem;color:#9ca3af">Manage nodes via chat: <code>add node</code> · <code>remove node</code> · <code>copy ssh key</code></p>
+      <p style="margin-top:12px;font-size:.75rem;color:var(--text3)">Manage nodes via chat: <code class="cmd cmd-slate">add node</code> · <code class="cmd cmd-slate">remove node</code> · <code class="cmd cmd-slate">copy ssh key</code></p>
     </div>
   </div>
 </div>
 
-<!-- ── KNOWLEDGE BASE ── -->
+<!-- ── KB ── -->
 <div id="tab-kb" class="tab-content">
-  <div style="max-width:860px;margin:0 auto;">
-    <h2 style="font-size:1.2rem;font-weight:700;color:#1e3a8a;margin-bottom:14px">📚 Knowledge Base</h2>
+  <div style="max-width:900px;margin:0 auto;">
+    <h2 style="font-size:1.1rem;font-weight:700;color:#60a5fa;margin-bottom:12px">📚 Knowledge Base</h2>
     <div class="kb-toolbar">
-      <input id="kb-search-input" type="text" placeholder="Type to search by title, tag or content…" oninput="searchKB(this.value)" onkeydown="if(event.key==='Escape'){this.value='';searchKB('');}">
-      <button style="background:#6b7280;color:#fff;" onclick="searchKB(document.getElementById('kb-search-input').value)">🔍 Search</button>
-      <button style="background:#f3f4f6;color:#374151;" onclick="document.getElementById('kb-search-input').value='';searchKB('');">✕ Clear</button>
-      <button style="background:#3b82f6;color:#fff;" onclick="toggleKBForm()">＋ Add Article</button>
-      <button style="background:#f3f4f6;color:#374151;" onclick="loadKB()">↺ Refresh</button>
+      <input id="kb-search-input" type="text" placeholder="Search by title, tag or content…" oninput="searchKB(this.value)" onkeydown="if(event.key==='Escape'){this.value='';searchKB('');}">
+      <button style="background:var(--accent);color:#fff;" onclick="searchKB(document.getElementById('kb-search-input').value)">🔍 Search</button>
+      <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border);" onclick="document.getElementById('kb-search-input').value='';searchKB('');">✕ Clear</button>
+      <button style="background:#059669;color:#fff;" onclick="toggleKBForm()">＋ Add Article</button>
+      <button style="background:var(--surface2);color:var(--text2);border:1px solid var(--border);" onclick="loadKB()">↺ Refresh</button>
     </div>
     <div class="kb-add-form" id="kb-add-form">
-      <strong style="font-size:.88rem;color:#374151;">New Article</strong>
+      <strong style="font-size:.85rem;color:var(--text2);">New Article</strong>
       <input id="kb-new-title" type="text" placeholder="Title">
       <input id="kb-new-tags" type="text" placeholder="Tags (comma-separated, optional)">
       <textarea id="kb-new-content" placeholder="Article content…"></textarea>
       <div style="display:flex;gap:8px;">
-        <button style="background:#10b981;color:#fff;padding:6px 16px;border:none;border-radius:6px;cursor:pointer;font-size:.85rem;" onclick="submitKBArticle()">Save</button>
-        <button style="background:#f3f4f6;color:#374151;padding:6px 16px;border:none;border-radius:6px;cursor:pointer;font-size:.85rem;" onclick="toggleKBForm()">Cancel</button>
+        <button style="background:#059669;color:#fff;padding:6px 16px;border:none;border-radius:6px;cursor:pointer;font-size:.82rem;" onclick="submitKBArticle()">Save</button>
+        <button style="background:var(--surface2);color:var(--text2);padding:6px 16px;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:.82rem;" onclick="toggleKBForm()">Cancel</button>
       </div>
     </div>
     <div id="kb-list"></div>
@@ -415,128 +809,181 @@
 
 <!-- ── HELP ── -->
 <div id="tab-help" class="tab-content">
-  <div style="max-width:860px;margin:0 auto;padding:24px 16px;font-family:inherit">
-
-    <h2 style="font-size:1.3rem;font-weight:700;color:#1e3a8a;margin-bottom:4px">&#128218; Command Reference</h2>
-    <p style="color:#6b7280;font-size:.85rem;margin-bottom:28px">Type any command in the Chat tab. Commands are case-insensitive. Use <code>help</code> in chat for a quick summary.</p>
+  <div class="help-inner">
+    <h2 style="font-size:1.2rem;font-weight:700;color:#60a5fa;margin-bottom:4px">Command Reference</h2>
+    <p style="color:var(--text3);font-size:.82rem;margin-bottom:24px">Type any command in the Chat tab or use the menu bar above. Commands are case-insensitive. Natural language also works — just describe what you need.</p>
 
     <!-- System Checks -->
-    <div style="margin-bottom:24px">
-      <div style="font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#1d4ed8;margin-bottom:10px;padding-bottom:4px;border-bottom:2px solid #dbeafe">System Checks</div>
-      <table style="width:100%;border-collapse:collapse;font-size:.84rem">
-        <thead><tr style="color:#6b7280;font-size:.76rem;background:#f8fafc"><th style="text-align:left;padding:5px 8px;font-weight:600">Command</th><th style="text-align:left;padding:5px 8px;font-weight:600">What it does</th><th style="text-align:left;padding:5px 8px;font-weight:600">Example / Notes</th></tr></thead>
+    <div class="help-section">
+      <div class="help-section-hdr hdr-blue">🖥 System Checks</div>
+      <table class="help-table">
+        <thead><tr><th>Command</th><th>Description</th><th>Example</th></tr></thead>
         <tbody>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px">check disk</code></td><td style="padding:7px 8px;color:#374151">Shows disk usage — total, used, free GB and % used. Status badge: OK / WARNING / CRITICAL based on configured thresholds.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check disk</code><br>Also: <code>check disk on newnode</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px">check memory</code></td><td style="padding:7px 8px;color:#374151">Shows RAM usage in MB with total, used, and % used. Status badge included.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check memory</code><br>Also: <code>check memory on all</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px">check cpu</code></td><td style="padding:7px 8px;color:#374151">Shows current CPU usage % and logical core count. Status badge included.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check cpu</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px">check uptime</code></td><td style="padding:7px 8px;color:#374151">Shows how long the server has been running in days, hours, minutes.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check uptime</code><br>Also: <code>check uptime on newnode</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px">check ports</code></td><td style="padding:7px 8px;color:#374151">Lists all open listening TCP/UDP ports on the server.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check ports</code><br>Also: <code>check ports on newnode</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px">top processes</code></td><td style="padding:7px 8px;color:#374151">Lists top 5 processes sorted by CPU usage, showing PID, name, CPU%, and memory%.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>top processes</code><br>Also: <code>top processes on newnode</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px">system health</code></td><td style="padding:7px 8px;color:#374151">Full health summary — disk, memory, CPU, and uptime all in one response. Each metric shows OK / WARNING / CRITICAL. Use to get a quick overall picture of any node.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>system health</code><br><code>system health on newnode</code><br><code>system health on all</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px">check failed services</code></td><td style="padding:7px 8px;color:#374151">Lists systemd services currently in a failed state. Useful for spotting crashed daemons.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check failed services</code><br>Also: <code>check failed services on newnode</code></td></tr>
+          <tr><td><code class="cmd cmd-blue">check disk</code></td><td style="color:var(--text2)">Disk usage — total, used, free GB and % used.</td><td style="color:var(--text3);font-size:.78rem"><code class="cmd cmd-blue">check disk on prod</code></td></tr>
+          <tr><td><code class="cmd cmd-blue">check memory</code></td><td style="color:var(--text2)">RAM usage in MB with total, used, and % used.</td><td style="color:var(--text3);font-size:.78rem"><code class="cmd cmd-blue">check memory on all</code></td></tr>
+          <tr><td><code class="cmd cmd-blue">check cpu</code></td><td style="color:var(--text2)">Current CPU usage % and logical core count.</td><td style="color:var(--text3);font-size:.78rem"></td></tr>
+          <tr><td><code class="cmd cmd-blue">check uptime</code></td><td style="color:var(--text2)">How long the server has been running.</td><td style="color:var(--text3);font-size:.78rem"></td></tr>
+          <tr><td><code class="cmd cmd-blue">check ports</code></td><td style="color:var(--text2)">All open listening TCP/UDP ports.</td><td style="color:var(--text3);font-size:.78rem"></td></tr>
+          <tr><td><code class="cmd cmd-blue">top processes</code></td><td style="color:var(--text2)">Top 5 processes by CPU usage.</td><td style="color:var(--text3);font-size:.78rem"></td></tr>
+          <tr><td><code class="cmd cmd-blue">system health</code></td><td style="color:var(--text2)">Full health summary — disk, memory, CPU, uptime all in one.</td><td style="color:var(--text3);font-size:.78rem"><code class="cmd cmd-blue">system health on all</code></td></tr>
+          <tr><td><code class="cmd cmd-blue">check failed services</code></td><td style="color:var(--text2)">Lists systemd services currently in a failed state.</td><td style="color:var(--text3);font-size:.78rem"></td></tr>
         </tbody>
       </table>
     </div>
 
     <!-- Network -->
-    <div style="margin-bottom:24px">
-      <div style="font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#0891b2;margin-bottom:10px;padding-bottom:4px;border-bottom:2px solid #cffafe">Network</div>
-      <table style="width:100%;border-collapse:collapse;font-size:.84rem">
-        <thead><tr style="color:#6b7280;font-size:.76rem;background:#f8fafc"><th style="text-align:left;padding:5px 8px;font-weight:600">Command</th><th style="text-align:left;padding:5px 8px;font-weight:600">What it does</th><th style="text-align:left;padding:5px 8px;font-weight:600">Example / Notes</th></tr></thead>
+    <div class="help-section">
+      <div class="help-section-hdr hdr-cyan">🌐 Network</div>
+      <table class="help-table">
+        <thead><tr><th>Command</th><th>Description</th><th>Example</th></tr></thead>
         <tbody>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#ecfeff;color:#0e7490;padding:2px 6px;border-radius:4px">check ip</code></td><td style="padding:7px 8px;color:#374151">Shows all network interfaces with their assigned IP addresses (IPv4 and IPv6).</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check ip</code><br>Also: <code>check ip on newnode</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#ecfeff;color:#0e7490;padding:2px 6px;border-radius:4px">check routes</code></td><td style="padding:7px 8px;color:#374151">Displays the routing table with columns: destination, gateway, interface, protocol, source, metric.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check routes</code><br>Also: <code>check routes on newnode</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#ecfeff;color:#0e7490;padding:2px 6px;border-radius:4px">check network</code></td><td style="padding:7px 8px;color:#374151">Shows per-interface network statistics: bytes sent, bytes received, packets.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check network</code><br>Also: <code>check network on newnode</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#ecfeff;color:#0e7490;padding:2px 6px;border-radius:4px">check dns</code></td><td style="padding:7px 8px;color:#374151">Tests DNS resolution for google.com, cloudflare.com, and github.com. Reports resolved IP or failure for each.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check dns</code><br>Also: <code>check dns on newnode</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#ecfeff;color:#0e7490;padding:2px 6px;border-radius:4px">check connections</code></td><td style="padding:7px 8px;color:#374151">Shows the count of currently established TCP connections.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check connections</code><br>Also: <code>check connections on newnode</code></td></tr>
+          <tr><td><code class="cmd cmd-cyan">check ip</code></td><td style="color:var(--text2)">Network interfaces with assigned IPs (IPv4 and IPv6).</td><td></td></tr>
+          <tr><td><code class="cmd cmd-cyan">check routes</code></td><td style="color:var(--text2)">Routing table: destination, gateway, interface, metric.</td><td></td></tr>
+          <tr><td><code class="cmd cmd-cyan">check network</code></td><td style="color:var(--text2)">Per-interface stats: bytes sent/received, packets.</td><td></td></tr>
+          <tr><td><code class="cmd cmd-cyan">check dns</code></td><td style="color:var(--text2)">Tests DNS resolution for google.com, cloudflare.com, github.com.</td><td></td></tr>
+          <tr><td><code class="cmd cmd-cyan">check connections</code></td><td style="color:var(--text2)">Count of currently established TCP connections.</td><td></td></tr>
         </tbody>
       </table>
     </div>
 
     <!-- Services -->
-    <div style="margin-bottom:24px">
-      <div style="font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#d97706;margin-bottom:10px;padding-bottom:4px;border-bottom:2px solid #fef3c7">Services</div>
-      <table style="width:100%;border-collapse:collapse;font-size:.84rem">
-        <thead><tr style="color:#6b7280;font-size:.76rem;background:#f8fafc"><th style="text-align:left;padding:5px 8px;font-weight:600">Command</th><th style="text-align:left;padding:5px 8px;font-weight:600">What it does</th><th style="text-align:left;padding:5px 8px;font-weight:600">Example / Notes</th></tr></thead>
+    <div class="help-section">
+      <div class="help-section-hdr hdr-amber">⚙️ Services</div>
+      <table class="help-table">
+        <thead><tr><th>Command</th><th>Description</th><th>Example</th></tr></thead>
         <tbody>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fffbeb;color:#b45309;padding:2px 6px;border-radius:4px">service status &lt;name&gt;</code></td><td style="padding:7px 8px;color:#374151">Checks if a systemd service is active, inactive, or failed. Replace <em>&lt;name&gt;</em> with the service name.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>service status nginx</code><br><code>service status ssh</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fffbeb;color:#b45309;padding:2px 6px;border-radius:4px">restart &lt;name&gt;</code></td><td style="padding:7px 8px;color:#374151">Initiates a service restart — always requires confirmation first. Shows a safety warning if restarting SSH/sshd (will drop your session).</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>restart nginx</code><br>Then: <code>confirm restart nginx</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fffbeb;color:#b45309;padding:2px 6px;border-radius:4px">confirm restart &lt;name&gt;</code></td><td style="padding:7px 8px;color:#374151">Confirms and executes the pending service restart. Must match the service name used in the <code>restart</code> command.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>confirm restart nginx</code><br>Use <code>cancel</code> to abort.</td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fffbeb;color:#b45309;padding:2px 6px;border-radius:4px">check failed services</code></td><td style="padding:7px 8px;color:#374151">Lists all systemd services currently in a failed state using <code>systemctl --failed</code>.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check failed services</code></td></tr>
+          <tr><td><code class="cmd cmd-amber">service status &lt;name&gt;</code></td><td style="color:var(--text2)">Checks if a systemd service is active, inactive, or failed.</td><td style="color:var(--text3);font-size:.78rem"><code class="cmd cmd-amber">service status nginx</code></td></tr>
+          <tr><td><code class="cmd cmd-amber">restart &lt;name&gt;</code></td><td style="color:var(--text2)">Initiates a service restart — always requires confirmation.</td><td style="color:var(--text3);font-size:.78rem"><code class="cmd cmd-amber">restart nginx</code></td></tr>
+          <tr><td><code class="cmd cmd-amber">confirm restart &lt;name&gt;</code></td><td style="color:var(--text2)">Confirms and executes the pending service restart.</td><td style="color:var(--text3);font-size:.78rem"><code class="cmd cmd-amber">confirm restart nginx</code></td></tr>
+          <tr><td><code class="cmd cmd-amber">cancel</code></td><td style="color:var(--text2)">Cancels any pending confirmation (restart, runbook, SSH key).</td><td></td></tr>
         </tbody>
       </table>
     </div>
 
-    <!-- Multi-node -->
-    <div style="margin-bottom:24px">
-      <div style="font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#db2777;margin-bottom:10px;padding-bottom:4px;border-bottom:2px solid #fce7f3">Multi-Node</div>
-      <table style="width:100%;border-collapse:collapse;font-size:.84rem">
-        <thead><tr style="color:#6b7280;font-size:.76rem;background:#f8fafc"><th style="text-align:left;padding:5px 8px;font-weight:600">Command</th><th style="text-align:left;padding:5px 8px;font-weight:600">What it does</th><th style="text-align:left;padding:5px 8px;font-weight:600">Example / Notes</th></tr></thead>
+    <!-- Multi-Node -->
+    <div class="help-section">
+      <div class="help-section-hdr hdr-pink">🖥 Multi-Node</div>
+      <table class="help-table">
+        <thead><tr><th>Command</th><th>Description</th><th>Example</th></tr></thead>
         <tbody>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fdf2f8;color:#9d174d;padding:2px 6px;border-radius:4px">add node &lt;name&gt; &lt;user&gt;@&lt;host&gt;</code></td><td style="padding:7px 8px;color:#374151">Registers a new remote node. The name is a short alias you'll use in commands. Requires SSH key access already set up on the remote host.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>add node prod ubuntu@10.0.0.5</code><br><code>add node newnode user@1.2.3.4</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fdf2f8;color:#9d174d;padding:2px 6px;border-radius:4px">list nodes</code></td><td style="padding:7px 8px;color:#374151">Shows all registered nodes — name, host, SSH user, and key path. The local ChatOps server is always listed first.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>list nodes</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fdf2f8;color:#9d174d;padding:2px 6px;border-radius:4px">remove node &lt;name&gt;</code></td><td style="padding:7px 8px;color:#374151">Removes a node from the registry. Existing metric history for that node is kept in the database.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>remove node prod</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fdf2f8;color:#9d174d;padding:2px 6px;border-radius:4px">copy ssh key &lt;user&gt;@&lt;host&gt;</code></td><td style="padding:7px 8px;color:#374151">Copies the ChatOps server's public SSH key to the remote host so passwordless SSH works. Auto-generates an SSH key pair if one doesn't exist yet. Requires confirmation.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>copy ssh key ubuntu@10.0.0.5</code><br>Then: <code>confirm copy ssh key</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fdf2f8;color:#9d174d;padding:2px 6px;border-radius:4px">confirm copy ssh key</code></td><td style="padding:7px 8px;color:#374151">Confirms and executes the pending SSH key copy. The remote host must allow password authentication for the initial key copy.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>confirm copy ssh key</code><br>Use <code>cancel</code> to abort.</td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fdf2f8;color:#9d174d;padding:2px 6px;border-radius:4px">&lt;command&gt; on &lt;node&gt;</code></td><td style="padding:7px 8px;color:#374151">Runs any supported command on a specific registered node via SSH. The node name must match one registered with <code>add node</code>.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>check disk on newnode</code><br><code>system health on prod</code><br><code>check ports on newnode</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fdf2f8;color:#9d174d;padding:2px 6px;border-radius:4px">&lt;command&gt; on all</code></td><td style="padding:7px 8px;color:#374151">Runs the command across all registered nodes simultaneously and returns results for each. The local server is included automatically.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>system health on all</code><br><code>check disk on all</code></td></tr>
+          <tr><td><code class="cmd cmd-pink">add node &lt;name&gt; &lt;user&gt;@&lt;host&gt;</code></td><td style="color:var(--text2)">Registers a new remote node with a short alias.</td><td style="color:var(--text3);font-size:.78rem"><code class="cmd cmd-pink">add node prod ubuntu@10.0.0.5</code></td></tr>
+          <tr><td><code class="cmd cmd-pink">list nodes</code></td><td style="color:var(--text2)">Shows all registered nodes — name, host, SSH user, key.</td><td></td></tr>
+          <tr><td><code class="cmd cmd-pink">remove node &lt;name&gt;</code></td><td style="color:var(--text2)">Removes a node from the registry.</td><td></td></tr>
+          <tr><td><code class="cmd cmd-pink">copy ssh key &lt;user&gt;@&lt;host&gt;</code></td><td style="color:var(--text2)">Copies the ChatOps SSH public key to a remote host.</td><td></td></tr>
+          <tr><td><code class="cmd cmd-pink">&lt;cmd&gt; on &lt;node&gt;</code></td><td style="color:var(--text2)">Runs any command on a specific registered node via SSH.</td><td style="color:var(--text3);font-size:.78rem"><code class="cmd cmd-pink">check disk on prod</code></td></tr>
+          <tr><td><code class="cmd cmd-pink">&lt;cmd&gt; on all</code></td><td style="color:var(--text2)">Runs across all registered nodes simultaneously.</td><td style="color:var(--text3);font-size:.78rem"><code class="cmd cmd-pink">system health on all</code></td></tr>
         </tbody>
       </table>
     </div>
 
-    <!-- Logs & Runbooks -->
-    <div style="margin-bottom:24px">
-      <div style="font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#ea580c;margin-bottom:10px;padding-bottom:4px;border-bottom:2px solid #ffedd5">Logs, Alerts &amp; Runbooks</div>
-      <table style="width:100%;border-collapse:collapse;font-size:.84rem">
-        <thead><tr style="color:#6b7280;font-size:.76rem;background:#f8fafc"><th style="text-align:left;padding:5px 8px;font-weight:600">Command</th><th style="text-align:left;padding:5px 8px;font-weight:600">What it does</th><th style="text-align:left;padding:5px 8px;font-weight:600">Example / Notes</th></tr></thead>
+    <!-- Logs, Alerts & Runbooks -->
+    <div class="help-section">
+      <div class="help-section-hdr hdr-orange">📋 Logs, Alerts &amp; Runbooks</div>
+      <table class="help-table">
+        <thead><tr><th>Command</th><th>Description</th><th>Example</th></tr></thead>
         <tbody>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fff7ed;color:#c2410c;padding:2px 6px;border-radius:4px">analyze logs: &lt;content&gt;</code></td><td style="padding:7px 8px;color:#374151">Paste log content after the colon to get an instant analysis: severity level, root cause, impact, and suggested actions. Alternatively, use the Upload Log button to analyze a file.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>analyze logs: ERROR db connection refused...</code><br>Or click <strong>Upload Log</strong> button.</td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fff7ed;color:#c2410c;padding:2px 6px;border-radius:4px">show alerts</code></td><td style="padding:7px 8px;color:#374151">Shows the 5 most recent alerts from all nodes. Filter by node to see only that node's alerts. Acknowledged alerts can be managed in the Alerts tab.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>show alerts</code><br><code>show alerts on newnode</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fff7ed;color:#c2410c;padding:2px 6px;border-radius:4px">list runbooks</code></td><td style="padding:7px 8px;color:#374151">Lists all available runbooks — pre-defined automated remediation scripts stored on the server.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>list runbooks</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fff7ed;color:#c2410c;padding:2px 6px;border-radius:4px">run &lt;runbook&gt;</code></td><td style="padding:7px 8px;color:#374151">Initiates a runbook execution — always asks for confirmation before running. Use the exact name shown in <code>list runbooks</code>.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>run disk-cleanup</code><br>Then: <code>confirm disk-cleanup</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fff7ed;color:#c2410c;padding:2px 6px;border-radius:4px">confirm &lt;runbook&gt;</code></td><td style="padding:7px 8px;color:#374151">Confirms and executes the pending runbook. Must be run within a short window after the <code>run</code> command.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>confirm disk-cleanup</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#fff7ed;color:#c2410c;padding:2px 6px;border-radius:4px">cancel</code></td><td style="padding:7px 8px;color:#374151">Cancels any pending confirmation — works for service restarts, runbooks, and SSH key copies.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>cancel</code></td></tr>
+          <tr><td><code class="cmd cmd-orange">analyze logs: &lt;text&gt;</code></td><td style="color:var(--text2)">AI analysis of pasted log content — or use Upload Log button.</td><td style="color:var(--text3);font-size:.78rem">Or click Upload Log</td></tr>
+          <tr><td><code class="cmd cmd-orange">show alerts</code></td><td style="color:var(--text2)">5 most recent alerts.</td><td style="color:var(--text3);font-size:.78rem"><code class="cmd cmd-orange">show alerts 20</code></td></tr>
+          <tr><td><code class="cmd cmd-orange">show critical alerts</code></td><td style="color:var(--text2)">Critical alerts only.</td><td></td></tr>
+          <tr><td><code class="cmd cmd-orange">show unacked alerts</code></td><td style="color:var(--text2)">Unacknowledged alerts only.</td><td></td></tr>
+          <tr><td><code class="cmd cmd-orange">list runbooks</code></td><td style="color:var(--text2)">Lists all available runbooks.</td><td></td></tr>
+          <tr><td><code class="cmd cmd-orange">run &lt;runbook&gt;</code></td><td style="color:var(--text2)">Initiates a runbook — requires confirmation before running.</td><td style="color:var(--text3);font-size:.78rem"><code class="cmd cmd-orange">run clear_tmp</code></td></tr>
+          <tr><td><code class="cmd cmd-orange">show test logs</code></td><td style="color:var(--text2)">Lists all saved test log files with AI analysis option.</td><td></td></tr>
+          <tr><td><code class="cmd cmd-orange">run tests</code></td><td style="color:var(--text2)">Runs pytest in background and saves log. Returns immediately.</td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ITSM Tickets -->
+    <div class="help-section">
+      <div class="help-section-hdr hdr-cyan">🎫 ITSM Tickets</div>
+      <table class="help-table">
+        <thead><tr><th>Command</th><th>Description</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><code class="cmd cmd-cyan">show tickets</code></td><td style="color:var(--text2)">Lists open tickets.</td><td></td></tr>
+          <tr><td><code class="cmd cmd-cyan">show all tickets</code></td><td style="color:var(--text2)">Lists all tickets regardless of status.</td><td></td></tr>
+          <tr><td><code class="cmd cmd-cyan">show ticket &lt;id&gt;</code></td><td style="color:var(--text2)">Full details for a specific ticket.</td><td style="color:var(--text3);font-size:.78rem"><code class="cmd cmd-cyan">show ticket 3</code></td></tr>
+          <tr><td><code class="cmd cmd-cyan">create ticket</code></td><td style="color:var(--text2)">Interactively create a new ticket.</td><td></td></tr>
+          <tr><td><code class="cmd cmd-cyan">close ticket &lt;id&gt;</code></td><td style="color:var(--text2)">Closes a ticket by ID.</td><td style="color:var(--text3);font-size:.78rem"><code class="cmd cmd-cyan">close ticket 3</code></td></tr>
+          <tr><td><code class="cmd cmd-cyan">link ticket &lt;id&gt; &lt;alert_id&gt;</code></td><td style="color:var(--text2)">Links a ticket to an alert.</td><td></td></tr>
+          <tr><td><code class="cmd cmd-cyan">rca &lt;alert_id&gt;</code></td><td style="color:var(--text2)">AI-generated Root Cause Analysis draft for an alert.</td><td style="color:var(--text3);font-size:.78rem"><code class="cmd cmd-cyan">rca 42</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Analytics -->
+    <div class="help-section">
+      <div class="help-section-hdr hdr-blue">📈 Analytics</div>
+      <table class="help-table">
+        <thead><tr><th>Command</th><th>Description</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><code class="cmd cmd-blue">show analytics</code></td><td style="color:var(--text2)">Alert stats, MTTR trend chart, and team leaderboard.</td><td style="color:var(--text3);font-size:.78rem"><code class="cmd cmd-blue">show analytics 14</code></td></tr>
+          <tr><td><code class="cmd cmd-blue">show prometheus metrics</code></td><td style="color:var(--text2)">Prometheus-format metrics output with AI analysis option.</td><td></td></tr>
+          <tr><td><code class="cmd cmd-blue">analyze prometheus</code></td><td style="color:var(--text2)">AI interpretation of Prometheus metrics with suggested actions.</td><td></td></tr>
+          <tr><td><code class="cmd cmd-blue">configure prometheus</code></td><td style="color:var(--text2)">Shows which metrics are enabled / disabled in the export.</td><td></td></tr>
+          <tr><td><code class="cmd cmd-blue">download pdf report</code></td><td style="color:var(--text2)">Generates and downloads a PDF analytics report.</td><td style="color:var(--text3);font-size:.78rem"><code class="cmd cmd-blue">download pdf report 14</code></td></tr>
+          <tr><td><code class="cmd cmd-blue">show report</code></td><td style="color:var(--text2)">24h health report for all nodes in chat.</td><td></td></tr>
         </tbody>
       </table>
     </div>
 
     <!-- Slack & Reports -->
-    <div style="margin-bottom:24px">
-      <div style="font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7c3aed;margin-bottom:10px;padding-bottom:4px;border-bottom:2px solid #ede9fe">Slack &amp; Reports</div>
-      <table style="width:100%;border-collapse:collapse;font-size:.84rem">
-        <thead><tr style="color:#6b7280;font-size:.76rem;background:#f8fafc"><th style="text-align:left;padding:5px 8px;font-weight:600">Command</th><th style="text-align:left;padding:5px 8px;font-weight:600">What it does</th><th style="text-align:left;padding:5px 8px;font-weight:600">Example / Notes</th></tr></thead>
+    <div class="help-section">
+      <div class="help-section-hdr hdr-purple">💬 Slack &amp; Reports</div>
+      <table class="help-table">
+        <thead><tr><th>Command</th><th>Description</th><th>Example</th></tr></thead>
         <tbody>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#f5f3ff;color:#6d28d9;padding:2px 6px;border-radius:4px">config set slack_webhook &lt;url&gt;</code></td><td style="padding:7px 8px;color:#374151">Sets the Slack incoming webhook URL. One webhook applies to all nodes — CRITICAL alerts from any node are sent to this URL. The URL is case-sensitive.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>config set slack_webhook https://hooks.slack.com/services/...</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#f5f3ff;color:#6d28d9;padding:2px 6px;border-radius:4px">test slack</code></td><td style="padding:7px 8px;color:#374151">Sends a test alert to the configured Slack webhook to verify the integration is working. Reports the actual HTTP error if it fails.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>test slack</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#f5f3ff;color:#6d28d9;padding:2px 6px;border-radius:4px">config set alert suppress &lt;minutes&gt;</code></td><td style="padding:7px 8px;color:#374151">Sets the alert suppression window. If a metric stays CRITICAL, Slack is only notified once per window (per node per metric). Default is 10 minutes.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>config set alert suppress 30</code><br>Prevents Slack spam during ongoing incidents.</td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#f5f3ff;color:#6d28d9;padding:2px 6px;border-radius:4px">config set report on</code></td><td style="padding:7px 8px;color:#374151">Enables the daily automated Slack report. The report covers all nodes and posts at the configured hour.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>config set report on</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#f5f3ff;color:#6d28d9;padding:2px 6px;border-radius:4px">config set report off</code></td><td style="padding:7px 8px;color:#374151">Disables the daily automated Slack report.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>config set report off</code></td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#f5f3ff;color:#6d28d9;padding:2px 6px;border-radius:4px">config set report hour &lt;0–23&gt;</code></td><td style="padding:7px 8px;color:#374151">Sets the hour (24h, server time) at which the daily report posts to Slack. Also enables the report automatically.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>config set report hour 9</code> → 9:00 AM<br><code>config set report hour 18</code> → 6:00 PM</td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#f5f3ff;color:#6d28d9;padding:2px 6px;border-radius:4px">show report</code></td><td style="padding:7px 8px;color:#374151">Generates and displays the last 24h health report for all nodes immediately in the chat — avg, min, max per metric and alert counts per node.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>show report</code></td></tr>
+          <tr><td><code class="cmd cmd-purple">config set slack_webhook &lt;url&gt;</code></td><td style="color:var(--text2)">Sets the Slack incoming webhook URL.</td><td></td></tr>
+          <tr><td><code class="cmd cmd-purple">test slack</code></td><td style="color:var(--text2)">Sends a test alert to the configured Slack webhook.</td><td></td></tr>
+          <tr><td><code class="cmd cmd-purple">config set alert suppress &lt;min&gt;</code></td><td style="color:var(--text2)">Sets the alert suppression window (default 10 min).</td><td style="color:var(--text3);font-size:.78rem"><code class="cmd cmd-purple">config set alert suppress 30</code></td></tr>
+          <tr><td><code class="cmd cmd-purple">config set report on/off</code></td><td style="color:var(--text2)">Enables / disables the daily Slack report.</td><td></td></tr>
+          <tr><td><code class="cmd cmd-purple">config set report hour &lt;0-23&gt;</code></td><td style="color:var(--text2)">Sets the hour for the daily Slack report.</td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- User Management -->
+    <div class="help-section">
+      <div class="help-section-hdr hdr-pink">👥 User Management</div>
+      <table class="help-table">
+        <thead><tr><th>Command</th><th>Description</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><code class="cmd cmd-pink">list users</code></td><td style="color:var(--text2)">Lists all users, roles, and creation date.</td><td></td></tr>
+          <tr><td><code class="cmd cmd-pink">add user &lt;name&gt; &lt;pass&gt; &lt;role&gt;</code></td><td style="color:var(--text2)">Creates a new user. Roles: viewer, operator, developer, admin.</td><td style="color:var(--text3);font-size:.78rem"><code class="cmd cmd-pink">add user alice pw123 operator</code></td></tr>
+          <tr><td><code class="cmd cmd-pink">remove user &lt;name&gt;</code></td><td style="color:var(--text2)">Deletes a user account.</td><td></td></tr>
+          <tr><td><code class="cmd cmd-pink">change password &lt;pass&gt;</code></td><td style="color:var(--text2)">Changes your own password.</td><td></td></tr>
+          <tr><td><code class="cmd cmd-pink">show audit log</code></td><td style="color:var(--text2)">Shows last 20 audit log entries.</td><td style="color:var(--text3);font-size:.78rem"><code class="cmd cmd-pink">show audit log 50</code></td></tr>
         </tbody>
       </table>
     </div>
 
     <!-- General -->
-    <div style="margin-bottom:24px">
-      <div style="font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#4b5563;margin-bottom:10px;padding-bottom:4px;border-bottom:2px solid #e5e7eb">General</div>
-      <table style="width:100%;border-collapse:collapse;font-size:.84rem">
-        <thead><tr style="color:#6b7280;font-size:.76rem;background:#f8fafc"><th style="text-align:left;padding:5px 8px;font-weight:600">Command</th><th style="text-align:left;padding:5px 8px;font-weight:600">What it does</th><th style="text-align:left;padding:5px 8px;font-weight:600">Example / Notes</th></tr></thead>
+    <div class="help-section">
+      <div class="help-section-hdr hdr-slate">⚡ General</div>
+      <table class="help-table">
+        <thead><tr><th>Command</th><th>Description</th><th>Notes</th></tr></thead>
         <tbody>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#f9fafb;color:#374151;padding:2px 6px;border-radius:4px">show system config</code></td><td style="padding:7px 8px;color:#374151">Shows the full system configuration — all thresholds (disk, memory, CPU), health check interval, Slack webhook, alert suppression window, and daily report settings.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>show system config</code><br>Also: <code>config</code><br>Change thresholds via the Config tab in UI.</td></tr>
-          <tr style="border-top:1px solid #f3f4f6"><td style="padding:7px 8px;white-space:nowrap"><code style="background:#f9fafb;color:#374151;padding:2px 6px;border-radius:4px">help</code></td><td style="padding:7px 8px;color:#374151">Shows a compact command reference in the chat window. For full details and examples, use this Help tab.</td><td style="padding:7px 8px;color:#6b7280;font-size:.8rem"><code>help</code></td></tr>
+          <tr><td><code class="cmd cmd-slate">show system config</code></td><td style="color:var(--text2)">Full system configuration — all thresholds, interval, Slack, suppression.</td><td style="color:var(--text3);font-size:.78rem">Also: <code class="cmd cmd-slate">config</code></td></tr>
+          <tr><td><code class="cmd cmd-slate">help</code></td><td style="color:var(--text2)">Quick command summary in chat.</td><td></td></tr>
         </tbody>
       </table>
     </div>
 
-    <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:12px 16px;margin-top:8px">
-      <span style="color:#6d28d9;font-weight:700;font-size:.85rem">&#9432; UI-only settings</span>
-      <p style="color:#374151;font-size:.83rem;margin:4px 0 0">Alert thresholds (disk / memory / cpu — warning &amp; critical levels) and per-node thresholds are configured in the <strong>Config tab</strong>. They cannot be changed via chat commands.</p>
+    <div style="background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.3);border-radius:8px;padding:12px 16px;margin-top:4px">
+      <span style="color:#a5b4fc;font-weight:700;font-size:.82rem">💡 Natural Language</span>
+      <p style="color:var(--text2);font-size:.8rem;margin:4px 0 0">You can also describe what you want in plain English. For example: <em>"how much disk space is left"</em>, <em>"is nginx running"</em>, or <em>"run rca on alert 5"</em> — the AI will map it to the right command automatically.</p>
     </div>
   </div>
 </div>
 
 <script>
+// ── Chart.js dark theme defaults ──────────────────────────────────────────────
+if (typeof Chart !== 'undefined') {
+  Chart.defaults.color = '#7d6a96';
+  Chart.defaults.borderColor = 'rgba(167,139,250,0.15)';
+  Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 const _nativeFetch = window.fetch.bind(window);
 
@@ -558,12 +1005,10 @@ async function doLogin() {
   const errEl = document.getElementById('login-error');
   const btn = document.getElementById('login-btn');
   if (!username || !password) { errEl.textContent = 'Enter username and password.'; return; }
-  btn.disabled = true;
-  btn.textContent = 'Signing in…';
+  btn.disabled = true; btn.textContent = 'Signing in…';
   try {
     const res = await _nativeFetch('/chatops/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     });
     if (!res.ok) { errEl.textContent = 'Invalid username or password.'; return; }
@@ -575,16 +1020,18 @@ async function doLogin() {
   } catch (e) {
     errEl.textContent = 'Could not connect to server.';
   } finally {
-    btn.disabled = false;
-    btn.textContent = 'Sign In';
+    btn.disabled = false; btn.textContent = 'Sign In';
   }
 }
 
 function showApp(username, role) {
   document.getElementById('login-overlay').classList.add('hidden');
-  document.getElementById('user-info').style.display = 'flex';
+  const ui = document.getElementById('user-info');
+  ui.style.display = 'flex';
   document.getElementById('user-display').textContent = username;
   document.getElementById('user-role-display').textContent = role;
+  const av = document.getElementById('user-avatar-initials');
+  if (av) av.textContent = (username || '?')[0].toUpperCase();
   loadChatHistory();
   loadNodes();
   pollAlertBadge();
@@ -604,31 +1051,57 @@ async function initAuth() {
   const token = localStorage.getItem('chatops_token');
   if (!token) return;
   try {
-    const res = await _nativeFetch('/chatops/auth/me', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (res.ok) {
-      const data = await res.json();
-      showApp(data.username, data.role);
-    } else {
-      logout();
-    }
+    const res = await _nativeFetch('/chatops/auth/me', { headers: { 'Authorization': `Bearer ${token}` } });
+    if (res.ok) { const data = await res.json(); showApp(data.username, data.role); }
+    else logout();
   } catch (_) { logout(); }
 }
 
-document.getElementById('login-password').addEventListener('keypress', e => {
-  if (e.key === 'Enter') doLogin();
+document.getElementById('login-password').addEventListener('keypress', e => { if (e.key === 'Enter') doLogin(); });
+document.getElementById('login-username').addEventListener('keypress', e => { if (e.key === 'Enter') document.getElementById('login-password').focus(); });
+
+// ── Menu Bar ─────────────────────────────────────────────────────────────────
+function toggleMenu(menuId) {
+  const menu = document.getElementById(menuId);
+  const isOpen = menu.classList.contains('open');
+  closeAllMenus();
+  if (!isOpen) {
+    menu.classList.add('open');
+    menu.previousElementSibling.classList.add('open');
+  }
+}
+
+function closeAllMenus() {
+  document.querySelectorAll('.dropdown-menu.open').forEach(m => {
+    m.classList.remove('open');
+    if (m.previousElementSibling) m.previousElementSibling.classList.remove('open');
+  });
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.menu-group')) closeAllMenus();
 });
-document.getElementById('login-username').addEventListener('keypress', e => {
-  if (e.key === 'Enter') document.getElementById('login-password').focus();
-});
+
+function menuCmd(cmd, send = true) {
+  closeAllMenus();
+  const chatBtn = document.querySelector('.tab-btn[data-tab="chat"]');
+  switchTab('chat', chatBtn);
+  const input = document.getElementById('chat-input');
+  input.value = cmd;
+  if (send) {
+    sendMessage();
+  } else {
+    input.focus();
+    input.setSelectionRange(cmd.length, cmd.length);
+  }
+}
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
 function switchTab(name, btn) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('nav button').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
-  btn.classList.add('active');
+  if (btn) btn.classList.add('active');
   if (name === 'alerts') loadAlerts();
   if (name === 'metrics') loadMetrics();
   if (name === 'config') loadConfig();
@@ -661,7 +1134,7 @@ function renderKB(articles) {
           </div>
         </div>
         <button onclick="deleteKBArticle(${a.id})"
-          style="background:#fee2e2;color:#dc2626;border:none;border-radius:5px;padding:3px 10px;cursor:pointer;font-size:.76em;white-space:nowrap;">
+          style="background:rgba(248,81,73,.18);color:#fca5a5;border:1px solid rgba(248,81,73,.3);border-radius:5px;padding:3px 10px;cursor:pointer;font-size:.74em;white-space:nowrap;">
           🗑 Delete
         </button>
       </div>
@@ -686,8 +1159,7 @@ function searchKB(query) {
   if (!query.trim()) { renderKB(_kbArticles); return; }
   const q = query.toLowerCase();
   renderKB(_kbArticles.filter(a =>
-    a.title.toLowerCase().includes(q) ||
-    (a.tags || '').toLowerCase().includes(q)
+    a.title.toLowerCase().includes(q) || (a.tags || '').toLowerCase().includes(q)
   ));
 }
 
@@ -702,8 +1174,7 @@ async function submitKBArticle() {
   const content = document.getElementById('kb-new-content').value.trim();
   if (!title || !content) { alert('Title and content are required.'); return; }
   const res = await authFetch('/chatops/kb', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title, content, tags }),
   });
   if (!res.ok) { alert('Could not save article.'); return; }
@@ -730,12 +1201,8 @@ function addBubble(text, sender, scroll = true) {
   if (sender === 'bot') {
     if (text.includes('CRITICAL')) el.classList.add('critical');
     else if (text.includes('WARNING')) el.classList.add('warning');
-    // Trusted HTML from the backend (e.g. colored help output)
-    if (text.includes('<span')) {
-      el.innerHTML = text;
-    } else {
-      el.textContent = text;
-    }
+    if (text.includes('<span')) { el.innerHTML = text; }
+    else { el.textContent = text; }
   } else {
     el.textContent = text;
   }
@@ -749,18 +1216,13 @@ async function deleteTestLog(filename, rowEl) {
   try {
     const res = await authFetch(`/chatops/test-log/${filename}`, { method: 'DELETE' });
     if (res.ok) {
-      rowEl.style.opacity = '0.4';
-      rowEl.style.pointerEvents = 'none';
+      rowEl.style.opacity = '0.4'; rowEl.style.pointerEvents = 'none';
       const note = document.createElement('span');
-      note.style.cssText = 'font-size:0.75em;color:#dc2626;margin-left:4px;';
+      note.style.cssText = 'font-size:0.75em;color:var(--red);margin-left:4px;';
       note.textContent = 'deleted';
       rowEl.appendChild(note);
-    } else {
-      alert('Could not delete log file.');
-    }
-  } catch(e) {
-    alert('Could not delete log file.');
-  }
+    } else { alert('Could not delete log file.'); }
+  } catch(e) { alert('Could not delete log file.'); }
 }
 
 async function downloadPdfReport(days) {
@@ -770,13 +1232,9 @@ async function downloadPdfReport(days) {
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = `chatops_analytics_${days}d.pdf`;
-    a.click();
+    a.href = url; a.download = `chatops_analytics_${days}d.pdf`; a.click();
     URL.revokeObjectURL(url);
-  } catch(e) {
-    alert('Could not download PDF report.');
-  }
+  } catch(e) { alert('Could not download PDF report.'); }
 }
 
 async function openTestLog(filename) {
@@ -787,14 +1245,12 @@ async function openTestLog(filename) {
     const win = window.open('', '_blank');
     win.document.write(
       `<!DOCTYPE html><html><head><title>${filename}</title>` +
-      `<style>body{margin:0;background:#1e1e2e;color:#cdd6f4;font-family:monospace;font-size:13px;}` +
+      `<style>body{margin:0;background:#0d1117;color:#c9d1d9;font-family:monospace;font-size:13px;}` +
       `pre{padding:20px;white-space:pre-wrap;word-break:break-all;}</style></head>` +
       `<body><pre>${text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre></body></html>`
     );
     win.document.close();
-  } catch(e) {
-    alert('Could not load log file.');
-  }
+  } catch(e) { alert('Could not load log file.'); }
 }
 
 async function sendMessage() {
@@ -816,142 +1272,120 @@ async function sendMessage() {
 
   try {
     const res = await authFetch('/chatops/message', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: text }),
     });
     const data = await res.json();
     pendingEl.remove();
-    // For test_logs, only show the header line — the grid replaces the file list
     const displayText = data?.test_logs
       ? (data.response || '').split('\n')[0]
       : (data?.response || 'No response');
     const bubble = addBubble(displayText, 'bot');
+
+    const btnStyle = 'padding:4px 12px;border:none;border-radius:6px;cursor:pointer;font-size:0.8em;color:#fff;font-weight:500;';
+
     if (data?.log_file) {
       const btnBar = document.createElement('div');
-      btnBar.style.cssText = 'display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;';
-      const btnStyle = 'padding:4px 12px;border:none;border-radius:6px;cursor:pointer;font-size:0.82em;color:#fff;';
-
+      btnBar.style.cssText = 'display:flex;gap:8px;margin-top:9px;flex-wrap:wrap;';
       const viewBtn = document.createElement('button');
       viewBtn.textContent = '📋 Open Full Log';
       viewBtn.style.cssText = btnStyle + 'background:#3b82f6;';
       viewBtn.onclick = () => openTestLog(data.log_file);
-
       const aiBtn = document.createElement('button');
       aiBtn.textContent = '🤖 Analyse with AI';
       aiBtn.style.cssText = btnStyle + 'background:#7c3aed;';
-      aiBtn.onclick = () => {
-        input.value = `analyze test log ${data.log_file}`;
-        sendMessage();
-      };
-
-      btnBar.appendChild(viewBtn);
-      btnBar.appendChild(aiBtn);
+      aiBtn.onclick = () => { input.value = `analyze test log ${data.log_file}`; sendMessage(); };
+      btnBar.appendChild(viewBtn); btnBar.appendChild(aiBtn);
       bubble.appendChild(btnBar);
     }
+
     if (data?.prometheus_output) {
       const btnBar = document.createElement('div');
-      btnBar.style.cssText = 'display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;white-space:normal;';
-      const btnStyle = 'padding:4px 12px;border:none;border-radius:6px;cursor:pointer;font-size:0.82em;color:#fff;';
-
+      btnBar.style.cssText = 'display:flex;gap:8px;margin-top:9px;flex-wrap:wrap;white-space:normal;';
       const aiBtn = document.createElement('button');
       aiBtn.textContent = '🤖 Analyse with AI';
       aiBtn.style.cssText = btnStyle + 'background:#7c3aed;';
       aiBtn.onclick = () => { input.value = 'analyze prometheus'; sendMessage(); };
-
       const cfgBtn = document.createElement('button');
       cfgBtn.textContent = '⚙️ Configure Metrics';
-      cfgBtn.style.cssText = btnStyle + 'background:#6b7280;';
+      cfgBtn.style.cssText = btnStyle + 'background:#475569;';
       cfgBtn.onclick = () => { input.value = 'configure prometheus'; sendMessage(); };
-
-      btnBar.appendChild(aiBtn);
-      btnBar.appendChild(cfgBtn);
+      btnBar.appendChild(aiBtn); btnBar.appendChild(cfgBtn);
       bubble.appendChild(btnBar);
     }
+
     if (data?.test_logs && data.test_logs.length > 0) {
       const grid = document.createElement('div');
       grid.style.cssText = 'margin-top:10px;display:flex;flex-direction:column;gap:5px;white-space:normal;';
-      const btnStyle = 'padding:2px 9px;border:none;border-radius:5px;cursor:pointer;font-size:0.76em;color:#fff;white-space:nowrap;';
+      const sBtn = 'padding:2px 9px;border:none;border-radius:5px;cursor:pointer;font-size:0.75em;color:#fff;white-space:nowrap;';
       data.test_logs.forEach(log => {
         const row = document.createElement('div');
         row.style.cssText = 'display:flex;align-items:center;gap:6px;white-space:normal;';
         const lbl = document.createElement('span');
-        lbl.style.cssText = 'font-size:0.78em;color:#6b7280;width:140px;flex-shrink:0;';
+        lbl.style.cssText = 'font-size:0.76em;color:var(--text3);width:140px;flex-shrink:0;';
         lbl.textContent = log.label;
         const sizeEl = document.createElement('span');
-        sizeEl.style.cssText = 'font-size:0.75em;color:#9ca3af;width:42px;flex-shrink:0;';
+        sizeEl.style.cssText = 'font-size:0.73em;color:var(--text3);width:42px;flex-shrink:0;';
         sizeEl.textContent = `${log.size_kb} KB`;
         const openBtn = document.createElement('button');
-        openBtn.textContent = '📋 Open';
-        openBtn.style.cssText = btnStyle + 'background:#3b82f6;';
+        openBtn.textContent = '📋 Open'; openBtn.style.cssText = sBtn + 'background:#3b82f6;';
         openBtn.onclick = () => openTestLog(log.filename);
         const aiBtn = document.createElement('button');
-        aiBtn.textContent = '🤖 Analyse';
-        aiBtn.style.cssText = btnStyle + 'background:#7c3aed;';
+        aiBtn.textContent = '🤖 Analyse'; aiBtn.style.cssText = sBtn + 'background:#7c3aed;';
         aiBtn.onclick = () => { input.value = `analyze test log ${log.filename}`; sendMessage(); };
         const delBtn = document.createElement('button');
-        delBtn.textContent = '🗑 Delete';
-        delBtn.style.cssText = btnStyle + 'background:#dc2626;';
+        delBtn.textContent = '🗑 Delete'; delBtn.style.cssText = sBtn + 'background:#dc2626;';
         delBtn.onclick = () => deleteTestLog(log.filename, row);
-        row.appendChild(lbl);
-        row.appendChild(sizeEl);
-        row.appendChild(openBtn);
-        row.appendChild(aiBtn);
-        row.appendChild(delBtn);
+        row.appendChild(lbl); row.appendChild(sizeEl);
+        row.appendChild(openBtn); row.appendChild(aiBtn); row.appendChild(delBtn);
         grid.appendChild(row);
       });
       bubble.appendChild(grid);
     }
+
     if (data?.mttr_trend && data.mttr_trend.length > 0) {
       const chartWrap = document.createElement('div');
       chartWrap.style.cssText = 'margin-top:12px;white-space:normal;';
       const title = document.createElement('div');
-      title.style.cssText = 'font-size:.78rem;font-weight:700;color:#374151;margin-bottom:4px;';
-      title.textContent = 'MTTR Trend (avg minutes per day)';
+      title.style.cssText = 'font-size:.75rem;font-weight:700;color:var(--text3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em;';
+      title.textContent = 'MTTR Trend — avg minutes per day';
       const canvas = document.createElement('canvas');
       canvas.style.cssText = 'width:100%!important;height:160px!important;';
-      chartWrap.appendChild(title);
-      chartWrap.appendChild(canvas);
+      chartWrap.appendChild(title); chartWrap.appendChild(canvas);
       bubble.appendChild(chartWrap);
       setTimeout(() => {
         new Chart(canvas, {
           type: 'line',
           data: {
             labels: data.mttr_trend.map(d => d.day),
-            datasets: [{
-              label: 'Avg MTTR (min)',
-              data: data.mttr_trend.map(d => d.avg_minutes),
+            datasets: [{ label: 'Avg MTTR (min)', data: data.mttr_trend.map(d => d.avg_minutes),
               borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)',
-              tension: 0.3, fill: true, pointRadius: 4,
-            }]
+              tension: 0.3, fill: true, pointRadius: 4 }]
           },
           options: { responsive: true, plugins: { legend: { display: false } },
             scales: { y: { beginAtZero: true, title: { display: true, text: 'minutes' } } } }
         });
       }, 50);
     }
+
     if (data?.leaderboard && data.leaderboard.length > 0) {
       const chartWrap = document.createElement('div');
       chartWrap.style.cssText = 'margin-top:12px;white-space:normal;';
       const title = document.createElement('div');
-      title.style.cssText = 'font-size:.78rem;font-weight:700;color:#374151;margin-bottom:4px;';
-      title.textContent = 'Team Leaderboard (commands run)';
+      title.style.cssText = 'font-size:.75rem;font-weight:700;color:var(--text3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em;';
+      title.textContent = 'Team Leaderboard — commands run';
       const canvas = document.createElement('canvas');
       canvas.style.cssText = 'width:100%!important;height:160px!important;';
-      chartWrap.appendChild(title);
-      chartWrap.appendChild(canvas);
+      chartWrap.appendChild(title); chartWrap.appendChild(canvas);
       bubble.appendChild(chartWrap);
       setTimeout(() => {
         new Chart(canvas, {
           type: 'bar',
           data: {
             labels: data.leaderboard.map(d => d.username),
-            datasets: [{
-              label: 'Commands',
-              data: data.leaderboard.map(d => d.count),
+            datasets: [{ label: 'Commands', data: data.leaderboard.map(d => d.count),
               backgroundColor: ['#6366f1','#3b82f6','#10b981','#f59e0b','#ef4444',
-                                '#8b5cf6','#ec4899','#14b8a6','#f97316','#84cc16'],
-            }]
+                               '#8b5cf6','#ec4899','#14b8a6','#f97316','#84cc16'] }]
           },
           options: { responsive: true, indexAxis: 'y',
             plugins: { legend: { display: false } },
@@ -959,10 +1393,11 @@ async function sendMessage() {
         });
       }, 50);
     }
+
     if (data?.pdf_report) {
       const pdfBtn = document.createElement('button');
       pdfBtn.textContent = '📥 Download PDF Report';
-      pdfBtn.style.cssText = 'display:inline-block;margin-top:8px;padding:4px 12px;background:#059669;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:0.82em;';
+      pdfBtn.style.cssText = 'display:inline-block;margin-top:8px;padding:5px 13px;background:#059669;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:0.8em;font-weight:500;';
       pdfBtn.onclick = () => downloadPdfReport(data.pdf_days || 7);
       bubble.appendChild(pdfBtn);
     }
@@ -975,9 +1410,8 @@ async function sendMessage() {
 }
 
 document.getElementById('file-input').addEventListener('change', async function () {
-  const file = this.files[0];
-  if (!file) return;
-  this.value = '';  // reset so the same file can be re-uploaded
+  const file = this.files[0]; if (!file) return;
+  this.value = '';
   addBubble(`📎 ${file.name}`, 'user');
   const labelText = document.getElementById('upload-label-text');
   labelText.textContent = 'Analysing…';
@@ -990,7 +1424,7 @@ document.getElementById('file-input').addEventListener('change', async function 
   } catch (e) {
     addBubble('Error uploading file.', 'bot');
   } finally {
-    labelText.innerHTML = '&#128206; Upload Log';
+    labelText.innerHTML = '📎 Upload Log';
   }
 });
 
@@ -1010,7 +1444,7 @@ async function loadChatHistory() {
     const data = await res.json();
     if (data.history && data.history.length > 0) {
       const sep = document.createElement('div');
-      sep.style.cssText = 'text-align:center;color:#9ca3af;font-size:.74rem;padding:6px 0;';
+      sep.style.cssText = 'text-align:center;color:var(--text3);font-size:.72rem;padding:6px 0;';
       sep.textContent = '— previous session —';
       chatWin.appendChild(sep);
       data.history.forEach(m => addBubble(m.message, m.role === 'user' ? 'user' : 'bot', false));
@@ -1049,18 +1483,14 @@ function renderAlerts() {
   if (_alertFilter === 'unacked') filtered = filtered.filter(a => !a.acked);
   else if (_alertFilter === 'CRITICAL' || _alertFilter === 'WARNING')
     filtered = filtered.filter(a => a.severity === _alertFilter);
-
-  if (!filtered.length) {
-    list.innerHTML = '<div class="empty-state">No alerts to show.</div>';
-    return;
-  }
+  if (!filtered.length) { list.innerHTML = '<div class="empty-state">No alerts to show.</div>'; return; }
   list.innerHTML = filtered.map(a => {
     const sev = (a.severity || 'INFO').toLowerCase();
     const ts = (a.timestamp || '').slice(0, 16).replace('T', ' ');
     return `
       <div class="alert-card ${sev}">
         <span class="sev-badge ${sev}">${a.severity}</span>
-        <span style="color:#9ca3af;font-size:.75rem;margin-right:4px">#${a.id}</span>
+        <span style="color:var(--text3);font-size:.72rem;margin-right:4px">#${a.id}</span>
         <span class="alert-msg">${escHtml(a.message)}</span>
         <span class="alert-time">${ts}</span>
         ${!a.acked
@@ -1101,7 +1531,7 @@ async function loadNodes() {
 
 // ── Metrics ───────────────────────────────────────────────────────────────────
 const _charts = {};
-const METRIC_COLORS = { disk: '#1e90ff', memory: '#f97316', cpu: '#10b981' };
+const METRIC_COLORS = { disk: '#a78bfa', memory: '#fbbf24', cpu: '#34d399' };
 
 async function loadMetrics() {
   const node = document.getElementById('metrics-node-select')?.value || 'local';
@@ -1127,16 +1557,15 @@ async function loadMetricSummary(node) {
       const data = await res.json();
       const latest = data.data?.[0];
       const val = latest ? latest.value.toFixed(1) : '—';
-      const statusClass = latest
-        ? (latest.value >= 90 ? 'critical' : latest.value >= 80 ? 'warning' : 'ok')
-        : 'ok';
-      const statusText = latest
-        ? (latest.value >= 90 ? 'CRITICAL' : latest.value >= 80 ? 'WARNING' : 'OK')
-        : '—';
+      const statusClass = latest ? (latest.value >= 90 ? 'critical' : latest.value >= 80 ? 'warning' : 'ok') : 'ok';
+      const statusText = latest ? (latest.value >= 90 ? 'CRITICAL' : latest.value >= 80 ? 'WARNING' : 'OK') : '—';
+      const tileRgb = m === 'disk' ? '167,139,250' : m === 'memory' ? '251,191,36' : '52,211,153';
+      const tileC   = m === 'disk' ? '#a78bfa' : m === 'memory' ? '#fbbf24' : '#34d399';
+      const tileC2  = m === 'disk' ? '#d946ef' : m === 'memory' ? '#f97316' : '#06b6d4';
       html += `
-        <div class="metric-tile">
+        <div class="metric-tile" style="--tile-rgb:${tileRgb};--tile-c:${tileC};--tile-c2:${tileC2}">
           <div class="label">${labels[m]}</div>
-          <div class="value" style="color:${METRIC_COLORS[m]}">${val}%</div>
+          <div class="value" style="color:${tileC}">${val}%</div>
           <div class="status ${statusClass}">${statusText}</div>
         </div>`;
     } catch (_) {}
@@ -1148,42 +1577,37 @@ function renderChart(metric, dataPoints) {
   const canvas = document.getElementById(`chart-${metric}`);
   const labels = dataPoints.map(d => (d.timestamp || '').slice(11, 16));
   const values = dataPoints.map(d => d.value);
-
   if (_charts[metric]) {
     _charts[metric].data.labels = labels;
     _charts[metric].data.datasets[0].data = values;
     _charts[metric].update();
     return;
   }
-
   _charts[metric] = new Chart(canvas, {
     type: 'line',
     data: {
       labels,
       datasets: [{
-        label: metric,
-        data: values,
+        label: metric, data: values,
         borderColor: METRIC_COLORS[metric],
         backgroundColor: METRIC_COLORS[metric] + '22',
         borderWidth: 2,
         pointRadius: dataPoints.length > 20 ? 0 : 3,
-        tension: 0.3,
-        fill: true,
+        tension: 0.3, fill: true,
       }],
     },
     options: {
-      animation: false,
-      responsive: true,
-      maintainAspectRatio: false,
+      animation: false, responsive: true, maintainAspectRatio: false,
       scales: {
-        y: {
-          min: 0, max: 100,
+        y: { min: 0, max: 100,
           ticks: { callback: v => v + '%' },
-          title: { display: true, text: 'Usage (%)', color: '#9ca3af', font: { size: 11 } },
+          title: { display: true, text: 'Usage (%)', font: { size: 11 } },
+          grid: { color: '#30363d' },
         },
         x: {
           ticks: { maxTicksLimit: 8, maxRotation: 0 },
-          title: { display: true, text: 'Time (HH:MM)', color: '#9ca3af', font: { size: 11 } },
+          title: { display: true, text: 'Time (HH:MM)', font: { size: 11 } },
+          grid: { color: '#30363d' },
         },
       },
       plugins: { legend: { display: false } },
@@ -1194,10 +1618,7 @@ function renderChart(metric, dataPoints) {
 // ── Config ────────────────────────────────────────────────────────────────────
 async function loadConfig() {
   const sel = document.getElementById('config-node-select');
-  if (sel && sel.value && sel.value !== 'local') {
-    onConfigNodeChange();
-    return;
-  }
+  if (sel && sel.value && sel.value !== 'local') { onConfigNodeChange(); return; }
   try {
     const res = await authFetch('/chatops/config');
     const cfg = await res.json();
@@ -1208,9 +1629,9 @@ async function loadConfig() {
     document.getElementById('cfg-cpu-warning').value     = cfg.cpu_warning;
     document.getElementById('cfg-cpu-critical').value    = cfg.cpu_critical;
     document.getElementById('cfg-interval').value        = cfg.health_check_interval;
-    document.getElementById('cfg-slack-webhook').value = cfg.slack_webhook || '';
-    document.getElementById('cfg-suppress').value      = cfg.alert_suppress_minutes || 10;
-    document.getElementById('cfg-report-enabled').value = cfg.report_enabled ? 'true' : 'false';
+    document.getElementById('cfg-slack-webhook').value   = cfg.slack_webhook || '';
+    document.getElementById('cfg-suppress').value        = cfg.alert_suppress_minutes || 10;
+    document.getElementById('cfg-report-enabled').value  = cfg.report_enabled ? 'true' : 'false';
     document.getElementById('cfg-report-hour').value     = cfg.report_hour ?? 8;
   } catch (_) {}
 }
@@ -1220,14 +1641,8 @@ async function onConfigNodeChange() {
   const node = sel?.value || 'local';
   const localPanel = document.getElementById('config-local-panel');
   const nodePanel  = document.getElementById('config-node-panel');
-  if (node === 'local') {
-    localPanel.style.display = '';
-    nodePanel.style.display  = 'none';
-    loadConfig();
-    return;
-  }
-  localPanel.style.display = 'none';
-  nodePanel.style.display  = '';
+  if (node === 'local') { localPanel.style.display = ''; nodePanel.style.display = 'none'; loadConfig(); return; }
+  localPanel.style.display = 'none'; nodePanel.style.display = '';
   const info = (_nodesList || []).find(n => n.name === node) || {};
   document.getElementById('node-info-title').textContent = `Node: ${node}`;
   document.getElementById('node-info-body').innerHTML = `
@@ -1269,17 +1684,14 @@ async function saveNodeConfig() {
   };
   try {
     await authFetch(`/chatops/nodes/${encodeURIComponent(node)}/config`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
     document.getElementById('node-cfg-badge').textContent = '(node-specific)';
     const msg = document.getElementById('node-config-msg');
     msg.textContent = 'Node thresholds saved.';
     setTimeout(() => { msg.textContent = ''; }, 3000);
-  } catch (_) {
-    document.getElementById('node-config-msg').textContent = 'Save failed.';
-  }
+  } catch (_) { document.getElementById('node-config-msg').textContent = 'Save failed.'; }
 }
 
 async function saveConfig() {
@@ -1291,23 +1703,20 @@ async function saveConfig() {
     cpu_warning:            parseFloat(document.getElementById('cfg-cpu-warning').value),
     cpu_critical:           parseFloat(document.getElementById('cfg-cpu-critical').value),
     health_check_interval:  parseInt(document.getElementById('cfg-interval').value),
-    slack_webhook:           document.getElementById('cfg-slack-webhook').value.trim(),
-    alert_suppress_minutes:  parseInt(document.getElementById('cfg-suppress').value) || 10,
+    slack_webhook:          document.getElementById('cfg-slack-webhook').value.trim(),
+    alert_suppress_minutes: parseInt(document.getElementById('cfg-suppress').value) || 10,
     report_enabled: document.getElementById('cfg-report-enabled').value === 'true',
     report_hour:    parseInt(document.getElementById('cfg-report-hour').value) || 8,
   };
   try {
     await authFetch('/chatops/config', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
     });
     const msg = document.getElementById('config-msg');
     msg.textContent = 'Settings saved.';
     setTimeout(() => { msg.textContent = ''; }, 3000);
-  } catch (_) {
-    document.getElementById('config-msg').textContent = 'Save failed.';
-  }
+  } catch (_) { document.getElementById('config-msg').textContent = 'Save failed.'; }
 }
 
 // ── Polling ───────────────────────────────────────────────────────────────────
@@ -1321,7 +1730,6 @@ function pollAlertBadge() {
     .catch(() => {});
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
 setInterval(pollAlertBadge, 30000);
 setInterval(loadNodes, 60000);
 initAuth();
