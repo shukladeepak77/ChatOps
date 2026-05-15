@@ -95,6 +95,10 @@ def help_text() -> str:
         f'  <span style="color:#9ca3af;font-style:italic">— e.g. show analytics 30d</span>\n'
         f"  {_s(green,'show prometheus metrics')}"
         f'  <span style="color:#9ca3af;font-style:italic">— Prometheus-format metrics inline</span>\n'
+        f"  {_s(green,'configure prometheus')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— enable/disable individual metrics</span>\n'
+        f"  {_s(green,'analyze prometheus')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— AI interpretation and action recommendations</span>\n'
         f"  {_s(green,'download PDF')}"
         f'  <span style="color:#9ca3af;font-style:italic">— GET /chatops/analytics/report.pdf</span>\n'
         "\n"
@@ -682,52 +686,182 @@ def run_tests() -> dict:
     }
 
 
+# All available Prometheus metric keys (used for config validation)
+PROMETHEUS_METRIC_KEYS = [
+    "alerts_by_severity",
+    "alerts_unacked",
+    "mttr",
+    "system_usage",
+    "top_commands",
+    "runbooks_executed",
+    "kb_articles",
+    "audit_events_24h",
+]
+
+_PROM_DEFAULTS = {k: True for k in PROMETHEUS_METRIC_KEYS}
+
+
+def _enabled_prometheus_metrics() -> dict:
+    from chatops.config import load_config
+    cfg = load_config()
+    stored = cfg.get("prometheus_metrics", {})
+    return {**_PROM_DEFAULTS, **stored}
+
+
 def get_prometheus_metrics() -> dict:
-    from chatops.db import unacked_count
+    from chatops.db import unacked_count, kb_list, get_audit_log, _conn as _db_conn
     from chatops.analytics import get_alert_stats, get_mttr_stats, get_command_stats
     import time
 
-    stats = get_alert_stats(7)
-    mttr = get_mttr_stats(7)
-    disk = check_disk()
-    mem = check_memory()
-    cpu = check_cpu()
-    top_cmds = get_command_stats(7)[:5]
-
+    enabled = _enabled_prometheus_metrics()
     lines = ["```"]
-    lines += [
-        "# HELP chatops_alerts_total Total alerts by severity (last 7d)",
-        "# TYPE chatops_alerts_total gauge",
-    ]
-    for sev, cnt in stats.get("by_severity", {}).items():
-        lines.append(f'chatops_alerts_total{{severity="{sev}"}} {cnt}')
-    lines += [
-        "",
-        "# HELP chatops_alerts_unacked Unacknowledged alerts",
-        "# TYPE chatops_alerts_unacked gauge",
-        f"chatops_alerts_unacked {unacked_count()}",
-        "",
-        "# HELP chatops_mttr_minutes_avg Average MTTR in minutes (last 7d)",
-        "# TYPE chatops_mttr_minutes_avg gauge",
-        f"chatops_mttr_minutes_avg {mttr['avg_minutes'] if mttr['avg_minutes'] is not None else 'NaN'}",
-        "",
-        "# HELP chatops_system_usage_percent Current resource usage %",
-        "# TYPE chatops_system_usage_percent gauge",
-        f'chatops_system_usage_percent{{resource="disk"}}   {disk.get("percent_used", "N/A")}',
-        f'chatops_system_usage_percent{{resource="memory"}} {mem.get("percent_used", "N/A")}',
-        f'chatops_system_usage_percent{{resource="cpu"}}    {cpu.get("percent_used", "N/A")}',
-    ]
-    if top_cmds:
+
+    if enabled.get("alerts_by_severity"):
+        stats = get_alert_stats(7)
         lines += [
-            "",
-            "# HELP chatops_top_commands_total Command usage count (last 7d)",
-            "# TYPE chatops_top_commands_total gauge",
+            "# HELP chatops_alerts_total Total alerts by severity (last 7d)",
+            "# TYPE chatops_alerts_total gauge",
         ]
-        for cmd in top_cmds:
-            safe = cmd["command"].replace('"', '\\"')
-            lines.append(f'chatops_top_commands_total{{command="{safe}"}} {cmd["count"]}')
-    lines += [f"", f"# Generated at {int(time.time())}", "```"]
+        for sev, cnt in stats.get("by_severity", {}).items():
+            lines.append(f'chatops_alerts_total{{severity="{sev}"}} {cnt}')
+        lines.append("")
+
+    if enabled.get("alerts_unacked"):
+        lines += [
+            "# HELP chatops_alerts_unacked Unacknowledged alerts",
+            "# TYPE chatops_alerts_unacked gauge",
+            f"chatops_alerts_unacked {unacked_count()}",
+            "",
+        ]
+
+    if enabled.get("mttr"):
+        mttr = get_mttr_stats(7)
+        lines += [
+            "# HELP chatops_mttr_minutes_avg Average MTTR in minutes (last 7d)",
+            "# TYPE chatops_mttr_minutes_avg gauge",
+            f"chatops_mttr_minutes_avg {mttr['avg_minutes'] if mttr['avg_minutes'] is not None else 'NaN'}",
+            "",
+        ]
+
+    if enabled.get("system_usage"):
+        disk = check_disk()
+        mem = check_memory()
+        cpu = check_cpu()
+        lines += [
+            "# HELP chatops_system_usage_percent Current resource usage %",
+            "# TYPE chatops_system_usage_percent gauge",
+            f'chatops_system_usage_percent{{resource="disk"}}   {disk.get("percent_used", "N/A")}',
+            f'chatops_system_usage_percent{{resource="memory"}} {mem.get("percent_used", "N/A")}',
+            f'chatops_system_usage_percent{{resource="cpu"}}    {cpu.get("percent_used", "N/A")}',
+            "",
+        ]
+
+    if enabled.get("top_commands"):
+        top_cmds = get_command_stats(7)[:5]
+        if top_cmds:
+            lines += [
+                "# HELP chatops_top_commands_total Command usage count (last 7d)",
+                "# TYPE chatops_top_commands_total gauge",
+            ]
+            for cmd in top_cmds:
+                safe = cmd["command"].replace('"', '\\"')
+                lines.append(f'chatops_top_commands_total{{command="{safe}"}} {cmd["count"]}')
+            lines.append("")
+
+    if enabled.get("runbooks_executed"):
+        try:
+            with _db_conn() as conn:
+                count = conn.execute(
+                    "SELECT COUNT(*) FROM audit_log WHERE command LIKE '%runbook%' OR command LIKE 'confirm %'"
+                ).fetchone()[0]
+        except Exception:
+            count = 0
+        lines += [
+            "# HELP chatops_runbooks_executed_total Total runbooks executed (all time)",
+            "# TYPE chatops_runbooks_executed_total counter",
+            f"chatops_runbooks_executed_total {count}",
+            "",
+        ]
+
+    if enabled.get("kb_articles"):
+        try:
+            kb_count = len(kb_list(limit=9999))
+        except Exception:
+            kb_count = 0
+        lines += [
+            "# HELP chatops_kb_articles_total Total Knowledge Base articles",
+            "# TYPE chatops_kb_articles_total gauge",
+            f"chatops_kb_articles_total {kb_count}",
+            "",
+        ]
+
+    if enabled.get("audit_events_24h"):
+        try:
+            from datetime import datetime, timedelta, timezone
+            since = (datetime.now(timezone.utc) - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+            with _db_conn() as conn:
+                count = conn.execute(
+                    "SELECT COUNT(*) FROM audit_log WHERE timestamp >= ?", (since,)
+                ).fetchone()[0]
+        except Exception:
+            count = 0
+        lines += [
+            "# HELP chatops_audit_events_24h Audit log events in the last 24 hours",
+            "# TYPE chatops_audit_events_24h gauge",
+            f"chatops_audit_events_24h {count}",
+            "",
+        ]
+
+    lines += [f"# Generated at {int(time.time())}", "```"]
+    raw = "\n".join(lines)
+    return {"response": raw, "prometheus_output": raw}
+
+
+def configure_prometheus_metrics() -> dict:
+    enabled = _enabled_prometheus_metrics()
+    lines = ["**Prometheus Metric Configuration**\n"]
+    lines.append("Use `enable metric <name>` or `disable metric <name>` to toggle.\n")
+    for key in PROMETHEUS_METRIC_KEYS:
+        status = "✅ enabled" if enabled.get(key) else "❌ disabled"
+        lines.append(f"  `{key}` — {status}")
     return {"response": "\n".join(lines)}
+
+
+def toggle_prometheus_metric(name: str, enable: bool) -> dict:
+    from chatops.config import load_config, save_config
+    if name not in PROMETHEUS_METRIC_KEYS:
+        keys = ", ".join(f"`{k}`" for k in PROMETHEUS_METRIC_KEYS)
+        return {"response": f"Unknown metric key `{name}`. Valid keys: {keys}"}
+    cfg = load_config()
+    stored = cfg.get("prometheus_metrics", {})
+    stored[name] = enable
+    save_config({"prometheus_metrics": stored})
+    state = "enabled" if enable else "disabled"
+    return {"response": f"Metric `{name}` is now **{state}**. Type `configure prometheus` to see full list."}
+
+
+def analyze_prometheus_metrics(metrics_text: str) -> dict:
+    from chatops.config import load_config
+    from chatops.llm import ask
+    cfg = load_config()
+    if cfg.get("llm_provider", "none") == "none":
+        return {"response": "LLM is not configured. Set a provider in system config to use AI analysis."}
+
+    system_prompt = (
+        "You are a senior site reliability engineer reviewing Prometheus metrics from a ChatOps platform. "
+        "Analyse the metrics provided and give a concise, actionable report covering:\n"
+        "1. Health summary — what looks good and what is concerning\n"
+        "2. Any metrics in WARNING or CRITICAL territory (high unacked alerts, high MTTR, resource usage above 80%)\n"
+        "3. Specific recommended actions the ops team should take right now\n"
+        "Keep the response under 300 words. Use bullet points."
+    )
+    analysis = ask(
+        prompt=f"Here are the current Prometheus metrics:\n\n{metrics_text}",
+        system=system_prompt,
+    )
+    if analysis.startswith("["):
+        return {"response": f"AI analysis failed: {analysis}"}
+    return {"response": f"**🤖 AI Analysis of Prometheus Metrics**\n\n{analysis}"}
 
 
 def analyze_test_log(filename: str) -> dict:

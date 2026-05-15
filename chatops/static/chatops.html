@@ -849,6 +849,25 @@ async function sendMessage() {
       btnBar.appendChild(aiBtn);
       bubble.appendChild(btnBar);
     }
+    if (data?.prometheus_output) {
+      const btnBar = document.createElement('div');
+      btnBar.style.cssText = 'display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;white-space:normal;';
+      const btnStyle = 'padding:4px 12px;border:none;border-radius:6px;cursor:pointer;font-size:0.82em;color:#fff;';
+
+      const aiBtn = document.createElement('button');
+      aiBtn.textContent = '🤖 Analyse with AI';
+      aiBtn.style.cssText = btnStyle + 'background:#7c3aed;';
+      aiBtn.onclick = () => { input.value = 'analyze prometheus'; sendMessage(); };
+
+      const cfgBtn = document.createElement('button');
+      cfgBtn.textContent = '⚙️ Configure Metrics';
+      cfgBtn.style.cssText = btnStyle + 'background:#6b7280;';
+      cfgBtn.onclick = () => { input.value = 'configure prometheus'; sendMessage(); };
+
+      btnBar.appendChild(aiBtn);
+      btnBar.appendChild(cfgBtn);
+      bubble.appendChild(btnBar);
+    }
     if (data?.test_logs && data.test_logs.length > 0) {
       const grid = document.createElement('div');
       grid.style.cssText = 'margin-top:10px;display:flex;flex-direction:column;gap:5px;white-space:normal;';

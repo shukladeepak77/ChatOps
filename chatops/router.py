@@ -26,6 +26,10 @@ from .actions import (
     analyze_test_log,
     copy_ssh_key,
     get_prometheus_metrics,
+    configure_prometheus_metrics,
+    toggle_prometheus_metric,
+    analyze_prometheus_metrics,
+    PROMETHEUS_METRIC_KEYS,
 )
 from .config import load_config
 from .runbooks import list_runbooks, request_runbook, confirm_runbook, cancel_runbook, dry_run_runbook
@@ -147,7 +151,11 @@ def route_message(message: str, caller_role: str = "operator") -> Dict[str, str]
         "search kb":            "Searches KB articles by keyword across title, content, and tags. Usage: search kb <keyword>.",
         "delete kb":            "Deletes a Knowledge Base article by ID. Admin role required. Usage: delete kb <id>.",
         "show analytics":       "Displays a 7-day summary: total alerts, severity breakdown, MTTR (mean time to resolution), and top commands used. Append a period like '30d' for a different window.",
-        "show prometheus metrics": "Displays current Prometheus-format metrics inline: alert counts by severity, unacked alerts, MTTR, system resource usage, and top commands.",
+        "show prometheus metrics": "Displays current Prometheus-format metrics inline. Includes alerts, MTTR, system usage, runbook count, KB size, and audit events (configurable).",
+        "configure prometheus":    "Shows which Prometheus metrics are enabled or disabled. Toggle with 'enable metric <name>' or 'disable metric <name>'.",
+        "enable metric":           "Enables a Prometheus metric by key name. Usage: enable metric <key>. See keys with 'configure prometheus'.",
+        "disable metric":          "Disables a Prometheus metric by key name. Usage: disable metric <key>. See keys with 'configure prometheus'.",
+        "analyze prometheus":      "Sends current Prometheus metrics to the AI for interpretation and action recommendations.",
         "show alerts":          "Lists the 20 most recent alerts with severity, message, and acknowledgement status.",
         "show predictive alerts": "Analyses recent metric trends and shows any metrics projected to breach a WARNING or CRITICAL threshold within the next 10 minutes.",
         "run test":             "Runs the full ChatOps pytest automation suite (266 tests). Requires developer or admin role. Results are saved as a timestamped log file.",
@@ -636,6 +644,21 @@ def route_message(message: str, caller_role: str = "operator") -> Dict[str, str]
     # ── Prometheus metrics ─────────────────────────────────────────────────────
     if s in ("prometheus", "show prometheus", "prometheus metrics", "show prometheus metrics", "metrics"):
         return get_prometheus_metrics()
+
+    if s in ("configure prometheus", "prometheus config", "prometheus settings", "show prometheus config"):
+        return configure_prometheus_metrics()
+
+    _enable_m = re.match(r'^(enable|disable)\s+(?:metric\s+)?(\S[\w\s]*)$', s)
+    if _enable_m and _enable_m.group(2).strip() in PROMETHEUS_METRIC_KEYS:
+        return toggle_prometheus_metric(_enable_m.group(2).strip(), _enable_m.group(1) == "enable")
+
+    if s in ("analyze prometheus", "analyse prometheus", "analyze prometheus metrics",
+             "analyse prometheus metrics", "ai prometheus", "prometheus ai"):
+        # Use last known metrics text — re-fetch inline
+        result = get_prometheus_metrics()
+        raw = result.get("prometheus_output", result.get("response", ""))
+        raw_clean = raw.replace("```", "").strip()
+        return analyze_prometheus_metrics(raw_clean)
 
     # ── Knowledge Base ─────────────────────────────────────────────────────────
     if s in ("list kb", "show kb", "kb list"):
