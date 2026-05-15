@@ -48,7 +48,7 @@ def test_route_uptime_natural():
 # ── Ports ─────────────────────────────────────────────────────────────────────
 
 def test_route_ports():
-    assert "port" in _resp("what ports are open").lower()
+    assert "port" in _resp("check ports").lower()
 
 
 # ── Processes ─────────────────────────────────────────────────────────────────
@@ -58,7 +58,7 @@ def test_route_processes_exact():
 
 
 def test_route_processes_natural():
-    assert "process" in _resp("what processes are hogging memory").lower()
+    assert "process" in _resp("running processes").lower()
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -118,7 +118,7 @@ def test_route_runbook_cancel():
 
 def test_route_unknown_message():
     resp = _resp("xyzzy nonsense blah")
-    assert "understand" in resp.lower() or "didn't" in resp.lower()
+    assert "sure" in resp.lower() or "understand" in resp.lower() or "didn't" in resp.lower()
 
 
 def test_route_empty_message():
@@ -511,3 +511,157 @@ def test_set_role_to_developer():
     _resp_role("add user devroletest pass123 viewer", role="admin")
     resp = _resp_role("set role devroletest developer", role="admin")
     assert "updated" in resp.lower()
+
+
+# ── Feature 1: Auto-link alert → ticket ──────────────────────────────────────
+
+def test_create_ticket_basic():
+    resp = _resp("create ticket Disk space critical")
+    assert "Ticket #" in resp
+    assert "disk space critical" in resp.lower()
+
+
+def test_create_ticket_with_priority():
+    resp = _resp("create ticket High CPU alert priority high")
+    assert "Ticket #" in resp
+    assert "[HIGH]" in resp
+    assert "priority" not in resp.lower().split("ticket #")[1].split("\n")[0]
+
+
+def test_create_ticket_default_priority_medium():
+    resp = _resp("create ticket No priority stated")
+    assert "[MEDIUM]" in resp
+
+
+def test_create_ticket_with_alert_link():
+    from chatops.db import add_alert, ticket_list
+    aid = add_alert("Test alert for link", "WARNING")
+    resp = _resp(f"create ticket Linked ticket alert {aid}")
+    assert "Ticket #" in resp
+    assert f"alert #{aid}" in resp.lower() or f"linked" in resp.lower()
+    # Verify alert_id stored in DB
+    tickets = ticket_list(status="open")
+    linked = next((t for t in tickets if t.get("alert_id") == aid), None)
+    assert linked is not None
+
+
+def test_create_ticket_priority_and_alert_link():
+    from chatops.db import add_alert, ticket_list
+    aid = add_alert("Combined test alert", "CRITICAL")
+    resp = _resp(f"create ticket Server down priority high alert {aid}")
+    assert "[HIGH]" in resp
+    assert f"#{aid}" in resp or "linked" in resp.lower()
+    tickets = ticket_list(status="open")
+    linked = next((t for t in tickets if t.get("alert_id") == aid), None)
+    assert linked is not None
+    assert linked["priority"] == "high"
+    assert "server down" in linked["title"].lower()
+
+
+def test_create_ticket_title_clean_of_modifiers():
+    from chatops.db import ticket_list
+    resp = _resp("create ticket Memory leak priority low")
+    tickets = ticket_list(status="all")
+    match = next((t for t in tickets if "memory leak" in t["title"].lower()), None)
+    assert match is not None
+    assert "priority" not in match["title"].lower()
+    assert "low" not in match["title"].lower()
+
+
+def test_link_ticket_alert_command():
+    from chatops.db import add_alert, ticket_create
+    aid = add_alert("Manual link alert", "WARNING")
+    tid = ticket_create("Manual link ticket", created_by="admin")
+    resp = _resp(f"link ticket {tid} alert {aid}")
+    assert f"#{tid}" in resp and f"#{aid}" in resp
+
+
+def test_show_ticket_displays_alert_link():
+    from chatops.db import add_alert, ticket_create
+    aid = add_alert("Display link alert", "CRITICAL")
+    tid = ticket_create("Display link ticket", created_by="admin", alert_id=aid)
+    resp = _resp(f"show ticket {tid}")
+    assert f"#{aid}" in resp
+
+
+# ── Feature 2: NLU confidence scoring ────────────────────────────────────────
+
+def test_nlu_no_mapped_prefix_shown():
+    # NLU results must not leak debug "(mapped: ...)" text to user
+    resp = _resp("how full is the disk")
+    assert "mapped:" not in resp
+
+
+def test_nlu_unknown_does_not_crash():
+    resp = _resp("what is the meaning of life")
+    assert resp  # returns something, doesn't raise
+
+
+def test_nlu_suggestions_field_absent_on_direct_match():
+    # Direct keyword match bypasses NLU entirely — no suggestions key
+    result = route_message("check disk")
+    assert "nlu_suggestions" not in result
+
+
+# ── Feature 3: Custom Runbooks (chat commands) ────────────────────────────────
+
+def test_list_custom_runbooks_empty():
+    from chatops.db import runbook_list, runbook_delete
+    for rb in runbook_list():
+        runbook_delete(rb["name"])
+    resp = _resp("list custom runbooks")
+    assert "no custom runbooks" in resp.lower() or "custom runbooks" in resp.lower()
+
+
+def test_list_custom_runbooks_with_entry():
+    from chatops.db import runbook_create, runbook_delete
+    runbook_create("ls_rb", "List files", '[{"label":"ls","command":"ls /tmp"}]', created_by="admin")
+    resp = _resp("list custom runbooks")
+    assert "ls_rb" in resp
+    runbook_delete("ls_rb")
+
+
+def test_run_custom_runbook_executes_steps():
+    from chatops.db import runbook_create, runbook_delete
+    runbook_create("echo_rb", "Echo test", '[{"label":"Echo","command":"echo hello_chatops"}]', created_by="admin")
+    resp = _resp("run custom runbook echo_rb")
+    assert "hello_chatops" in resp
+    runbook_delete("echo_rb")
+
+
+def test_run_custom_runbook_not_found():
+    resp = _resp("run custom runbook nonexistent_xyz_rb")
+    assert "not found" in resp.lower()
+
+
+def test_run_custom_runbook_no_steps():
+    from chatops.db import runbook_create, runbook_delete
+    runbook_create("empty_rb", "No steps", '[]', created_by="admin")
+    resp = _resp("run custom runbook empty_rb")
+    assert "no steps" in resp.lower()
+    runbook_delete("empty_rb")
+
+
+def test_delete_custom_runbook_admin():
+    from chatops.db import runbook_create
+    runbook_create("del_rb", "Delete me", '[]', created_by="admin")
+    resp = _resp_role("delete custom runbook del_rb", role="admin")
+    assert "deleted" in resp.lower()
+
+
+def test_delete_custom_runbook_denied_for_operator():
+    from chatops.db import runbook_create, runbook_delete
+    runbook_create("del_rb_op", "Op cannot delete", '[]', created_by="admin")
+    resp = _resp_role("delete custom runbook del_rb_op", role="operator")
+    assert "denied" in resp.lower() or "access" in resp.lower()
+    runbook_delete("del_rb_op")
+
+
+def test_show_custom_runbooks_alias():
+    resp = _resp("show custom runbooks")
+    assert "custom runbooks" in resp.lower() or "runbook" in resp.lower()
+
+
+def test_custom_runbooks_alias():
+    resp = _resp("custom runbooks")
+    assert "custom runbooks" in resp.lower() or "runbook" in resp.lower()

@@ -4,6 +4,8 @@ from chatops.db import (
     add_metric, get_metric_history,
     get_metric_stats, get_alert_count,
     get_last_notified, set_last_notified,
+    ticket_create, ticket_get, ticket_list, ticket_close, ticket_update,
+    runbook_create, runbook_list, runbook_get, runbook_delete,
 )
 
 
@@ -201,3 +203,124 @@ def test_set_last_notified_upserts():
     set_last_notified("cpu_test_key")
     second = get_last_notified("cpu_test_key")
     assert second >= first
+
+
+# ── Tickets ───────────────────────────────────────────────────────────────────
+
+def test_ticket_create_returns_id():
+    tid = ticket_create("Test ticket", priority="medium", created_by="admin")
+    assert isinstance(tid, int) and tid > 0
+
+
+def test_ticket_get_fields():
+    tid = ticket_create("Field check ticket", description="desc", priority="high", created_by="admin")
+    t = ticket_get(tid)
+    assert t is not None
+    for field in ["id", "title", "description", "status", "priority", "created_by", "created_at"]:
+        assert field in t
+
+
+def test_ticket_default_status_open():
+    tid = ticket_create("Status check", created_by="admin")
+    assert ticket_get(tid)["status"] == "open"
+
+
+def test_ticket_create_with_alert_link():
+    aid = add_alert("Linked alert", "WARNING")
+    tid = ticket_create("Linked ticket", priority="high", created_by="admin", alert_id=aid)
+    t = ticket_get(tid)
+    assert t["alert_id"] == aid
+
+
+def test_ticket_list_open_only():
+    tid = ticket_create("Open ticket", created_by="admin")
+    ticket_close(tid)
+    open_tickets = ticket_list(status="open")
+    assert all(t["status"] == "open" for t in open_tickets)
+
+
+def test_ticket_list_all():
+    ticket_create("For all list", created_by="admin")
+    all_tickets = ticket_list(status="all")
+    statuses = {t["status"] for t in all_tickets}
+    assert "open" in statuses
+
+
+def test_ticket_close():
+    tid = ticket_create("To close", created_by="admin")
+    assert ticket_close(tid) is True
+    t = ticket_get(tid)
+    assert t["status"] == "closed"
+    assert t["closed_at"] is not None
+
+
+def test_ticket_close_already_closed():
+    tid = ticket_create("Already closed", created_by="admin")
+    ticket_close(tid)
+    assert ticket_close(tid) is False
+
+
+def test_ticket_close_nonexistent():
+    assert ticket_close(999999) is False
+
+
+def test_ticket_update_priority():
+    tid = ticket_create("Update me", priority="low", created_by="admin")
+    assert ticket_update(tid, priority="high") is True
+    assert ticket_get(tid)["priority"] == "high"
+
+
+def test_ticket_update_title():
+    tid = ticket_create("Old title", created_by="admin")
+    assert ticket_update(tid, title="New title") is True
+    assert ticket_get(tid)["title"] == "New title"
+
+
+def test_ticket_update_no_fields():
+    tid = ticket_create("No update", created_by="admin")
+    assert ticket_update(tid) is False
+
+
+# ── Custom Runbooks ───────────────────────────────────────────────────────────
+
+def test_runbook_create_returns_id():
+    rid = runbook_create("test_rb_db", "Test runbook", '[{"label":"ls","command":"ls"}]', created_by="admin")
+    assert isinstance(rid, int) and rid > 0
+    runbook_delete("test_rb_db")
+
+
+def test_runbook_get_fields():
+    runbook_create("rb_fields", "Fields test", '[]', created_by="admin")
+    rb = runbook_get("rb_fields")
+    assert rb is not None
+    for field in ["id", "name", "description", "steps", "created_by", "created_at"]:
+        assert field in rb
+    runbook_delete("rb_fields")
+
+
+def test_runbook_get_nonexistent():
+    assert runbook_get("nonexistent_xyz_rb") is None
+
+
+def test_runbook_list_includes_created():
+    runbook_create("rb_list_test", "List test", '[]', created_by="admin")
+    names = [rb["name"] for rb in runbook_list()]
+    assert "rb_list_test" in names
+    runbook_delete("rb_list_test")
+
+
+def test_runbook_delete_returns_true():
+    runbook_create("rb_to_delete", "Delete me", '[]', created_by="admin")
+    assert runbook_delete("rb_to_delete") is True
+
+
+def test_runbook_delete_nonexistent():
+    assert runbook_delete("nonexistent_xyz_rb") is False
+
+
+def test_runbook_name_unique():
+    import pytest
+    runbook_create("rb_unique", "First", '[]', created_by="admin")
+    with pytest.raises(Exception):
+        runbook_create("rb_unique", "Duplicate", '[]', created_by="admin")
+    runbook_delete("rb_unique")

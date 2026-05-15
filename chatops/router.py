@@ -1451,10 +1451,6 @@ def route_message(message: str, caller_role: str = "operator", _nlu_depth: int =
 
             if cmd:
                 routed = route_message(cmd, caller_role=caller_role, _nlu_depth=1)
-                if confidence == "HIGH":
-                    routed["response"] = f"_(mapped: `{cmd}`)_\n\n{routed['response']}"
-                else:
-                    routed["response"] = f"_(mapped: `{cmd}` — {confidence} confidence)_\n\n{routed['response']}"
                 if alternatives:
                     routed["nlu_suggestions"] = alternatives
                     routed["nlu_confidence"] = confidence
