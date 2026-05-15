@@ -1271,6 +1271,17 @@
       </div>
       <span style="font-size:.73rem;color:var(--text3)">Posts a daily summary to Slack at the configured hour (requires webhook).</span>
     </div>
+    <div class="config-group">
+      <label>Default Execution Node</label>
+      <div class="config-row">
+        <div style="flex:2">
+          <select id="cfg-default-node" class="cfg-select" style="width:100%">
+            <option value="">local (ChatOps server itself)</option>
+          </select>
+        </div>
+      </div>
+      <span style="font-size:.73rem;color:var(--text3)">When set, commands like <code>check disk</code> run on this node via SSH instead of the ChatOps server. Use <code>on &lt;node&gt;</code> to override per-command.</span>
+    </div>
     <button class="config-save" onclick="saveConfig()">Save Settings</button>
     <div id="config-msg"></div>
   </div>
@@ -2793,8 +2804,12 @@ async function loadConfig() {
   const sel = document.getElementById('config-node-select');
   if (sel && sel.value && sel.value !== 'local') { onConfigNodeChange(); return; }
   try {
-    const res = await authFetch('/chatops/config');
-    const cfg = await res.json();
+    const [cfgRes, nodesRes] = await Promise.all([
+      authFetch('/chatops/config'),
+      authFetch('/chatops/nodes'),
+    ]);
+    const cfg   = await cfgRes.json();
+    const nodes = await nodesRes.json();
     document.getElementById('cfg-disk-warning').value    = cfg.disk_warning;
     document.getElementById('cfg-disk-critical').value   = cfg.disk_critical;
     document.getElementById('cfg-memory-warning').value  = cfg.memory_warning;
@@ -2806,6 +2821,17 @@ async function loadConfig() {
     document.getElementById('cfg-suppress').value        = cfg.alert_suppress_minutes || 10;
     document.getElementById('cfg-report-enabled').value  = cfg.report_enabled ? 'true' : 'false';
     document.getElementById('cfg-report-hour').value     = cfg.report_hour ?? 8;
+    // Populate default_node selector with registered nodes
+    const dnSel = document.getElementById('cfg-default-node');
+    const curDn = cfg.default_node || '';
+    dnSel.innerHTML = '<option value="">local (ChatOps server itself)</option>';
+    (nodes || []).forEach(n => {
+      const o = document.createElement('option');
+      o.value = n.name;
+      o.textContent = `${n.name}  (${n.user}@${n.host})`;
+      if (n.name === curDn) o.selected = true;
+      dnSel.appendChild(o);
+    });
   } catch (_) {}
 }
 
@@ -2880,6 +2906,7 @@ async function saveConfig() {
     alert_suppress_minutes: parseInt(document.getElementById('cfg-suppress').value) || 10,
     report_enabled: document.getElementById('cfg-report-enabled').value === 'true',
     report_hour:    parseInt(document.getElementById('cfg-report-hour').value) || 8,
+    default_node:   document.getElementById('cfg-default-node').value,
   };
   try {
     await authFetch('/chatops/config', {

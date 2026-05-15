@@ -17,6 +17,7 @@ _DEFAULTS = {
     "llm_model": "",
     "llm_api_key": "",
     "ollama_url": "http://localhost:11434",
+    "default_node": "",
 }
 
 _CONFIG_FILE = "chatops_config.json"

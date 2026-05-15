@@ -284,6 +284,7 @@ class ConfigUpdate(BaseModel):
     alert_suppress_minutes: Optional[int] = None
     report_enabled: Optional[bool] = None
     report_hour:    Optional[int]  = None
+    default_node:   Optional[str]  = None
 
 
 class LoginRequest(BaseModel):

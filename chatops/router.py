@@ -135,6 +135,14 @@ def route_message(message: str, caller_role: str = "operator", _nlu_depth: int =
         target_node = on_match.group(1)
         s = s[:on_match.start()].strip()
 
+    # ── Default node — applies when no explicit "on <node>" was given ─────────
+    # Set default_node in config to avoid running sysadmin commands locally on
+    # the ChatOps server (which may not be Linux or the machine you want to probe).
+    if target_node is None:
+        _dn = cfg.get("default_node", "").strip()
+        if _dn and _dn.lower() != "local":
+            target_node = _dn
+
     # ── Special prefix commands ────────────────────────────────────────────────
     if not s or s == "help":
         return {"response": help_text_action()}
