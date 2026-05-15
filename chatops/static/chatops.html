@@ -902,6 +902,34 @@
   </div>
 </div>
 
+<!-- Network Monitor -->
+<div class="modal-backdrop" id="modal-net-monitor">
+  <div class="modal-box modal-wide">
+    <div class="modal-header"><span class="modal-icon">🔭</span><span class="modal-title">Network Monitor</span><button class="modal-close" onclick="closeModal('modal-net-monitor')">✕</button></div>
+    <div class="modal-body">
+      <div class="m-field"><label>Device</label>
+        <select id="nm-device"><option value="">— select device —</option></select>
+      </div>
+      <div class="m-field" id="nm-ping-target-field" style="display:none">
+        <label>Ping Target <span style="font-size:.72rem;opacity:.6">(IP or hostname)</span></label>
+        <input id="nm-ping-target" type="text" placeholder="8.8.8.8">
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">
+        <button class="m-btn m-btn-secondary" onclick="runNetMonitor('routes')">🗺 Routes</button>
+        <button class="m-btn m-btn-secondary" onclick="runNetMonitor('cpu')">⚙️ CPU/Memory</button>
+        <button class="m-btn m-btn-secondary" onclick="runNetMonitor('bgp')">🔗 BGP Neighbors</button>
+        <button class="m-btn m-btn-secondary" onclick="runNetMonitor('arp')">📋 ARP Table</button>
+        <button class="m-btn m-btn-secondary" onclick="togglePingTarget()">📡 Ping Device</button>
+        <button class="m-btn m-btn-secondary" onclick="runNetMonitor('backup-view')">💾 View Backup</button>
+      </div>
+      <div class="m-result" id="nm-result"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="m-btn m-btn-secondary" onclick="closeModal('modal-net-monitor')">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Runbook Builder -->
 <div class="modal-backdrop" id="modal-runbook-builder">
   <div class="modal-box modal-wide">
@@ -1045,10 +1073,12 @@
       <div class="drop-sep"></div>
       <div class="drop-label">Monitor</div>
       <div class="drop-item" onclick="loadNetdevSelects();openModal('modal-net-interfaces');closeAllMenus()"><span class="di">📡</span> Interface Status…</div>
+      <div class="drop-item" onclick="loadNetdevSelects('nm-device');openModal('modal-net-monitor');closeAllMenus()"><span class="di">🔭</span> Monitor Device…</div>
       <div class="drop-item" onclick="menuCmd('list network devices')"><span class="di">📋</span> Show All Devices</div>
       <div class="drop-sep"></div>
       <div class="drop-label">Configuration</div>
       <div class="drop-item" onclick="loadNetdevSelects();openModal('modal-net-backup');closeAllMenus()"><span class="di">💾</span> Backup Config…</div>
+      <div class="drop-item" onclick="loadNetdevSelects('nm-device');openModal('modal-net-monitor');closeAllMenus()"><span class="di">💿</span> View Latest Backup…</div>
       <div class="drop-item" onclick="loadNetdevSelects();openModal('modal-net-push');closeAllMenus()"><span class="di">📤</span> Push Config…</div>
     </div>
   </div>
@@ -2060,11 +2090,13 @@ async function deleteNetdev(name) {
   } catch(e) { showModalResult('nd-list-result','Error: '+e.message,false); }
 }
 
-async function loadNetdevSelects() {
+async function loadNetdevSelects(extraId) {
   try {
     const res = await authFetch('/chatops/network/devices');
     const devs = await res.json();
-    ['ni-device','nb-device','np-device'].forEach(id => {
+    const ids = ['ni-device','nb-device','np-device','nm-device'];
+    if (extraId && !ids.includes(extraId)) ids.push(extraId);
+    ids.forEach(id => {
       const sel = document.getElementById(id);
       if (!sel) return;
       const cur = sel.value;
@@ -2077,6 +2109,35 @@ async function loadNetdevSelects() {
       });
     });
   } catch(e) {}
+}
+
+function togglePingTarget() {
+  const field = document.getElementById('nm-ping-target-field');
+  const visible = field.style.display !== 'none';
+  field.style.display = visible ? 'none' : 'block';
+  if (!visible) document.getElementById('nm-ping-target').focus();
+  else runNetMonitor('ping');
+}
+
+async function runNetMonitor(action) {
+  const name = document.getElementById('nm-device').value;
+  if (!name) { document.getElementById('nm-result').innerHTML = '<span style="color:#f87171">Select a device first.</span>'; return; }
+  const el = document.getElementById('nm-result');
+  el.innerHTML = '<span style="opacity:.6">Running…</span>';
+  let cmd;
+  if (action === 'routes')      cmd = `show routes ${name}`;
+  else if (action === 'cpu')    cmd = `show device cpu ${name}`;
+  else if (action === 'bgp')    cmd = `show bgp neighbors ${name}`;
+  else if (action === 'arp')    cmd = `show arp ${name}`;
+  else if (action === 'ping') {
+    const target = document.getElementById('nm-ping-target').value.trim() || '8.8.8.8';
+    cmd = `ping device ${name} ${target}`;
+    document.getElementById('nm-ping-target-field').style.display = 'none';
+  } else if (action === 'backup-view') {
+    cmd = `show config backup ${name}`;
+  }
+  closeModal('modal-net-monitor');
+  menuCmd(cmd);
 }
 
 async function loadInterfacesModal() {
