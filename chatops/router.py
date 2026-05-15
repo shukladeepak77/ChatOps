@@ -1280,15 +1280,35 @@ def route_message(message: str, caller_role: str = "operator", _nlu_depth: int =
         return {"response": "\n".join(lines)}
 
     # ── Greeting / chitchat shortcut ─────────────────────────────────────────────
-    _greetings = {"hello", "hi", "hey", "howdy", "hiya", "yo", "sup", "greetings", "good morning", "good afternoon", "good evening"}
-    if s in _greetings or raw.lower().strip().rstrip("!").rstrip(".") in _greetings:
-        import random
+    import random
+    _clean = raw.lower().strip().rstrip("!.?").strip()
+
+    _how_are_you_phrases = ["how are you", "how are you doing", "how do you do", "how's it going", "hows it going", "what's up", "whats up", "how you doing", "you ok", "are you ok"]
+    if any(p in _clean for p in _how_are_you_phrases):
+        _howdy_replies = [
+            "I'm doing great, thanks for asking! 😊\n\nAll systems are standing by. Ready to help — want a quick `system health` check to see how your infrastructure is doing?",
+            "Running smoothly! 🚀 Always ready to assist with your ops.\n\nAnything I can help with? Try `show alerts` or `system health` to get started.",
+            "Doing well and ready to go! ⚡\n\nHow about your systems — want me to run a `system health` check?",
+        ]
+        return {"response": random.choice(_howdy_replies)}
+
+    _greeting_words = ["hello", "hi", "hey", "howdy", "hiya", "yo", "sup", "greetings", "good morning", "good afternoon", "good evening"]
+    if _clean in _greeting_words or any(p == _clean for p in _greeting_words):
         _greeting_replies = [
-            "👋 Hey there! I'm your ChatOps assistant.\n\nI can help you monitor systems, check alerts, manage services, run runbooks, and much more.\n\nType `help` to see everything I can do, or just ask me naturally — like *\"check disk space\"* or *\"show critical alerts\"*.",
+            "👋 Hey there! I'm your ChatOps assistant.\n\nI can help you monitor systems, check alerts, manage services, run runbooks, and much more.\n\nType `help` to see everything I can do, or just ask me naturally — like \"check disk space\" or \"show critical alerts\".",
             "Hello! 😊 Ready to help with your infrastructure.\n\nTry asking things like:\n• `system health` — full system overview\n• `show alerts` — recent alerts\n• `list runbooks` — available runbooks\n\nOr type `help` for the full command list.",
             "Hi! I'm your ops assistant. 🚀\n\nAsk me anything about your systems — health checks, alerts, services, deployments, and more.\n\nNot sure where to start? Type `system health` for a quick overview.",
         ]
         return {"response": random.choice(_greeting_replies)}
+
+    _thanks_phrases = ["thanks", "thank you", "thank you very much", "thanks a lot", "cheers", "thx", "ty"]
+    if any(p in _clean for p in _thanks_phrases):
+        _thanks_replies = [
+            "You're welcome! 😊 Let me know if there's anything else I can help with.",
+            "Happy to help! 🚀 Just ask whenever you need anything.",
+            "Anytime! ⚡ I'm always here if you need me.",
+        ]
+        return {"response": random.choice(_thanks_replies)}
 
     # ── NLU fallback: map natural language to a command or answer directly ───────
     from .llm import ask as _llm_ask, is_configured as _llm_ok

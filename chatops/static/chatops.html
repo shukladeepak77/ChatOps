@@ -193,9 +193,9 @@
     }
     .bubble.bot {
       align-self: flex-start;
-      background: #FF2EB8;
-      color: #1a1008; border-bottom-left-radius: 5px; font-weight: 600;
-      box-shadow: 0 4px 18px rgba(255,46,184,.4), 0 1px 0 rgba(255,255,255,.2) inset;
+      background: linear-gradient(135deg, #D946EF, #8B5CF6);
+      color: #fff; border-bottom-left-radius: 5px; font-weight: 600;
+      box-shadow: 0 4px 18px rgba(139,92,246,.45), 0 1px 0 rgba(255,255,255,.2) inset;
     }
     .bubble.bot.critical { background: linear-gradient(135deg, #dc2626, #f87171); color: #fff; box-shadow: 0 4px 18px rgba(248,113,113,.4), 0 1px 0 rgba(255,255,255,.15) inset; }
     .bubble.bot.warning  { background: linear-gradient(135deg, #d97706, #fbbf24); color: #1a1008; box-shadow: 0 4px 18px rgba(251,191,36,.4), 0 1px 0 rgba(255,255,255,.2) inset; }
@@ -598,7 +598,7 @@
       <div class="drop-item" onclick="menuCmd('download pdf report')"><span class="di">📥</span> Download PDF (7d)</div>
       <div class="drop-item" onclick="menuCmd('show report')"><span class="di">📝</span> Daily Report</div>
       <div class="drop-sep"></div>
-      <div class="drop-item" onclick="switchTab('metrics', document.querySelector('.tab-btn[data-tab=\\'metrics\\']')); loadMetrics(); closeAllMenus();"><span class="di">📡</span> Open Metrics Panel</div>
+      <div class="drop-item" onclick="switchTab('metrics', null); loadMetrics(); closeAllMenus();"><span class="di">📡</span> Open Metrics Panel</div>
     </div>
   </div>
 
@@ -616,6 +616,8 @@
       <div class="drop-sep"></div>
       <div class="drop-label">System</div>
       <div class="drop-item" onclick="menuCmd('show system config')"><span class="di">⚙️</span> System Config</div>
+      <div class="drop-item" onclick="switchTab('config', null); loadConfig(); closeAllMenus();"><span class="di">🛠️</span> Open Config Panel</div>
+      <div class="drop-item" onclick="switchTab('kb', null); loadKB(); closeAllMenus();"><span class="di">📚</span> Open KB Panel</div>
       <div class="drop-item" onclick="menuCmd('show audit log')"><span class="di">📜</span> Audit Log</div>
       <div class="drop-item" onclick="menuCmd('test slack')"><span class="di">💬</span> Test Slack</div>
       <div class="drop-sep"></div>
@@ -630,9 +632,6 @@
     <button class="tab-btn" data-tab="alerts" onclick="switchTab('alerts', this)">
       🔔 Alerts <span id="alert-badge" class="badge"></span>
     </button>
-    <button class="tab-btn" data-tab="metrics" onclick="switchTab('metrics', this)">📊 Metrics</button>
-    <button class="tab-btn" data-tab="config" onclick="switchTab('config', this)">⚙️ Config</button>
-    <button class="tab-btn" data-tab="kb" onclick="switchTab('kb', this); loadKB()">📚 KB</button>
     <button class="tab-btn" data-tab="help" onclick="switchTab('help', this)">❓ Help</button>
   </div>
 </div>
