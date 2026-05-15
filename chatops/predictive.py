@@ -73,21 +73,29 @@ def check_predictive_alerts(node: str = "local") -> list[dict]:
 def run_predictive_check(node: str = "local"):
     """
     Called from the health-check loop. Fires predictive alerts into the DB
-    if not already fired recently (suppress duplicate within 15 min).
+    using the configured alert_suppress_minutes window (default 30 min).
     """
-    from .db import add_alert, _conn
+    from .db import add_alert, get_last_notified, set_last_notified
+    from .config import load_config
+    from datetime import datetime, timedelta
+
+    cfg = load_config()
+    suppress_minutes = int(cfg.get("alert_suppress_minutes", 30))
+
     alerts = check_predictive_alerts(node)
     for a in alerts:
         metric = a["metric"]
-        # Check if we already fired a predictive alert for this metric in last 15 min
-        with _conn() as conn:
-            recent = conn.execute(
-                "SELECT COUNT(*) FROM alerts "
-                "WHERE message LIKE ? AND timestamp >= datetime('now', '-15 minutes')",
-                (f"[PREDICTIVE] {metric.capitalize()}%",),
-            ).fetchone()[0]
-        if recent:
-            continue
+        suppress_key = f"predictive_{metric}_{node}"
+
+        last = get_last_notified(suppress_key)
+        if last:
+            try:
+                last_dt = datetime.strptime(last[:19], "%Y-%m-%d %H:%M:%S")
+                if datetime.utcnow() - last_dt < timedelta(minutes=suppress_minutes):
+                    continue
+            except Exception:
+                pass
+
         msg = (
             f"[PREDICTIVE] {metric.capitalize()} trending toward "
             f"{a['threshold_type']} — currently {a['current']}%, "
@@ -95,3 +103,4 @@ def run_predictive_check(node: str = "local"):
             f"(threshold: {a['threshold_value']}%)"
         )
         add_alert(msg, f"PREDICTIVE_{a['threshold_type']}", source="predictive", node=node)
+        set_last_notified(suppress_key)

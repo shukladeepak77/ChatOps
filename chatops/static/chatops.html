@@ -902,6 +902,63 @@ async function sendMessage() {
       });
       bubble.appendChild(grid);
     }
+    if (data?.mttr_trend && data.mttr_trend.length > 0) {
+      const chartWrap = document.createElement('div');
+      chartWrap.style.cssText = 'margin-top:12px;white-space:normal;';
+      const title = document.createElement('div');
+      title.style.cssText = 'font-size:.78rem;font-weight:700;color:#374151;margin-bottom:4px;';
+      title.textContent = 'MTTR Trend (avg minutes per day)';
+      const canvas = document.createElement('canvas');
+      canvas.style.cssText = 'width:100%!important;height:160px!important;';
+      chartWrap.appendChild(title);
+      chartWrap.appendChild(canvas);
+      bubble.appendChild(chartWrap);
+      setTimeout(() => {
+        new Chart(canvas, {
+          type: 'line',
+          data: {
+            labels: data.mttr_trend.map(d => d.day),
+            datasets: [{
+              label: 'Avg MTTR (min)',
+              data: data.mttr_trend.map(d => d.avg_minutes),
+              borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)',
+              tension: 0.3, fill: true, pointRadius: 4,
+            }]
+          },
+          options: { responsive: true, plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, title: { display: true, text: 'minutes' } } } }
+        });
+      }, 50);
+    }
+    if (data?.leaderboard && data.leaderboard.length > 0) {
+      const chartWrap = document.createElement('div');
+      chartWrap.style.cssText = 'margin-top:12px;white-space:normal;';
+      const title = document.createElement('div');
+      title.style.cssText = 'font-size:.78rem;font-weight:700;color:#374151;margin-bottom:4px;';
+      title.textContent = 'Team Leaderboard (commands run)';
+      const canvas = document.createElement('canvas');
+      canvas.style.cssText = 'width:100%!important;height:160px!important;';
+      chartWrap.appendChild(title);
+      chartWrap.appendChild(canvas);
+      bubble.appendChild(chartWrap);
+      setTimeout(() => {
+        new Chart(canvas, {
+          type: 'bar',
+          data: {
+            labels: data.leaderboard.map(d => d.username),
+            datasets: [{
+              label: 'Commands',
+              data: data.leaderboard.map(d => d.count),
+              backgroundColor: ['#6366f1','#3b82f6','#10b981','#f59e0b','#ef4444',
+                                '#8b5cf6','#ec4899','#14b8a6','#f97316','#84cc16'],
+            }]
+          },
+          options: { responsive: true, indexAxis: 'y',
+            plugins: { legend: { display: false } },
+            scales: { x: { beginAtZero: true } } }
+        });
+      }, 50);
+    }
     if (data?.pdf_report) {
       const pdfBtn = document.createElement('button');
       pdfBtn.textContent = '📥 Download PDF Report';

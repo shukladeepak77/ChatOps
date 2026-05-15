@@ -37,13 +37,13 @@ from .runbooks import list_runbooks, request_runbook, confirm_runbook, cancel_ru
 # Intent keyword map — order matters: more specific phrases listed first
 _INTENTS: Dict[str, list] = {
     "logs":        ["analyze logs", "log analysis", "check logs", "analyze log", "parse logs"],
-    "processes":   ["top processes", "running processes", "process list", "what is running", "show processes", "ps aux", "processes", "process"],
+    "processes":   ["top processes", "running processes", "process list", "show processes", "ps aux", "top cpu processes", "high cpu process"],
     "ports":       ["open ports", "listening ports", "check ports", "network ports", "show ports"],
     "health":      ["system health", "system status", "system overview", "overall health", "how is system"],
     "runbooks":    ["list runbooks", "available runbooks", "show runbooks", "what runbooks"],
     "alerts":      ["show alerts", "recent alerts", "alert history", "view alerts", "list alerts"],
     "disk":        ["disk", "storage", "space", "filesystem", "drive", "how full", "disk usage"],
-    "memory":      ["memory", "ram", "mem", "swap", "how much memory", "how much ram"],
+    "memory":      ["check memory", "memory usage", "ram usage", "mem usage", "check ram", "check mem", "check swap", "how much memory", "how much ram"],
     "cpu":         ["cpu", "processor", "cpu usage", "cpu load", "compute"],
     "uptime":      ["uptime", "up time", "how long", "server uptime", "been up", "running since"],
     "config":      ["config", "configuration", "settings", "thresholds", "show system config", "system config"],
@@ -76,18 +76,19 @@ def _detect_intent(s: str) -> str:
     for intent, keywords in _INTENTS.items():
         if any(kw in s for kw in keywords):
             return intent
-    # Fuzzy fallback
-    phrases = [p for p, _ in _ALL_PHRASES]
-    result = rfuzz_process.extractOne(s, phrases, scorer=fuzz.WRatio, score_cutoff=72)
-    if result:
-        matched = result[0]
-        for phrase, intent in _ALL_PHRASES:
-            if phrase == matched:
-                return intent
+    # Fuzzy fallback — only for short inputs (≤5 words) to avoid false positives on natural language
+    if len(s.split()) <= 5:
+        phrases = [p for p, _ in _ALL_PHRASES]
+        result = rfuzz_process.extractOne(s, phrases, scorer=fuzz.WRatio, score_cutoff=88)
+        if result:
+            matched = result[0]
+            for phrase, intent in _ALL_PHRASES:
+                if phrase == matched:
+                    return intent
     return "unknown"
 
 
-def route_message(message: str, caller_role: str = "operator") -> Dict[str, str]:
+def route_message(message: str, caller_role: str = "operator", _nlu_depth: int = 0) -> Dict[str, str]:
     global _pending_restart, _pending_ssh_copy, _pending_kill
     raw = (message or "").strip()
     raw_lower = raw.lower()
@@ -150,7 +151,14 @@ def route_message(message: str, caller_role: str = "operator") -> Dict[str, str]
         "show kb":              "Displays the full content of a Knowledge Base article by its ID. Usage: show kb <id>.",
         "search kb":            "Searches KB articles by keyword across title, content, and tags. Usage: search kb <keyword>.",
         "delete kb":            "Deletes a Knowledge Base article by ID. Admin role required. Usage: delete kb <id>.",
-        "show analytics":       "Displays a 7-day summary: total alerts, severity breakdown, MTTR (mean time to resolution), and top commands used. Append a period like '30d' for a different window.",
+        "show analytics":       "Displays a 7-day summary with MTTR trend chart and team leaderboard. Append a period like '30d' for a different window.",
+        "rca":                  "Generates an AI-drafted Root Cause Analysis for a specific alert. Usage: rca <alert_id>. Includes incident summary, root cause, timeline, impact, and action items.",
+        "show tickets":         "Lists all open ITSM tickets with ID, priority, title, and created date.",
+        "show all tickets":     "Lists all tickets (open and closed).",
+        "show ticket":          "Shows full details of a specific ticket. Usage: show ticket <id>.",
+        "create ticket":        "Creates a new ITSM ticket. Usage: create ticket <title> [priority high/medium/low].",
+        "close ticket":         "Closes an open ticket by ID. Usage: close ticket <id>.",
+        "link ticket":          "Links a ticket to an alert. Usage: link ticket <ticket_id> alert <alert_id>.",
         "show prometheus metrics": "Displays current Prometheus-format metrics inline. Includes alerts, MTTR, system usage, runbook count, KB size, and audit events (configurable).",
         "configure prometheus":    "Shows which Prometheus metrics are enabled or disabled. Toggle with 'enable metric <name>' or 'disable metric <name>'.",
         "enable metric":           "Enables a Prometheus metric by key name. Usage: enable metric <key>. See keys with 'configure prometheus'.",
@@ -374,9 +382,11 @@ def route_message(message: str, caller_role: str = "operator") -> Dict[str, str]
                 return {"response": result["output"]}
             return {"response": result["message"]}
 
-    # Runbook: run <name>
+    # Runbook: run <name> — only match known runbook names to avoid swallowing NL sentences
+    _KNOWN_RUNBOOKS = {"clear_tmp", "disk_breakdown", "large_logs", "listening_services",
+                       "flush_cache", "rotate_logs", "rotate_secret"}
     run_match = re.match(r"^run\s+([\w\-]+)", s)
-    if run_match:
+    if run_match and run_match.group(1) in _KNOWN_RUNBOOKS:
         result = request_runbook(run_match.group(1))
         return {"response": result["message"]}
 
@@ -617,14 +627,15 @@ def route_message(message: str, caller_role: str = "operator") -> Dict[str, str]
     analytics_m = re.match(r'^show\s+analytics(?:\s+(\d+)d?)?$', s)
     if analytics_m or s in ("analytics", "show analytics"):
         days = int(analytics_m.group(1)) if analytics_m and analytics_m.group(1) else 7
-        from .analytics import get_alert_stats, get_mttr_stats, get_command_stats
+        from .analytics import get_alert_stats, get_mttr_stats, get_command_stats, get_mttr_trend, get_user_leaderboard
         a = get_alert_stats(days)
         m = get_mttr_stats(days)
         cmds = get_command_stats(days)
+        mttr_trend = get_mttr_trend(days)
+        leaderboard = get_user_leaderboard(days)
         sev_line = "  ".join(f"{k}: {v}" for k, v in sorted(a["by_severity"].items())) or "none"
         mttr_line = (f"{m['avg_minutes']} min avg  (min {m['min_minutes']}  max {m['max_minutes']}  n={m['sample_size']})"
                      if m.get("avg_minutes") else "no resolved alerts")
-        top_cmd = cmds[0]["command"] if cmds else "-"
         lines = [
             f"Analytics — last {days} days",
             "",
@@ -639,7 +650,13 @@ def route_message(message: str, caller_role: str = "operator") -> Dict[str, str]
         ]
         for c in cmds[:5]:
             lines.append(f"  {c['command'][:50]:<50}  {c['count']}x")
-        return {"response": "\n".join(lines), "pdf_report": True, "pdf_days": days}
+        return {
+            "response": "\n".join(lines),
+            "pdf_report": True,
+            "pdf_days": days,
+            "mttr_trend": mttr_trend,
+            "leaderboard": leaderboard,
+        }
 
     # ── Prometheus metrics ─────────────────────────────────────────────────────
     if s in ("prometheus", "show prometheus", "prometheus metrics", "show prometheus metrics", "metrics"):
@@ -713,6 +730,93 @@ def route_message(message: str, caller_role: str = "operator") -> Dict[str, str]
             return {"response": f"KB article #{delete_kb_m.group(1)} deleted."}
         return {"response": f"No KB article with ID {delete_kb_m.group(1)}."}
 
+    # ── RCA Draft ──────────────────────────────────────────────────────────────
+    rca_m = re.match(r'^rca\s+(\d+)$', s)
+    if rca_m or s == "rca":
+        if not rca_m:
+            return {"response": "Usage: `rca <alert_id>` — e.g. `rca 42`"}
+        from .actions import generate_rca
+        return generate_rca(int(rca_m.group(1)))
+
+    # ── ITSM Tickets ───────────────────────────────────────────────────────────
+    if s in ("show tickets", "list tickets", "tickets"):
+        from .db import ticket_list
+        tickets = ticket_list(status="open")
+        if not tickets:
+            return {"response": "No open tickets.\nUse `create ticket <title>` to create one."}
+        lines = [f"Open Tickets ({len(tickets)}):"]
+        for t in tickets:
+            pri_icon = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(t["priority"], "⚪")
+            lines.append(f"  #{t['id']}  {pri_icon} [{t['priority'].upper()}]  {t['title'][:60]}  ({t['created_at'][:10]})")
+        return {"response": "\n".join(lines), "tickets": tickets}
+
+    if s in ("show all tickets", "list all tickets", "all tickets"):
+        from .db import ticket_list
+        tickets = ticket_list(status="all")
+        if not tickets:
+            return {"response": "No tickets found."}
+        lines = [f"All Tickets ({len(tickets)}):"]
+        for t in tickets:
+            pri_icon = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(t["priority"], "⚪")
+            status_icon = "✅" if t["status"] == "closed" else "🔓"
+            lines.append(f"  #{t['id']}  {status_icon} {pri_icon} [{t['priority'].upper()}]  {t['title'][:55]}  ({t['created_at'][:10]})")
+        return {"response": "\n".join(lines), "tickets": tickets}
+
+    show_ticket_m = re.match(r'^show\s+ticket\s+(\d+)$', s)
+    if show_ticket_m:
+        from .db import ticket_get
+        t = ticket_get(int(show_ticket_m.group(1)))
+        if not t:
+            return {"response": f"Ticket #{show_ticket_m.group(1)} not found."}
+        pri_icon = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(t["priority"], "⚪")
+        lines = [
+            f"Ticket #{t['id']} — {t['title']}",
+            f"  Status:      {t['status'].upper()}",
+            f"  Priority:    {pri_icon} {t['priority'].upper()}",
+            f"  Created by:  {t['created_by']}",
+            f"  Created at:  {t['created_at'][:16]}",
+        ]
+        if t.get("alert_id"):
+            lines.append(f"  Linked alert: #{t['alert_id']}")
+        if t.get("closed_at"):
+            lines.append(f"  Closed at:   {t['closed_at'][:16]}")
+        if t.get("description"):
+            lines += ["", "Description:", f"  {t['description']}"]
+        return {"response": "\n".join(lines)}
+
+    create_ticket_m = re.match(r'^create\s+ticket\s+(.+)$', s)
+    if create_ticket_m:
+        title = create_ticket_m.group(1).strip()
+        # Check for priority hint: "create ticket <title> priority high/medium/low"
+        pri_m = re.search(r'\bpriority\s+(high|medium|low)\b', title, re.IGNORECASE)
+        priority = pri_m.group(1).lower() if pri_m else "medium"
+        if pri_m:
+            title = title[:pri_m.start()].strip()
+        from .db import ticket_create
+        tid = ticket_create(title=title, priority=priority, created_by=caller_role)
+        return {"response": f"Ticket #{tid} created: **{title}** [{priority.upper()}]\nUse `show ticket {tid}` to view details."}
+
+    close_ticket_m = re.match(r'^close\s+ticket\s+(\d+)$', s)
+    if close_ticket_m:
+        from .db import ticket_close
+        ok = ticket_close(int(close_ticket_m.group(1)))
+        if ok:
+            return {"response": f"Ticket #{close_ticket_m.group(1)} closed."}
+        return {"response": f"Ticket #{close_ticket_m.group(1)} not found or already closed."}
+
+    link_ticket_m = re.match(r'^link\s+ticket\s+(\d+)\s+alert\s+(\d+)$', s)
+    if link_ticket_m:
+        from .db import ticket_update
+        ok = ticket_update(int(link_ticket_m.group(1)), status="open")
+        if ok:
+            # Update alert_id directly
+            from .db import _conn as _dbconn
+            with _dbconn() as conn:
+                conn.execute("UPDATE tickets SET alert_id=?, updated_at=datetime('now') WHERE id=?",
+                             (int(link_ticket_m.group(2)), int(link_ticket_m.group(1))))
+            return {"response": f"Ticket #{link_ticket_m.group(1)} linked to alert #{link_ticket_m.group(2)}."}
+        return {"response": f"Ticket #{link_ticket_m.group(1)} not found."}
+
     # ── Kill process ───────────────────────────────────────────────────────────
     kill_m = re.match(r'^kill\s+process\s+(\d+)$', s)
     if kill_m:
@@ -743,21 +847,6 @@ def route_message(message: str, caller_role: str = "operator") -> Dict[str, str]
         except subprocess.CalledProcessError:
             return {"response": f"Failed to kill PID {pid}. Process may have already exited or requires elevated privileges."}
 
-    # ── Free-form questions → LLM (before intent detection) ───────────────────
-    _Q_WORDS = ("how ", "why ", "what ", "when ", "where ", "can ", "should ",
-                "is ", "are ", "does ", "will ", "explain ", "tell me", "describe ")
-    if any(s.startswith(q) for q in _Q_WORDS):
-        from .llm import ask as _llm_ask, is_configured as _llm_ok
-        if _llm_ok():
-            answer = _llm_ask(
-                raw,
-                system=(
-                    "You are a DevOps and Linux systems assistant embedded in a ChatOps console. "
-                    "Answer concisely and technically with actionable steps. "
-                    "Keep responses under 150 words."
-                ),
-            )
-            return {"response": answer}
 
     _svc_m = re.match(r'^(?:show|list|search)\s+services?\s+(.+)$', s)
     _svc_filter = _svc_m.group(1).strip() if _svc_m else None
@@ -825,6 +914,42 @@ def route_message(message: str, caller_role: str = "operator") -> Dict[str, str]
                 f"~{a['projected']}% in {a['eta_minutes']} min "
                 f"(threshold: {a['threshold_value']}% {a['threshold_type']})"
             )
+        return {"response": "\n".join(lines)}
+
+    # ── Explicit alert filter commands ─────────────────────────────────────────
+    _alerts_n_m = re.match(r'^show\s+alerts?\s+(\d+)$', s)
+    if s in ("show unacked alerts", "unacked alerts", "show unacknowledged alerts", "unacknowledged alerts"):
+        from .db import get_alerts
+        alerts = [a for a in get_alerts(limit=100) if not a["acked"]]
+        if not alerts:
+            return {"response": "No unacknowledged alerts."}
+        lines = [f"Unacknowledged alerts ({len(alerts)}):"]
+        for a in alerts:
+            lines.append(f"  #{a['id']} [{a['severity']}] {a['message']}  ({a['timestamp'][:16]})")
+        return {"response": "\n".join(lines)}
+
+    if s in ("show critical alerts", "critical alerts"):
+        from .db import get_alerts
+        alerts = [a for a in get_alerts(limit=100) if a["severity"] == "CRITICAL"]
+        if not alerts:
+            return {"response": "No CRITICAL alerts."}
+        lines = [f"Critical alerts ({len(alerts)}):"]
+        for a in alerts:
+            ack = "✓" if a["acked"] else "!"
+            lines.append(f"  #{a['id']} [{ack}] {a['message']}  ({a['timestamp'][:16]})")
+        return {"response": "\n".join(lines)}
+
+    if _alerts_n_m:
+        from .db import get_alerts, unacked_count
+        n = int(_alerts_n_m.group(1))
+        alerts = get_alerts(limit=n)
+        count = unacked_count()
+        if not alerts:
+            return {"response": "No alerts recorded yet."}
+        lines = [f"Last {n} alerts ({count} unacknowledged):"]
+        for a in alerts:
+            ack = "✓" if a["acked"] else "!"
+            lines.append(f"  #{a['id']} [{ack}] [{a['severity']}] {a['message']}  ({a['timestamp'][:16]})")
         return {"response": "\n".join(lines)}
 
     # ── Intents handled locally even when a node is specified ─────────────────
@@ -1154,22 +1279,74 @@ def route_message(message: str, caller_role: str = "operator") -> Dict[str, str]
             lines.append(f"  {n} — {info['user']}@{info['host']}  (key: {info['key_path']})")
         return {"response": "\n".join(lines)}
 
+    # ── NLU fallback: map natural language to a command or answer directly ───────
     from .llm import ask as _llm_ask, is_configured as _llm_ok
-    if _llm_ok() and raw:
-        answer = _llm_ask(
-            raw,
-            system=(
-                "You are a DevOps and Linux systems assistant embedded in a ChatOps console. "
-                "Answer the operator's question concisely and technically. "
-                "Focus on actionable steps. Keep responses under 150 words."
-            ),
+    if _llm_ok() and raw and _nlu_depth == 0:
+        _NLU_COMMANDS = (
+            "check disk | check memory | check cpu | check uptime | check ports | "
+            "top processes | system health | show predictive alerts | "
+            "show alerts | show alerts <N> | show critical alerts | show unacked alerts | "
+            "show services | show services <keyword> | service status <name> | "
+            "restart <name> | check failed services | kill process <pid> | "
+            "list runbooks | run <runbook> | dry run <runbook> | "
+            "show tickets | show all tickets | show ticket <id> | "
+            "create ticket <title> [priority high|medium|low] | close ticket <id> | "
+            "link ticket <id> alert <id> | "
+            "list kb | search kb <keyword> | show kb <id> | "
+            "add kb <title>: <content> | delete kb <id> | "
+            "check ip | check routes | check network | check connections | "
+            "check dns | check dns <domain> | "
+            "show analytics | show analytics <N>d | show prometheus metrics | "
+            "configure prometheus | enable metric <name> | disable metric <name> | "
+            "analyze prometheus | rca <alert_id> | explain alert <id> | "
+            "analyze logs: <content> | analyze test log <filename> | "
+            "show audit log | show report | show system config | "
+            "add node <name> <user>@<host> | list nodes | remove node <name> | "
+            "list users | add user <username> <password> <role> | "
+            "set role <username> <role> | deactivate user <username> | "
+            "run tests | show test logs | test llm | date | help"
         )
-        return {"response": answer}
+        _nlu_system = (
+            "You are a command router for a ChatOps platform. "
+            "The user has typed a natural language message that did not match any known command. "
+            "Your job is to either:\n"
+            "1. Map it to an exact command from the list below and reply ONLY with: EXECUTE: <command>\n"
+            "2. If it is a general DevOps/Linux/ops question with no direct command match, answer it in under 150 words.\n"
+            "3. If it is completely unrelated to operations (weather, sports, cooking, etc.), reply: UNKNOWN\n\n"
+            "Rules:\n"
+            "- Only use EXECUTE: if you are confident the user wants that specific action.\n"
+            "- Fill in parameters exactly as shown in the command syntax. Examples:\n"
+            "    'check if nginx is running' → EXECUTE: service status nginx\n"
+            "    'run rca on alert 1' → EXECUTE: rca 1\n"
+            "    'generate rca for alert 5' → EXECUTE: rca 5\n"
+            "    'show me open tickets' → EXECUTE: show tickets\n"
+            "    'how full is the disk' → EXECUTE: check disk\n"
+            "- Parameters are positional numbers or names — never use key=value format.\n"
+            "- Never guess a parameter that is not explicitly in the user's message.\n\n"
+            f"Available commands:\n{_NLU_COMMANDS}"
+        )
+        nlu_result = _llm_ask(raw, system=_nlu_system)
+        nlu_clean = nlu_result.strip()
+
+        if nlu_clean.upper().startswith("EXECUTE:"):
+            cmd = nlu_clean[len("EXECUTE:"):].strip()
+            routed = route_message(cmd, caller_role=caller_role, _nlu_depth=1)
+            # Prepend a subtle note showing what command was inferred
+            routed["response"] = f"_(mapped: `{cmd}`)_\n\n{routed['response']}"
+            return routed
+
+        if nlu_clean.upper() == "UNKNOWN":
+            return {
+                "response": (
+                    "I didn't understand that. Type `help` to see all available commands."
+                )
+            }
+
+        return {"response": nlu_result}
 
     return {
         "response": (
-            "I didn't understand that. Try: check disk, check memory, check cpu, "
-            "check ip, service status <name>, or type 'help' for all commands."
+            "I didn't understand that. Type `help` to see all available commands."
         )
     }
 

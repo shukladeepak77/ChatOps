@@ -71,6 +71,41 @@ def get_mttr_stats(days: int = 7) -> dict:
     }
 
 
+def get_mttr_trend(days: int = 7) -> list:
+    """Per-day average MTTR for charting."""
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT DATE(acked_at) day, timestamp, acked_at FROM alerts "
+            "WHERE acked=1 AND acked_at IS NOT NULL AND acked_at != '' "
+            "AND acked_at >= ? ORDER BY acked_at",
+            (since,),
+        ).fetchall()
+    daily: dict = {}
+    for r in rows:
+        try:
+            day = r["day"]
+            created = datetime.strptime(r["timestamp"][:19], "%Y-%m-%d %H:%M:%S")
+            resolved = datetime.strptime(r["acked_at"][:19], "%Y-%m-%d %H:%M:%S")
+            diff = (resolved - created).total_seconds() / 60
+            if diff > 0:
+                daily.setdefault(day, []).append(diff)
+        except Exception:
+            pass
+    return [{"day": day, "avg_minutes": round(sum(v) / len(v), 1)} for day, v in sorted(daily.items())]
+
+
+def get_user_leaderboard(days: int = 7) -> list:
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT username, COUNT(*) cnt FROM audit_log WHERE timestamp >= ? "
+            "GROUP BY username ORDER BY cnt DESC LIMIT 10",
+            (since,),
+        ).fetchall()
+    return [{"username": r["username"], "count": r["cnt"]} for r in rows]
+
+
 def get_command_stats(days: int = 7) -> list:
     since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
     with _conn() as conn:

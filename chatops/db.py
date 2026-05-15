@@ -62,6 +62,18 @@ def init_db():
                 created_by TEXT    NOT NULL DEFAULT 'admin',
                 created_at TEXT    NOT NULL DEFAULT (datetime('now'))
             );
+            CREATE TABLE IF NOT EXISTS tickets (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                title       TEXT    NOT NULL,
+                description TEXT    NOT NULL DEFAULT '',
+                status      TEXT    NOT NULL DEFAULT 'open',
+                priority    TEXT    NOT NULL DEFAULT 'medium',
+                created_by  TEXT    NOT NULL DEFAULT 'system',
+                alert_id    INTEGER,
+                created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+                updated_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+                closed_at   TEXT
+            );
         """)
         for table in ('metrics_history', 'alerts'):
             cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
@@ -393,4 +405,58 @@ def kb_list(limit: int = 20) -> List[Dict]:
 def kb_delete(article_id: int) -> bool:
     with _conn() as conn:
         cur = conn.execute("DELETE FROM kb_articles WHERE id=?", (article_id,))
+    return cur.rowcount > 0
+
+
+# ── Tickets (ITSM) ────────────────────────────────────────────────────────────
+
+def ticket_create(title: str, description: str = "", priority: str = "medium",
+                  created_by: str = "system", alert_id: int = None) -> int:
+    with _conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO tickets (title, description, priority, created_by, alert_id) VALUES (?,?,?,?,?)",
+            (title, description, priority, created_by, alert_id),
+        )
+    return cur.lastrowid
+
+
+def ticket_list(status: str = "open", limit: int = 20) -> List[Dict]:
+    with _conn() as conn:
+        if status == "all":
+            rows = conn.execute(
+                "SELECT * FROM tickets ORDER BY id DESC LIMIT ?", (limit,)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM tickets WHERE status=? ORDER BY id DESC LIMIT ?", (status, limit)
+            ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def ticket_get(ticket_id: int) -> Dict | None:
+    with _conn() as conn:
+        row = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def ticket_close(ticket_id: int) -> bool:
+    with _conn() as conn:
+        cur = conn.execute(
+            "UPDATE tickets SET status='closed', closed_at=datetime('now'), updated_at=datetime('now') WHERE id=? AND status='open'",
+            (ticket_id,),
+        )
+    return cur.rowcount > 0
+
+
+def ticket_update(ticket_id: int, **fields) -> bool:
+    allowed = {"title", "description", "priority", "status"}
+    updates = {k: v for k, v in fields.items() if k in allowed}
+    if not updates:
+        return False
+    updates["updated_at"] = "datetime('now')"
+    set_clause = ", ".join(f"{k}=?" for k in updates if k != "updated_at")
+    set_clause += ", updated_at=datetime('now')"
+    vals = [v for k, v in updates.items() if k != "updated_at"]
+    with _conn() as conn:
+        cur = conn.execute(f"UPDATE tickets SET {set_clause} WHERE id=?", vals + [ticket_id])
     return cur.rowcount > 0

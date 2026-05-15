@@ -25,24 +25,23 @@ def help_text() -> str:
         '<span style="color:#374151;font-weight:700">System Monitoring:</span>\n'
         f"  {_s(blue,'check disk')} | {_s(blue,'check memory')} | {_s(blue,'check cpu')}"
         f" | {_s(blue,'check uptime')} | {_s(blue,'check ports')}\n"
-        f"  {_s(green,'top processes')} | {_s(green,'system health')}\n"
-        "\n"
-        '<span style="color:#374151;font-weight:700">General:</span>\n'
-        f"  {_s(gray,'show system config')} | {_s(gray,'date')} | {_s(gray,'help')}\n"
-        f"  {_s(gray,'show predictive alerts')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— metrics trending toward threshold breach</span>\n'
-        f"  {_s(gray,'run tests')} | {_s(gray,'show test logs')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— run test suite / list past runs (developer+ only)</span>\n'
+        f"  {_s(blue,'top processes')} | {_s(blue,'system health')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— live resource snapshot across all metrics</span>\n'
+        f"  {_s(blue,'show predictive alerts')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— metrics trending toward WARNING/CRITICAL in next 10 min</span>\n'
         "\n"
         '<span style="color:#374151;font-weight:700">Alerts:</span>\n'
-        f"  {_s(purple,'show alerts')} | {_s(purple,'show predictive alerts')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— recent alerts / metrics trending toward threshold</span>\n'
+        f"  {_s(purple,'show alerts')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— 20 most recent alerts with severity and ack status</span>\n'
+        f"  {_s(purple,'show alerts &lt;N&gt;')} | {_s(purple,'show critical alerts')} | {_s(purple,'show unacked alerts')}\n"
         "\n"
         '<span style="color:#374151;font-weight:700">AI-Powered Analysis:</span>\n'
         f"  {_s(green,'analyze logs: &lt;content&gt;')}"
         f'  <span style="color:#9ca3af;font-style:italic">— paste inline or upload a log file for AI analysis</span>\n'
         f"  {_s(green,'explain alert &lt;id&gt;')}"
         f'  <span style="color:#9ca3af;font-style:italic">— AI root cause analysis and fix suggestions for an alert</span>\n'
+        f"  {_s(green,'rca &lt;alert_id&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— full AI-drafted RCA: summary, root cause, timeline, actions</span>\n'
         f'  <span style="color:#9ca3af;font-style:italic">  Ask anything: "how do I reduce swap?" → answered by AI</span>\n'
         "\n"
         '<span style="color:#374151;font-weight:700">Runbooks:</span>\n'
@@ -52,91 +51,87 @@ def help_text() -> str:
         f'  <span style="color:#9ca3af;font-style:italic">— simulate without executing (safe preview)</span>\n'
         f'  <span style="color:#9ca3af;font-style:italic">  Available: clear_tmp, disk_breakdown, large_logs, listening_services, flush_cache, rotate_logs, rotate_secret</span>\n'
         "\n"
+        '<span style="color:#374151;font-weight:700">ITSM Tickets:</span>\n'
+        f"  {_s(orange,'show tickets')} | {_s(orange,'show all tickets')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— list open tickets / all tickets (open + closed)</span>\n'
+        f"  {_s(orange,'show ticket &lt;id&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— full ticket details</span>\n'
+        f"  {_s(orange,'create ticket &lt;title&gt; [priority high|medium|low]')}\n"
+        f"  {_s(orange,'close ticket &lt;id&gt;')} | {_s(orange,'link ticket &lt;id&gt; alert &lt;id&gt;')}\n"
+        "\n"
         '<span style="color:#374151;font-weight:700">Knowledge Base:</span>\n'
-        f"  {_s(cyan,'list kb')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— list all KB articles</span>\n'
-        f"  {_s(cyan,'add kb &lt;title&gt;: &lt;content&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— add a new article</span>\n'
-        f"  {_s(cyan,'show kb &lt;id&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— read full article</span>\n'
-        f"  {_s(cyan,'search kb &lt;keyword&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— search by title, content or tags</span>\n'
-        f"  {_s(cyan,'delete kb &lt;id&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— delete article (admin only)</span>\n'
+        f"  {_s(cyan,'list kb')} | {_s(cyan,'search kb &lt;keyword&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— list all / search by title, content or tags</span>\n'
+        f"  {_s(cyan,'show kb &lt;id&gt;')} | {_s(cyan,'add kb &lt;title&gt;: &lt;content&gt;')}"
+        f" | {_s(cyan,'delete kb &lt;id&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— (admin only)</span>\n'
+        "\n"
+        '<span style="color:#374151;font-weight:700">Services:</span>\n'
+        f"  {_s(amber,'show services')} | {_s(amber,'show services &lt;keyword&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— list all / filter by name</span>\n'
+        f"  {_s(amber,'service status &lt;name&gt;')} | {_s(amber,'restart &lt;name&gt;')}"
+        f" | {_s(amber,'confirm restart &lt;name&gt;')} | {_s(amber,'check failed services')}\n"
+        f"  {_s(amber,'kill process &lt;pid&gt;')} | {_s(amber,'confirm kill &lt;pid&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— terminate a process by PID (SIGTERM)</span>\n'
         "\n"
         '<span style="color:#374151;font-weight:700">Network:</span>\n'
         f"  {_s(cyan,'check ip')} | {_s(cyan,'check routes')} | {_s(cyan,'check network')}"
         f" | {_s(cyan,'check connections')}\n"
-        f"  {_s(cyan,'check dns')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— default connectivity check</span>\n'
-        f"  {_s(cyan,'check dns &lt;domain&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— full DNS lookup (A, MX, NS, TXT, CNAME)  e.g. check dns yahoo.com</span>\n'
+        f"  {_s(cyan,'check dns')} | {_s(cyan,'check dns &lt;domain&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— connectivity check / full DNS lookup (A, MX, NS, TXT, CNAME)</span>\n'
         "\n"
-        '<span style="color:#374151;font-weight:700">Services:</span>\n'
-        f"  {_s(amber,'show services')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— list all services with PID</span>\n'
-        f"  {_s(amber,'show services &lt;keyword&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— filter services by name  e.g. show services ssh</span>\n'
-        f"  {_s(amber,'service status &lt;name&gt;')} | {_s(amber,'restart &lt;name&gt;')}"
-        f" | {_s(amber,'confirm restart &lt;name&gt;')} | {_s(amber,'check failed services')}\n"
-        f"  {_s(amber,'kill process &lt;pid&gt;')} | {_s(amber,'confirm kill &lt;pid&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— terminates a process by PID (SIGTERM)</span>\n'
-        "\n"
-        '<span style="color:#374151;font-weight:700">Multi-instance:</span>\n'
+        '<span style="color:#374151;font-weight:700">Multi-Node:</span>\n'
         f"  {_s(rose,'add node &lt;name&gt; &lt;user&gt;@&lt;host&gt;')} | {_s(rose,'list nodes')}"
         f" | {_s(rose,'remove node &lt;name&gt;')}\n"
         f"  {_s(rose,'&lt;any command&gt; on &lt;node&gt;')} | {_s(rose,'&lt;any command&gt; on all')}\n"
         f"  {_s(rose,'copy ssh key &lt;user&gt;@&lt;host&gt;')} | {_s(rose,'confirm copy ssh key')}\n"
         "\n"
         '<span style="color:#374151;font-weight:700">Analytics:</span>\n'
-        f"  {_s(green,'show analytics')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— alert stats, MTTR, top commands (last 7 days)</span>\n'
-        f"  {_s(green,'show analytics &lt;N&gt;d')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— e.g. show analytics 30d</span>\n'
+        f"  {_s(green,'show analytics')} | {_s(green,'show analytics &lt;N&gt;d')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— alert stats, MTTR trend chart, team leaderboard  e.g. show analytics 30d</span>\n'
         f"  {_s(green,'show prometheus metrics')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— Prometheus-format metrics inline</span>\n'
-        f"  {_s(green,'configure prometheus')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— enable/disable individual metrics</span>\n'
+        f'  <span style="color:#9ca3af;font-style:italic">— Prometheus-format metrics inline (alerts, MTTR, resources, KB, runbooks)</span>\n'
+        f"  {_s(green,'configure prometheus')} | {_s(green,'enable metric &lt;name&gt;')} | {_s(green,'disable metric &lt;name&gt;')}\n"
         f"  {_s(green,'analyze prometheus')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— AI interpretation and action recommendations</span>\n'
+        f'  <span style="color:#9ca3af;font-style:italic">— AI interpretation and recommended actions</span>\n'
         f"  {_s(green,'download PDF')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— GET /chatops/analytics/report.pdf</span>\n'
+        f'  <span style="color:#9ca3af;font-style:italic">— download analytics report as PDF</span>\n'
         "\n"
-        '<span style="color:#374151;font-weight:700">Slack &amp; Reports:</span>\n'
+        '<span style="color:#374151;font-weight:700">Testing (developer+ only):</span>\n'
+        f"  {_s(gray,'run tests')} | {_s(gray,'show test logs')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— run full test suite in background / list past runs</span>\n'
+        f"  {_s(gray,'analyze test log &lt;filename&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— AI analysis of a test run log</span>\n'
+        "\n"
+        '<span style="color:#374151;font-weight:700">Audit &amp; Reports:</span>\n'
+        f"  {_s(gray,'show audit log')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— last 50 commands with user, timestamp and result</span>\n'
+        f"  {_s(gray,'show report')} | {_s(gray,'config set report on')} | {_s(gray,'config set report off')}"
+        f" | {_s(gray,'config set report hour &lt;0-23&gt;')}\n"
+        "\n"
+        '<span style="color:#374151;font-weight:700">Slack:</span>\n'
         f"  {_s(gray,'config set slack_webhook &lt;url&gt;')} | {_s(gray,'test slack')}"
         f" | {_s(gray,'config set alert suppress &lt;minutes&gt;')}\n"
-        f"  {_s(gray,'config set slack bot token &lt;token&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— enable inbound Slack commands</span>\n'
-        f"  {_s(gray,'config set slack signing secret &lt;secret&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— verify Slack request signatures</span>\n'
-        f"  {_s(gray,'config set report on')} | {_s(gray,'config set report off')}"
-        f" | {_s(gray,'config set report hour &lt;0-23&gt;')} | {_s(gray,'show report')}\n"
+        f"  {_s(gray,'config set slack bot token &lt;token&gt;')} | {_s(gray,'config set slack signing secret &lt;secret&gt;')}\n"
         "\n"
-        '<span style="color:#374151;font-weight:700">AI / LLM Config:</span>\n'
-        f"  {_s(green,'test llm')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— verify LLM connection is working</span>\n'
-        f"  {_s(green,'show llm config')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— show active provider, model and API key (admin only)</span>\n'
-
+        '<span style="color:#374151;font-weight:700">AI / LLM:</span>\n'
+        f"  {_s(green,'test llm')} | {_s(green,'show llm config')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— test connection / show provider and model (admin only)</span>\n'
         f"  {_s(gray,'config set llm provider &lt;ollama|groq|claude|none&gt;')}\n"
-        f"  {_s(gray,'config set llm api key &lt;key&gt;')} | {_s(gray,'config set llm model &lt;model&gt;')}\n"
-        f"  {_s(gray,'config set ollama url &lt;url&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— default: http://localhost:11434</span>\n'
+        f"  {_s(gray,'config set llm api key &lt;key&gt;')} | {_s(gray,'config set llm model &lt;model&gt;')}"
+        f" | {_s(gray,'config set ollama url &lt;url&gt;')}\n"
         "\n"
         '<span style="color:#374151;font-weight:700">User Management (admin only):</span>\n'
         f"  {_s(rose,'add user &lt;username&gt; &lt;password&gt; &lt;viewer|operator|developer|admin&gt;')}"
         f'  <span style="color:#9ca3af;font-style:italic">— roles: viewer &lt; operator &lt; developer &lt; admin</span>\n'
-        f"  {_s(rose,'list users')} | {_s(rose,'show users')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— list all users with roles and status</span>\n'
-        f"  {_s(rose,'set role &lt;username&gt; &lt;viewer|operator|developer|admin&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— change a user\'s role</span>\n'
-        f"  {_s(rose,'deactivate user &lt;username&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— disable login (user kept in DB)</span>\n'
-        f"  {_s(rose,'remove user &lt;username&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— permanently delete user</span>\n'
+        f"  {_s(rose,'list users')} | {_s(rose,'set role &lt;username&gt; &lt;role&gt;')}"
+        f" | {_s(rose,'deactivate user &lt;username&gt;')} | {_s(rose,'remove user &lt;username&gt;')}\n"
+        "\n"
+        '<span style="color:#374151;font-weight:700">General:</span>\n'
+        f"  {_s(gray,'show system config')} | {_s(gray,'date')} | {_s(gray,'help')}\n"
         "\n"
         '<span style="color:#374151;font-weight:700">UI Only:</span>\n'
-        f'  <span style="color:#7c3aed;font-weight:600;">Alert thresholds (disk / memory / cpu warning &amp; critical) are managed via the <span style="color:#4f46e5;text-decoration:underline;">Config tab</span> in the UI.</span>'
+        f'  <span style="color:#7c3aed;font-weight:600;">Alert thresholds and config are managed via the <span style="color:#4f46e5;text-decoration:underline;">Config tab</span>. KB articles via the <span style="color:#4f46e5;text-decoration:underline;">KB tab</span>.</span>'
     )
 
 
@@ -862,6 +857,67 @@ def analyze_prometheus_metrics(metrics_text: str) -> dict:
     if analysis.startswith("["):
         return {"response": f"AI analysis failed: {analysis}"}
     return {"response": f"**🤖 AI Analysis of Prometheus Metrics**\n\n{analysis}"}
+
+
+def generate_rca(alert_id: int) -> dict:
+    from chatops.db import _conn as _db_conn, get_audit_log
+    from chatops.llm import ask, is_configured
+
+    if not is_configured():
+        return {"response": "LLM is not configured. Set a provider in system config to generate RCA drafts."}
+
+    with _db_conn() as conn:
+        alert = conn.execute("SELECT * FROM alerts WHERE id=?", (alert_id,)).fetchone()
+    if not alert:
+        return {"response": f"Alert #{alert_id} not found."}
+    alert = dict(alert)
+
+    status = f"Resolved at {alert['acked_at']}" if alert.get("acked") and alert.get("acked_at") else "Unresolved"
+    duration = ""
+    if alert.get("acked") and alert.get("acked_at"):
+        try:
+            from datetime import datetime
+            created = datetime.strptime(alert["timestamp"][:19], "%Y-%m-%d %H:%M:%S")
+            resolved = datetime.strptime(alert["acked_at"][:19], "%Y-%m-%d %H:%M:%S")
+            mins = int((resolved - created).total_seconds() / 60)
+            duration = f"{mins} minutes"
+        except Exception:
+            pass
+
+    audit = get_audit_log(limit=30)
+    audit_lines = "\n".join(
+        f"  [{e['timestamp'][:16]}] {e['username']}: {e['command']}"
+        for e in audit
+    ) or "  (no audit entries)"
+
+    context = (
+        f"Alert Details:\n"
+        f"  ID:        #{alert['id']}\n"
+        f"  Severity:  {alert['severity']}\n"
+        f"  Message:   {alert['message']}\n"
+        f"  Node:      {alert.get('node', 'local')}\n"
+        f"  Created:   {alert['timestamp'][:16]}\n"
+        f"  Status:    {status}\n"
+        f"  Duration:  {duration or 'N/A'}\n"
+        f"\nRecent Audit Log (last 30 entries):\n{audit_lines}"
+    )
+
+    system_prompt = (
+        "You are an SRE writing a Root Cause Analysis (RCA) document. "
+        "Based on the alert details and audit log provided, draft a concise RCA with these sections:\n"
+        "## Incident Summary\n"
+        "## Root Cause\n"
+        "## Timeline\n"
+        "## Impact\n"
+        "## Resolution\n"
+        "## Action Items (2-3 preventive measures)\n"
+        "Keep it under 400 words. Use the alert data provided — do not invent facts."
+    )
+
+    analysis = ask(prompt=context, system=system_prompt)
+    if analysis.startswith("["):
+        return {"response": f"RCA generation failed: {analysis}"}
+    return {"response": f"**RCA Draft — Alert #{alert_id}** ({alert['severity']})\n\n{analysis}"}
 
 
 def analyze_test_log(filename: str) -> dict:
