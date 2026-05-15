@@ -9,3 +9,5 @@ bcrypt
 PyJWT
 dnspython
 fpdf2
+netmiko
+ncclient

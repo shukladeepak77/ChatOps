@@ -794,6 +794,114 @@
   </div>
 </div>
 
+<!-- Add Network Device -->
+<div class="modal-backdrop" id="modal-add-netdev">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-icon">🌐</span><span class="modal-title">Add Network Device</span><button class="modal-close" onclick="closeModal('modal-add-netdev')">✕</button></div>
+    <div class="modal-body">
+      <div class="m-row">
+        <div class="m-field"><label>Name *</label><input id="nd-name" type="text" placeholder="e.g. core-rtr-1" /></div>
+        <div class="m-field"><label>Host / IP *</label><input id="nd-host" type="text" placeholder="192.168.1.1" /></div>
+      </div>
+      <div class="m-row">
+        <div class="m-field"><label>Username *</label><input id="nd-user" type="text" placeholder="admin" /></div>
+        <div class="m-field"><label>Password *</label><input id="nd-pass" type="password" placeholder="••••••••" /></div>
+      </div>
+      <div class="m-row">
+        <div class="m-field"><label>Device Type</label>
+          <select id="nd-type">
+            <option value="cisco_xe">Cisco IOS-XE</option>
+            <option value="cisco_ios">Cisco IOS</option>
+            <option value="cisco_xr">Cisco IOS-XR</option>
+            <option value="cisco_nxos">Cisco NX-OS</option>
+            <option value="vyos">VyOS</option>
+            <option value="juniper_junos">Juniper JunOS</option>
+            <option value="linux">Linux / Generic SSH</option>
+          </select>
+        </div>
+        <div class="m-field"><label>SSH Port</label><input id="nd-port" type="number" value="22" /></div>
+      </div>
+      <div class="m-field"><label>Description <span style="font-size:.72rem;opacity:.6">(optional)</span></label><input id="nd-desc" type="text" placeholder="Core router, building A" /></div>
+      <div class="m-result" id="nd-result"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="m-btn m-btn-secondary" onclick="closeModal('modal-add-netdev')">Cancel</button>
+      <button class="m-btn m-btn-primary" onclick="submitAddNetdev()">🌐 Add Device</button>
+    </div>
+  </div>
+</div>
+
+<!-- Network Devices List -->
+<div class="modal-backdrop" id="modal-list-netdevs">
+  <div class="modal-box modal-wide">
+    <div class="modal-header"><span class="modal-icon">🖧</span><span class="modal-title">Network Devices</span><button class="modal-close" onclick="closeModal('modal-list-netdevs')">✕</button></div>
+    <div class="modal-body">
+      <div id="nd-list-body"><div class="m-empty"><span class="m-spinner"></span> Loading…</div></div>
+      <div class="m-result" id="nd-list-result"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="m-btn m-btn-secondary" onclick="closeModal('modal-list-netdevs')">Close</button>
+      <button class="m-btn m-btn-primary" onclick="openModal('modal-add-netdev');closeModal('modal-list-netdevs')">➕ Add Device</button>
+    </div>
+  </div>
+</div>
+
+<!-- Interface Status -->
+<div class="modal-backdrop" id="modal-net-interfaces">
+  <div class="modal-box modal-wide">
+    <div class="modal-header"><span class="modal-icon">📡</span><span class="modal-title">Interface Status</span><button class="modal-close" onclick="closeModal('modal-net-interfaces')">✕</button></div>
+    <div class="modal-body">
+      <div class="m-field"><label>Device</label>
+        <select id="ni-device" onchange="loadInterfacesModal()"><option value="">— select device —</option></select>
+      </div>
+      <div id="ni-body"><div class="m-empty">Select a device above.</div></div>
+    </div>
+    <div class="modal-footer">
+      <button class="m-btn m-btn-secondary" onclick="closeModal('modal-net-interfaces')">Close</button>
+      <button class="m-btn m-btn-primary" onclick="loadInterfacesModal()">🔄 Refresh</button>
+    </div>
+  </div>
+</div>
+
+<!-- Config Backup -->
+<div class="modal-backdrop" id="modal-net-backup">
+  <div class="modal-box modal-wide">
+    <div class="modal-header"><span class="modal-icon">💾</span><span class="modal-title">Config Backup</span><button class="modal-close" onclick="closeModal('modal-net-backup')">✕</button></div>
+    <div class="modal-body">
+      <div class="m-field"><label>Device</label>
+        <select id="nb-device"><option value="">— select device —</option></select>
+      </div>
+      <div class="m-result" id="nb-result"></div>
+      <div id="nb-backup-body" style="margin-top:10px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="m-btn m-btn-secondary" onclick="closeModal('modal-net-backup')">Close</button>
+      <button class="m-btn m-btn-primary" onclick="submitNetBackup()">💾 Backup Now</button>
+    </div>
+  </div>
+</div>
+
+<!-- Push Config -->
+<div class="modal-backdrop" id="modal-net-push">
+  <div class="modal-box modal-wide">
+    <div class="modal-header"><span class="modal-icon">📤</span><span class="modal-title">Push Config</span><button class="modal-close" onclick="closeModal('modal-net-push')">✕</button></div>
+    <div class="modal-body">
+      <div class="m-field"><label>Device</label>
+        <select id="np-device"><option value="">— select device —</option></select>
+      </div>
+      <div class="m-field"><label>Config Commands <span style="font-size:.72rem;opacity:.6">(one per line, entered in config mode)</span></label>
+        <textarea id="np-commands" rows="8" placeholder="interface GigabitEthernet1&#10; description WAN uplink&#10; ip address 10.0.0.1 255.255.255.0&#10; no shutdown"></textarea>
+      </div>
+      <p style="font-size:.75rem;color:#f87171;margin-top:4px;">⚠️ Commands are applied directly to the device and saved. Double-check before submitting.</p>
+      <div class="m-result" id="np-result"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="m-btn m-btn-secondary" onclick="closeModal('modal-net-push')">Cancel</button>
+      <button class="m-btn m-btn-primary" onclick="submitNetPush()">📤 Push Config</button>
+    </div>
+  </div>
+</div>
+
 <!-- Runbook Builder -->
 <div class="modal-backdrop" id="modal-runbook-builder">
   <div class="modal-box modal-wide">
@@ -924,6 +1032,24 @@
       <div class="drop-item" onclick="openModal('modal-ack-all');closeAllMenus()"><span class="di">✅</span> Acknowledge All</div>
       <div class="drop-sep"></div>
       <div class="drop-item" onclick="switchTab('alerts', document.querySelector('.tab-btn[data-tab=\\'alerts\\']')); loadAlerts(); closeAllMenus();"><span class="di">📋</span> Open Alerts Panel</div>
+    </div>
+  </div>
+
+  <!-- Network -->
+  <div class="menu-group">
+    <button class="menu-trigger" onclick="toggleMenu('dd-network')">Network <span class="arrow">▼</span></button>
+    <div class="dropdown-menu" id="dd-network">
+      <div class="drop-label">Devices</div>
+      <div class="drop-item" onclick="loadNetdevsModal();openModal('modal-list-netdevs');closeAllMenus()"><span class="di">🖧</span> List Devices</div>
+      <div class="drop-item" onclick="openModal('modal-add-netdev');closeAllMenus()"><span class="di">➕</span> Add Device…</div>
+      <div class="drop-sep"></div>
+      <div class="drop-label">Monitor</div>
+      <div class="drop-item" onclick="loadNetdevSelects();openModal('modal-net-interfaces');closeAllMenus()"><span class="di">📡</span> Interface Status…</div>
+      <div class="drop-item" onclick="menuCmd('list network devices')"><span class="di">📋</span> Show All Devices</div>
+      <div class="drop-sep"></div>
+      <div class="drop-label">Configuration</div>
+      <div class="drop-item" onclick="loadNetdevSelects();openModal('modal-net-backup');closeAllMenus()"><span class="di">💾</span> Backup Config…</div>
+      <div class="drop-item" onclick="loadNetdevSelects();openModal('modal-net-push');closeAllMenus()"><span class="di">📤</span> Push Config…</div>
     </div>
   </div>
 
@@ -1869,6 +1995,187 @@ function copyIntegUrl(inputId) {
   });
 }
 
+
+// ── Network Device Modals ─────────────────────────────────────────────────────
+
+async function loadNetdevsModal() {
+  const body = document.getElementById('nd-list-body');
+  body.innerHTML = '<div class="m-empty"><span class="m-spinner"></span> Loading…</div>';
+  try {
+    const res = await authFetch('/chatops/network/devices');
+    const devs = await res.json();
+    if (!devs.length) {
+      body.innerHTML = '<div class="m-empty">No network devices yet. Click ➕ Add Device to register one.</div>';
+      return;
+    }
+    const typeLabels = {cisco_xe:'IOS-XE',cisco_ios:'IOS',cisco_xr:'IOS-XR',cisco_nxos:'NX-OS',vyos:'VyOS',juniper_junos:'JunOS',linux:'Linux'};
+    let html = '<table class="m-table"><thead><tr><th>Name</th><th>Host</th><th>Type</th><th>Description</th><th>Added</th><th></th></tr></thead><tbody>';
+    devs.forEach(d => {
+      html += `<tr>
+        <td><strong>${d.name}</strong></td>
+        <td style="font-family:monospace;font-size:.8rem">${d.host}</td>
+        <td><span class="m-badge m-badge-blue">${typeLabels[d.device_type]||d.device_type}</span></td>
+        <td style="color:var(--text2);font-size:.8rem">${d.description||'—'}</td>
+        <td style="color:var(--text3);font-size:.75rem">${(d.created_at||'').slice(0,10)}</td>
+        <td style="display:flex;gap:4px;flex-wrap:wrap;">
+          <button class="m-btn" style="padding:2px 8px;font-size:.72rem;background:rgba(99,102,241,.2);border:1px solid rgba(99,102,241,.3);color:#c7d2fe;" onclick="quickNetCheck('${d.name}')">🔍 Check</button>
+          <button class="m-btn" style="padding:2px 8px;font-size:.72rem;background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.3);color:#6ee7b7;" onclick="quickNetInterfaces('${d.name}')">📡 Ifaces</button>
+          <button class="m-btn" style="padding:2px 8px;font-size:.72rem;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#fca5a5;" onclick="deleteNetdev('${d.name}')">🗑</button>
+        </td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    body.innerHTML = html;
+  } catch(e) { body.innerHTML = `<div class="m-empty">Error: ${e.message}</div>`; }
+}
+
+async function submitAddNetdev() {
+  const name = document.getElementById('nd-name').value.trim();
+  const host = document.getElementById('nd-host').value.trim();
+  const user = document.getElementById('nd-user').value.trim();
+  const pass = document.getElementById('nd-pass').value;
+  if (!name || !host || !user || !pass) { showModalResult('nd-result','All fields marked * are required.',false); return; }
+  const dtype = document.getElementById('nd-type').value;
+  const port  = parseInt(document.getElementById('nd-port').value) || 22;
+  const desc  = document.getElementById('nd-desc').value.trim();
+  try {
+    const res = await authFetch('/chatops/network/devices', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name, host, username: user, password: pass, device_type: dtype, port, description: desc}),
+    });
+    const data = await res.json();
+    if (!res.ok) { showModalResult('nd-result', data.detail||'Error adding device.', false); return; }
+    showModalResult('nd-result', `Device "${name}" added (${host}, ${dtype}).`, true);
+    syncToChat(`🌐 Network device added: "${name}" — ${host} (${dtype})`);
+    ['nd-name','nd-host','nd-user','nd-pass','nd-desc'].forEach(id => document.getElementById(id).value = '');
+  } catch(e) { showModalResult('nd-result','Error: '+e.message,false); }
+}
+
+async function deleteNetdev(name) {
+  if (!confirm(`Remove network device "${name}"?`)) return;
+  try {
+    const res = await authFetch(`/chatops/network/devices/${encodeURIComponent(name)}`, {method:'DELETE'});
+    if (res.ok) { showModalResult('nd-list-result',`Device "${name}" removed.`,true); loadNetdevsModal(); }
+    else { const d = await res.json(); showModalResult('nd-list-result', d.detail||'Error.',false); }
+  } catch(e) { showModalResult('nd-list-result','Error: '+e.message,false); }
+}
+
+async function loadNetdevSelects() {
+  try {
+    const res = await authFetch('/chatops/network/devices');
+    const devs = await res.json();
+    ['ni-device','nb-device','np-device'].forEach(id => {
+      const sel = document.getElementById(id);
+      if (!sel) return;
+      const cur = sel.value;
+      sel.innerHTML = '<option value="">— select device —</option>';
+      devs.forEach(d => {
+        const o = document.createElement('option');
+        o.value = d.name; o.textContent = `${d.name} (${d.host})`;
+        if (d.name === cur) o.selected = true;
+        sel.appendChild(o);
+      });
+    });
+  } catch(e) {}
+}
+
+async function loadInterfacesModal() {
+  const name = document.getElementById('ni-device').value;
+  const body = document.getElementById('ni-body');
+  if (!name) { body.innerHTML = '<div class="m-empty">Select a device above.</div>'; return; }
+  body.innerHTML = '<div class="m-empty"><span class="m-spinner"></span> Connecting…</div>';
+  try {
+    const res = await authFetch(`/chatops/network/devices/${encodeURIComponent(name)}/interfaces`);
+    const data = await res.json();
+    if (!res.ok) { body.innerHTML = `<div class="m-empty" style="color:var(--red)">Error: ${data.detail}</div>`; return; }
+    const ifaces = data.interfaces || [];
+    const up   = ifaces.filter(i => (i.status||'').toLowerCase() === 'up').length;
+    const down = ifaces.length - up;
+    let html = `<div style="font-size:.78rem;color:var(--text2);margin-bottom:8px;">` +
+               `${ifaces.length} interfaces — <span style="color:var(--green)">${up} up</span>  <span style="color:var(--red)">${down} down</span></div>`;
+    html += '<table class="m-table"><thead><tr><th>Interface</th><th>IP</th><th>Status</th><th>Protocol</th><th>In bps</th><th>Out bps</th><th>Errors</th></tr></thead><tbody>';
+    ifaces.forEach(i => {
+      const st = (i.status||'').toLowerCase() === 'up' ? '<span class="m-badge m-badge-green">up</span>' : `<span class="m-badge m-badge-red">${i.status||'?'}</span>`;
+      html += `<tr>
+        <td style="font-family:monospace;font-size:.78rem"><strong>${i.interface}</strong></td>
+        <td style="font-family:monospace;font-size:.76rem">${i.ip||'—'}</td>
+        <td>${st}</td>
+        <td style="font-size:.76rem;color:var(--text3)">${i.protocol||'—'}</td>
+        <td style="font-size:.76rem">${i.in_rate != null ? i.in_rate.toLocaleString() : '—'}</td>
+        <td style="font-size:.76rem">${i.out_rate != null ? i.out_rate.toLocaleString() : '—'}</td>
+        <td style="font-size:.76rem;color:${(i.errors_in||0)+(i.errors_out||0)>0?'var(--red)':'var(--text3)'}">${(i.errors_in||0)+(i.errors_out||0)}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    body.innerHTML = html;
+    syncToChat(`📡 Interfaces on ${name}: ${up} up, ${down} down`);
+  } catch(e) { body.innerHTML = `<div class="m-empty" style="color:var(--red)">Error: ${e.message}</div>`; }
+}
+
+async function submitNetBackup() {
+  const name = document.getElementById('nb-device').value;
+  if (!name) { showModalResult('nb-result','Select a device first.',false); return; }
+  const btn = document.querySelector('#modal-net-backup .m-btn-primary');
+  btn.disabled = true; btn.innerHTML = '<span class="m-spinner"></span> Backing up…';
+  try {
+    const res = await authFetch(`/chatops/network/devices/${encodeURIComponent(name)}/backup`, {method:'POST'});
+    const data = await res.json();
+    if (!res.ok) { showModalResult('nb-result', data.detail||'Backup failed.', false); return; }
+    showModalResult('nb-result', `Backup #${data.backup_id} saved — ${data.lines} lines.`, true);
+    syncToChat(`💾 Config backup for "${name}": ${data.lines} lines saved (backup #${data.backup_id})`);
+    // Load preview
+    const bkRes = await authFetch(`/chatops/network/devices/${encodeURIComponent(name)}/backups/latest`);
+    const bk = await bkRes.json();
+    const preview = (bk.config_text||'').split('\n').slice(0,30).join('\n');
+    document.getElementById('nb-backup-body').innerHTML =
+      `<div style="font-size:.73rem;color:var(--text3);margin-bottom:4px;">Preview (first 30 lines):</div>` +
+      `<pre style="font-size:.72rem;background:rgba(0,0,0,.25);padding:8px;border-radius:6px;overflow-x:auto;max-height:180px;overflow-y:auto;color:var(--text2)">${preview}</pre>`;
+  } catch(e) { showModalResult('nb-result','Error: '+e.message,false); }
+  finally { btn.disabled=false; btn.innerHTML='💾 Backup Now'; }
+}
+
+async function submitNetPush() {
+  const name = document.getElementById('np-device').value;
+  const raw  = document.getElementById('np-commands').value.trim();
+  if (!name) { showModalResult('np-result','Select a device first.',false); return; }
+  if (!raw)  { showModalResult('np-result','Enter at least one command.',false); return; }
+  if (!confirm(`Push ${raw.split('\n').filter(l=>l.trim()).length} config command(s) to "${name}"?\n\nThis will modify the device configuration.`)) return;
+  const commands = raw.split('\n').map(l => l.trimEnd()).filter(l => l.trim());
+  const btn = document.querySelector('#modal-net-push .m-btn-primary');
+  btn.disabled = true; btn.innerHTML = '<span class="m-spinner"></span> Pushing…';
+  try {
+    const res = await authFetch(`/chatops/network/devices/${encodeURIComponent(name)}/push-config`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({commands}),
+    });
+    const data = await res.json();
+    if (!res.ok) { showModalResult('np-result', data.detail||'Push failed.', false); return; }
+    showModalResult('np-result', `Config pushed successfully (${commands.length} commands).`, true);
+    syncToChat(`📤 Config push to "${name}" — ${commands.length} commands applied.`);
+  } catch(e) { showModalResult('np-result','Error: '+e.message,false); }
+  finally { btn.disabled=false; btn.innerHTML='📤 Push Config'; }
+}
+
+async function quickNetCheck(name) {
+  showModalResult('nd-list-result', `Connecting to ${name}…`, true);
+  try {
+    const res = await authFetch(`/chatops/network/devices/${encodeURIComponent(name)}/info`);
+    const d = await res.json();
+    if (!res.ok) { showModalResult('nd-list-result', `${name}: ${d.detail}`, false); return; }
+    const msg = `${name} — ${d.hostname} | ${d.model} | v${d.version} | up: ${d.uptime}`;
+    showModalResult('nd-list-result', msg, true);
+    syncToChat(`🔍 Device check ${name}: ${msg}`);
+  } catch(e) { showModalResult('nd-list-result','Error: '+e.message,false); }
+}
+
+async function quickNetInterfaces(name) {
+  document.getElementById('ni-device').value = name;
+  closeModal('modal-list-netdevs');
+  await loadNetdevSelects();
+  document.getElementById('ni-device').value = name;
+  openModal('modal-net-interfaces');
+  loadInterfacesModal();
+}
 
 // Close modal on backdrop click
 document.querySelectorAll('.modal-backdrop').forEach(el => {

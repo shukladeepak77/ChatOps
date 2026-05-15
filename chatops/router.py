@@ -886,6 +886,207 @@ def route_message(message: str, caller_role: str = "operator", _nlu_depth: int =
             return {"response": f"Custom runbook '{name}' deleted."}
         return {"response": f"Custom runbook '{name}' not found."}
 
+    # ── Network device management ──────────────────────────────────────────────
+
+    # add netdev <name> <host> <user> <password> [device_type]
+    add_netdev_m = re.match(
+        r'^add\s+(?:net(?:work)?\s+)?device\s+(\S+)\s+([\w\.\-]+)\s+(\S+)\s+(\S+)(?:\s+(\S+))?$',
+        raw_lower
+    )
+    if add_netdev_m:
+        if caller_role not in ("operator", "admin"):
+            return {"response": "Access denied. Adding network devices requires operator or admin role."}
+        from .db import netdev_add as _nd_add
+        from .network import encode_password as _enc_pw
+        nd_name  = add_netdev_m.group(1)
+        nd_host  = add_netdev_m.group(2)
+        nd_user  = add_netdev_m.group(3)
+        nd_pw    = add_netdev_m.group(4)
+        nd_type  = add_netdev_m.group(5) or "cisco_xe"
+        _nd_add(nd_name, nd_host, nd_user, _enc_pw(nd_pw), device_type=nd_type, created_by=caller_role)
+        return {"response": f"Network device '{nd_name}' added — {nd_host} ({nd_type})\nUse `check device {nd_name}` to verify connectivity."}
+
+    if s in ("list network devices", "show network devices", "list devices", "show devices", "network devices"):
+        from .db import netdev_list as _nd_list
+        devs = _nd_list()
+        if not devs:
+            return {"response": "No network devices registered.\nUsage: add device <name> <host> <user> <password> [cisco_xe|cisco_ios|cisco_xr|cisco_nxos|vyos]"}
+        lines = [f"Network Devices ({len(devs)}):"]
+        for d in devs:
+            lines.append(f"  {d['name']:<15} {d['host']:<20} {d['device_type']:<12} (added {d['created_at'][:10]})")
+        return {"response": "\n".join(lines), "network_devices": devs}
+
+    remove_netdev_m = re.match(r'^remove\s+(?:net(?:work)?\s+)?device\s+(\S+)$', s)
+    if remove_netdev_m:
+        if caller_role != "admin":
+            return {"response": "Access denied. Removing network devices requires admin role."}
+        from .db import netdev_delete as _nd_del
+        name = remove_netdev_m.group(1)
+        if _nd_del(name):
+            return {"response": f"Network device '{name}' removed."}
+        return {"response": f"Network device '{name}' not found."}
+
+    check_device_m = re.match(r'^check\s+device\s+(\S+)$', s)
+    if check_device_m:
+        from .db import netdev_get as _nd_get
+        from .network import get_device_info as _nd_info
+        name = check_device_m.group(1)
+        dev = _nd_get(name)
+        if not dev:
+            return {"response": f"Network device '{name}' not found. Use `list network devices` to see registered devices."}
+        result = _nd_info(dev)
+        if result["status"] == "error":
+            return {"response": f"Could not connect to '{name}': {result['error']}"}
+        return {"response": (
+            f"Device: {name} ({dev['host']})\n"
+            f"  Hostname: {result['hostname']}\n"
+            f"  Model:    {result['model']}\n"
+            f"  Version:  {result['version']}\n"
+            f"  Uptime:   {result['uptime']}\n"
+            f"  Serial:   {result['serial']}"
+        )}
+
+    check_ifaces_m = re.match(r'^(?:check|show)\s+interfaces?\s+(\S+)$', s)
+    if check_ifaces_m:
+        from .db import netdev_get as _nd_get, netdev_log_interfaces as _nd_log
+        from .network import get_interfaces as _nd_ifaces
+        name = check_ifaces_m.group(1)
+        dev = _nd_get(name)
+        if not dev:
+            return {"response": f"Network device '{name}' not found."}
+        result = _nd_ifaces(dev)
+        if result["status"] == "error":
+            return {"response": f"Could not get interfaces for '{name}': {result['error']}"}
+        ifaces = result["interfaces"]
+        _nd_log(name, ifaces)
+        up   = [i for i in ifaces if i["status"].lower() == "up"]
+        down = [i for i in ifaces if i["status"].lower() != "up"]
+        lines = [f"Interfaces on {name} ({len(ifaces)} total — {len(up)} up, {len(down)} down):"]
+        for i in ifaces:
+            st = "✅" if i["status"].lower() == "up" else "🔴"
+            ip = f"  {i['ip']}" if i.get("ip") and i["ip"] != "unassigned" else ""
+            lines.append(f"  {st} {i['interface']:<28}{ip}")
+        return {"response": "\n".join(lines), "interfaces": ifaces}
+
+    show_routes_m = re.match(r'^show\s+routes?\s+(\S+)$', s)
+    if show_routes_m:
+        from .db import netdev_get as _nd_get
+        from .network import get_routes as _nd_routes
+        name = show_routes_m.group(1)
+        dev = _nd_get(name)
+        if not dev:
+            return {"response": f"Network device '{name}' not found."}
+        result = _nd_routes(dev)
+        if result["status"] == "error":
+            return {"response": f"Could not get routes for '{name}': {result['error']}"}
+        routes = result["routes"]
+        if not routes:
+            return {"response": result.get("raw", "No routes found.")}
+        lines = [f"Routing table on {name} ({len(routes)} routes):"]
+        for r in routes[:30]:
+            lines.append(f"  {r['code']:<4} {r['network']:<20} via {r['next_hop']}")
+        if len(routes) > 30:
+            lines.append(f"  ... and {len(routes)-30} more routes")
+        return {"response": "\n".join(lines), "routes": routes}
+
+    check_device_cpu_m = re.match(r'^(?:check|show)\s+device\s+cpu\s+(\S+)$', s)
+    if check_device_cpu_m:
+        from .db import netdev_get as _nd_get
+        from .network import get_cpu_memory as _nd_cpumem
+        name = check_device_cpu_m.group(1)
+        dev = _nd_get(name)
+        if not dev:
+            return {"response": f"Network device '{name}' not found."}
+        result = _nd_cpumem(dev)
+        if result["status"] == "error":
+            return {"response": f"Could not get CPU/memory for '{name}': {result['error']}"}
+        return {"response": (
+            f"Device CPU/Memory: {name}\n"
+            f"  CPU (5s):  {result['cpu_5sec']}%\n"
+            f"  Mem used:  {result['mem_used_bytes']} bytes\n"
+            f"  Mem free:  {result['mem_free_bytes']} bytes"
+        )}
+
+    show_bgp_m = re.match(r'^show\s+bgp(?:\s+neighbors?)?\s+(\S+)$', s)
+    if show_bgp_m:
+        from .db import netdev_get as _nd_get
+        from .network import get_bgp_neighbors as _nd_bgp
+        name = show_bgp_m.group(1)
+        dev = _nd_get(name)
+        if not dev:
+            return {"response": f"Network device '{name}' not found."}
+        result = _nd_bgp(dev)
+        if result["status"] == "error":
+            return {"response": f"Could not get BGP info for '{name}': {result['error']}"}
+        neighbors = result["neighbors"]
+        if not neighbors:
+            return {"response": result.get("raw", "No BGP neighbors found or BGP not configured.")}
+        lines = [f"BGP Neighbors on {name} ({len(neighbors)} peers):"]
+        for n in neighbors:
+            state_icon = "✅" if n["state"] == "Established" else "🔴"
+            lines.append(f"  {state_icon} {n['neighbor']:<18} AS {n['as']:<8} {n['state']:<14} prefixes: {n['prefixes']}")
+        return {"response": "\n".join(lines), "bgp_neighbors": neighbors}
+
+    backup_cfg_m = re.match(r'^backup\s+config\s+(\S+)$', s)
+    if backup_cfg_m:
+        from .db import netdev_get as _nd_get, netdev_save_backup as _nd_save
+        from .network import backup_config as _nd_backup
+        name = backup_cfg_m.group(1)
+        dev = _nd_get(name)
+        if not dev:
+            return {"response": f"Network device '{name}' not found."}
+        result = _nd_backup(dev)
+        if result["status"] == "error":
+            return {"response": f"Backup failed for '{name}': {result['error']}"}
+        bid = _nd_save(name, result["config"], result["lines"])
+        return {"response": f"Config backup #{bid} saved for '{name}' — {result['lines']} lines.\nUse `show config backup {name}` to view it."}
+
+    show_backup_m = re.match(r'^show\s+config\s+backup\s+(\S+)$', s)
+    if show_backup_m:
+        from .db import netdev_get_backup as _nd_get_bk
+        name = show_backup_m.group(1)
+        bk = _nd_get_bk(name)
+        if not bk:
+            return {"response": f"No config backup found for '{name}'. Use `backup config {name}` first."}
+        preview = "\n".join(bk["config_text"].splitlines()[:40])
+        return {
+            "response": f"Config backup for '{name}' ({bk['lines']} lines, backed up {bk['backed_up_at'][:16]}):\n\n{preview}",
+            "config_backup": bk,
+        }
+
+    ping_device_m = re.match(r'^ping\s+device\s+(\S+)(?:\s+(\S+))?$', s)
+    if ping_device_m:
+        from .db import netdev_get as _nd_get
+        from .network import ping_device as _nd_ping
+        name   = ping_device_m.group(1)
+        target = ping_device_m.group(2) or "8.8.8.8"
+        dev = _nd_get(name)
+        if not dev:
+            return {"response": f"Network device '{name}' not found."}
+        result = _nd_ping(dev, target)
+        if result["status"] == "error":
+            return {"response": f"Ping failed: {result['error']}"}
+        return {"response": f"Ping from {name} to {target}: {result['success_rate']}% success rate"}
+
+    show_arp_m = re.match(r'^show\s+arp\s+(\S+)$', s)
+    if show_arp_m:
+        from .db import netdev_get as _nd_get
+        from .network import get_arp_table as _nd_arp
+        name = show_arp_m.group(1)
+        dev = _nd_get(name)
+        if not dev:
+            return {"response": f"Network device '{name}' not found."}
+        result = _nd_arp(dev)
+        if result["status"] == "error":
+            return {"response": f"Could not get ARP table for '{name}': {result['error']}"}
+        entries = result["entries"]
+        if not entries:
+            return {"response": result.get("raw", "No ARP entries found.")}
+        lines = [f"ARP Table on {name} ({len(entries)} entries):"]
+        for e in entries[:30]:
+            lines.append(f"  {e['ip']:<18} {e['mac']:<20} {e['interface']}")
+        return {"response": "\n".join(lines), "arp_table": entries}
+
     # ── Kill process ───────────────────────────────────────────────────────────
     kill_m = re.match(r'^kill\s+process\s+(\d+)$', s)
     if kill_m:

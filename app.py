@@ -18,6 +18,9 @@ from chatops.db import (
     update_user_role, set_user_active,
     add_audit, get_audit_log,
     runbook_create, runbook_list, runbook_get, runbook_delete,
+    netdev_add, netdev_get, netdev_list, netdev_delete,
+    netdev_save_backup, netdev_get_backup, netdev_list_backups,
+    netdev_log_interfaces,
 )
 from chatops.config import load_config, save_config
 from chatops.runbooks import list_runbooks
@@ -114,6 +117,38 @@ def _poll_remote_nodes_sync():
             pass
 
 
+def _poll_network_devices_sync():
+    """Poll registered network devices — alert on interface down or connection failure."""
+    from chatops.db import netdev_list, netdev_log_interfaces, add_alert as _add_alert
+    from chatops.network import get_interfaces
+    try:
+        devices = netdev_list()
+    except Exception:
+        return
+    for dev_row in devices:
+        full_dev = netdev_get(dev_row["name"])
+        if not full_dev:
+            continue
+        try:
+            result = get_interfaces(full_dev)
+            if result["status"] == "error":
+                _add_alert(
+                    f"[{dev_row['name']}] Cannot connect: {result['error'][:120]}",
+                    "CRITICAL", source=dev_row["name"],
+                )
+                continue
+            ifaces = result["interfaces"]
+            netdev_log_interfaces(dev_row["name"], ifaces)
+            for iface in ifaces:
+                if iface.get("status", "").lower() not in ("up", "connected"):
+                    _add_alert(
+                        f"[{dev_row['name']}] Interface {iface['interface']} is {iface['status']}",
+                        "WARNING", source=dev_row["name"],
+                    )
+        except Exception:
+            pass
+
+
 async def _health_check_loop():
     loop = asyncio.get_event_loop()
     while True:
@@ -133,6 +168,10 @@ async def _health_check_loop():
         try:
             from chatops.predictive import run_predictive_check
             await loop.run_in_executor(None, run_predictive_check)
+        except Exception:
+            pass
+        try:
+            await loop.run_in_executor(None, _poll_network_devices_sync)
         except Exception:
             pass
         await asyncio.sleep(interval)
@@ -256,6 +295,21 @@ class CreateUserRequest(BaseModel):
     username: str
     password: str
     role: str = "operator"
+
+
+class NetworkDeviceCreate(BaseModel):
+    name:         str
+    host:         str
+    username:     str
+    password:     str
+    device_type:  str = "cisco_xe"
+    port:         int = 22
+    netconf_port: int = 830
+    description:  str = ""
+
+
+class NetworkConfigPush(BaseModel):
+    commands: list
 
 
 class UpdateRoleRequest(BaseModel):
@@ -742,4 +796,148 @@ def delete_custom_runbook(name: str, user=Depends(_require_role("admin"))):
     add_audit(user["sub"], f"runbook delete {name}")
     return {"deleted": name}
 
-    return {"ok": True}
+
+# ── Network Device Management ─────────────────────────────────────────────────
+
+@app.get("/chatops/network/devices")
+def list_network_devices(user=Depends(_get_current_user)):
+    return netdev_list()
+
+
+@app.post("/chatops/network/devices")
+def add_network_device(req: NetworkDeviceCreate, user=Depends(_require_role("operator"))):
+    from chatops.network import encode_password
+    if netdev_get(req.name):
+        raise HTTPException(status_code=409, detail="Device name already exists")
+    did = netdev_add(
+        req.name, req.host, req.username, encode_password(req.password),
+        device_type=req.device_type, port=req.port,
+        netconf_port=req.netconf_port, description=req.description,
+        created_by=user["sub"],
+    )
+    add_audit(user["sub"], f"network device add {req.name} {req.host}")
+    return {"id": did, "name": req.name, "host": req.host, "device_type": req.device_type}
+
+
+@app.delete("/chatops/network/devices/{name}")
+def remove_network_device(name: str, user=Depends(_require_role("admin"))):
+    if not netdev_delete(name):
+        raise HTTPException(status_code=404, detail="Device not found")
+    add_audit(user["sub"], f"network device remove {name}")
+    return {"deleted": name}
+
+
+@app.get("/chatops/network/devices/{name}/info")
+def network_device_info(name: str, user=Depends(_get_current_user)):
+    from chatops.network import get_device_info
+    dev = netdev_get(name)
+    if not dev:
+        raise HTTPException(status_code=404, detail="Device not found")
+    result = get_device_info(dev)
+    if result["status"] == "error":
+        raise HTTPException(status_code=502, detail=result["error"])
+    return result
+
+
+@app.get("/chatops/network/devices/{name}/interfaces")
+def network_device_interfaces(name: str, user=Depends(_get_current_user)):
+    from chatops.network import get_interfaces
+    dev = netdev_get(name)
+    if not dev:
+        raise HTTPException(status_code=404, detail="Device not found")
+    result = get_interfaces(dev)
+    if result["status"] == "error":
+        raise HTTPException(status_code=502, detail=result["error"])
+    netdev_log_interfaces(name, result["interfaces"])
+    return result
+
+
+@app.get("/chatops/network/devices/{name}/routes")
+def network_device_routes(name: str, user=Depends(_get_current_user)):
+    from chatops.network import get_routes
+    dev = netdev_get(name)
+    if not dev:
+        raise HTTPException(status_code=404, detail="Device not found")
+    result = get_routes(dev)
+    if result["status"] == "error":
+        raise HTTPException(status_code=502, detail=result["error"])
+    return result
+
+
+@app.get("/chatops/network/devices/{name}/bgp")
+def network_device_bgp(name: str, user=Depends(_get_current_user)):
+    from chatops.network import get_bgp_neighbors
+    dev = netdev_get(name)
+    if not dev:
+        raise HTTPException(status_code=404, detail="Device not found")
+    result = get_bgp_neighbors(dev)
+    if result["status"] == "error":
+        raise HTTPException(status_code=502, detail=result["error"])
+    return result
+
+
+@app.get("/chatops/network/devices/{name}/cpu")
+def network_device_cpu(name: str, user=Depends(_get_current_user)):
+    from chatops.network import get_cpu_memory
+    dev = netdev_get(name)
+    if not dev:
+        raise HTTPException(status_code=404, detail="Device not found")
+    result = get_cpu_memory(dev)
+    if result["status"] == "error":
+        raise HTTPException(status_code=502, detail=result["error"])
+    return result
+
+
+@app.post("/chatops/network/devices/{name}/backup")
+def network_device_backup(name: str, user=Depends(_require_role("operator"))):
+    from chatops.network import backup_config
+    dev = netdev_get(name)
+    if not dev:
+        raise HTTPException(status_code=404, detail="Device not found")
+    result = backup_config(dev)
+    if result["status"] == "error":
+        raise HTTPException(status_code=502, detail=result["error"])
+    bid = netdev_save_backup(name, result["config"], result["lines"])
+    add_audit(user["sub"], f"network backup {name}")
+    return {"backup_id": bid, "device": name, "lines": result["lines"]}
+
+
+@app.get("/chatops/network/devices/{name}/backups")
+def network_device_backup_list(name: str, user=Depends(_get_current_user)):
+    if not netdev_get(name):
+        raise HTTPException(status_code=404, detail="Device not found")
+    return netdev_list_backups(name)
+
+
+@app.get("/chatops/network/devices/{name}/backups/latest")
+def network_device_backup_latest(name: str, user=Depends(_get_current_user)):
+    bk = netdev_get_backup(name)
+    if not bk:
+        raise HTTPException(status_code=404, detail="No backup found")
+    return bk
+
+
+@app.post("/chatops/network/devices/{name}/push-config")
+def network_device_push_config(name: str, req: NetworkConfigPush,
+                                user=Depends(_require_role("admin"))):
+    from chatops.network import push_config
+    dev = netdev_get(name)
+    if not dev:
+        raise HTTPException(status_code=404, detail="Device not found")
+    result = push_config(dev, req.commands)
+    if result["status"] == "error":
+        raise HTTPException(status_code=502, detail=result["error"])
+    add_audit(user["sub"], f"network push-config {name}: {len(req.commands)} commands")
+    return result
+
+
+@app.get("/chatops/network/devices/{name}/arp")
+def network_device_arp(name: str, user=Depends(_get_current_user)):
+    from chatops.network import get_arp_table
+    dev = netdev_get(name)
+    if not dev:
+        raise HTTPException(status_code=404, detail="Device not found")
+    result = get_arp_table(dev)
+    if result["status"] == "error":
+        raise HTTPException(status_code=502, detail=result["error"])
+    return result

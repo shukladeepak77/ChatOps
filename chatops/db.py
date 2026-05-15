@@ -82,6 +82,38 @@ def init_db():
                 created_by  TEXT    NOT NULL DEFAULT 'system',
                 created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
             );
+            CREATE TABLE IF NOT EXISTS network_devices (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                name         TEXT    NOT NULL UNIQUE,
+                host         TEXT    NOT NULL,
+                port         INTEGER NOT NULL DEFAULT 22,
+                netconf_port INTEGER NOT NULL DEFAULT 830,
+                username     TEXT    NOT NULL,
+                password_enc TEXT    NOT NULL DEFAULT '',
+                device_type  TEXT    NOT NULL DEFAULT 'cisco_xe',
+                description  TEXT    NOT NULL DEFAULT '',
+                created_by   TEXT    NOT NULL DEFAULT 'system',
+                created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE TABLE IF NOT EXISTS network_config_backups (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_name TEXT    NOT NULL,
+                config_text TEXT    NOT NULL,
+                lines       INTEGER NOT NULL DEFAULT 0,
+                backed_up_at TEXT   NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE TABLE IF NOT EXISTS network_interface_log (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_name TEXT    NOT NULL,
+                interface   TEXT    NOT NULL,
+                status      TEXT    NOT NULL,
+                protocol    TEXT    NOT NULL DEFAULT 'unknown',
+                in_rate     INTEGER DEFAULT 0,
+                out_rate    INTEGER DEFAULT 0,
+                errors_in   INTEGER DEFAULT 0,
+                errors_out  INTEGER DEFAULT 0,
+                timestamp   TEXT    NOT NULL DEFAULT (datetime('now'))
+            );
         """)
         for table in ('metrics_history', 'alerts'):
             cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
@@ -497,3 +529,97 @@ def runbook_delete(name: str) -> bool:
     with _conn() as conn:
         cur = conn.execute("DELETE FROM custom_runbooks WHERE name=?", (name,))
     return cur.rowcount > 0
+
+
+# ── Network Devices ───────────────────────────────────────────────────────────
+
+def netdev_add(name: str, host: str, username: str, password_enc: str,
+               device_type: str = "cisco_xe", port: int = 22,
+               netconf_port: int = 830, description: str = "",
+               created_by: str = "system") -> int:
+    with _conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO network_devices "
+            "(name, host, port, netconf_port, username, password_enc, device_type, description, created_by) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (name, host, port, netconf_port, username, password_enc,
+             device_type, description, created_by),
+        )
+    return cur.lastrowid
+
+
+def netdev_get(name: str) -> Dict | None:
+    with _conn() as conn:
+        row = conn.execute("SELECT * FROM network_devices WHERE name=?", (name,)).fetchone()
+    return dict(row) if row else None
+
+
+def netdev_list() -> List[Dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT id, name, host, port, netconf_port, username, device_type, description, created_at "
+            "FROM network_devices ORDER BY id"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def netdev_delete(name: str) -> bool:
+    with _conn() as conn:
+        cur = conn.execute("DELETE FROM network_devices WHERE name=?", (name,))
+    return cur.rowcount > 0
+
+
+# ── Config Backups ────────────────────────────────────────────────────────────
+
+def netdev_save_backup(device_name: str, config_text: str, lines: int) -> int:
+    with _conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO network_config_backups (device_name, config_text, lines) VALUES (?,?,?)",
+            (device_name, config_text, lines),
+        )
+    return cur.lastrowid
+
+
+def netdev_get_backup(device_name: str) -> Dict | None:
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM network_config_backups WHERE device_name=? ORDER BY id DESC LIMIT 1",
+            (device_name,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def netdev_list_backups(device_name: str, limit: int = 10) -> List[Dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT id, device_name, lines, backed_up_at FROM network_config_backups "
+            "WHERE device_name=? ORDER BY id DESC LIMIT ?",
+            (device_name, limit),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ── Interface Log ─────────────────────────────────────────────────────────────
+
+def netdev_log_interfaces(device_name: str, interfaces: list):
+    with _conn() as conn:
+        for iface in interfaces:
+            conn.execute(
+                "INSERT INTO network_interface_log "
+                "(device_name, interface, status, protocol, in_rate, out_rate, errors_in, errors_out) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (device_name, iface.get("interface", ""),
+                 iface.get("status", "unknown"), iface.get("protocol", "unknown"),
+                 iface.get("in_rate") or 0, iface.get("out_rate") or 0,
+                 iface.get("errors_in") or 0, iface.get("errors_out") or 0),
+            )
+
+
+def netdev_get_interface_history(device_name: str, interface: str, limit: int = 60) -> List[Dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM network_interface_log WHERE device_name=? AND interface=? "
+            "ORDER BY id DESC LIMIT ?",
+            (device_name, interface, limit),
+        ).fetchall()
+    return [dict(r) for r in reversed(rows)]
