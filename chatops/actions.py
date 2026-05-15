@@ -2,6 +2,10 @@ import shutil
 import os
 import re
 import subprocess
+import threading
+
+_test_lock = threading.Lock()
+_test_running = False
 
 
 def help_text() -> str:
@@ -24,13 +28,15 @@ def help_text() -> str:
         f"  {_s(green,'top processes')} | {_s(green,'system health')}\n"
         "\n"
         '<span style="color:#374151;font-weight:700">General:</span>\n'
-        f"  {_s(gray,'show system config')} | {_s(gray,'help')}\n"
-        f"  {_s(gray,'run tests')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— run the full automation test suite (pytest)</span>\n'
+        f"  {_s(gray,'show system config')} | {_s(gray,'date')} | {_s(gray,'help')}\n"
+        f"  {_s(gray,'show predictive alerts')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— metrics trending toward threshold breach</span>\n'
+        f"  {_s(gray,'run tests')} | {_s(gray,'show test logs')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— run test suite / list past runs (developer+ only)</span>\n'
         "\n"
         '<span style="color:#374151;font-weight:700">Alerts:</span>\n'
-        f"  {_s(purple,'show alerts')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— view recent alerts with severity and ID</span>\n'
+        f"  {_s(purple,'show alerts')} | {_s(purple,'show predictive alerts')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— recent alerts / metrics trending toward threshold</span>\n'
         "\n"
         '<span style="color:#374151;font-weight:700">AI-Powered Analysis:</span>\n'
         f"  {_s(green,'analyze logs: &lt;content&gt;')}"
@@ -42,6 +48,8 @@ def help_text() -> str:
         '<span style="color:#374151;font-weight:700">Runbooks:</span>\n'
         f"  {_s(purple,'list runbooks')} | {_s(purple,'run &lt;runbook&gt;')}"
         f" | {_s(purple,'confirm &lt;runbook&gt;')} | {_s(purple,'cancel')}\n"
+        f"  {_s(purple,'dry run &lt;runbook&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— simulate without executing (safe preview)</span>\n'
         f'  <span style="color:#9ca3af;font-style:italic">  Available: clear_tmp, disk_breakdown, large_logs, listening_services, flush_cache, rotate_logs, rotate_secret</span>\n'
         "\n"
         '<span style="color:#374151;font-weight:700">Knowledge Base:</span>\n'
@@ -85,6 +93,8 @@ def help_text() -> str:
         f'  <span style="color:#9ca3af;font-style:italic">— alert stats, MTTR, top commands (last 7 days)</span>\n'
         f"  {_s(green,'show analytics &lt;N&gt;d')}"
         f'  <span style="color:#9ca3af;font-style:italic">— e.g. show analytics 30d</span>\n'
+        f"  {_s(green,'show prometheus metrics')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— Prometheus-format metrics inline</span>\n'
         f"  {_s(green,'download PDF')}"
         f'  <span style="color:#9ca3af;font-style:italic">— GET /chatops/analytics/report.pdf</span>\n'
         "\n"
@@ -110,11 +120,11 @@ def help_text() -> str:
         f'  <span style="color:#9ca3af;font-style:italic">— default: http://localhost:11434</span>\n'
         "\n"
         '<span style="color:#374151;font-weight:700">User Management (admin only):</span>\n'
-        f"  {_s(rose,'add user &lt;username&gt; &lt;password&gt; &lt;viewer|operator|admin&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— roles: viewer, operator, admin</span>\n'
+        f"  {_s(rose,'add user &lt;username&gt; &lt;password&gt; &lt;viewer|operator|developer|admin&gt;')}"
+        f'  <span style="color:#9ca3af;font-style:italic">— roles: viewer &lt; operator &lt; developer &lt; admin</span>\n'
         f"  {_s(rose,'list users')} | {_s(rose,'show users')}"
         f'  <span style="color:#9ca3af;font-style:italic">— list all users with roles and status</span>\n'
-        f"  {_s(rose,'set role &lt;username&gt; &lt;viewer|operator|admin&gt;')}"
+        f"  {_s(rose,'set role &lt;username&gt; &lt;viewer|operator|developer|admin&gt;')}"
         f'  <span style="color:#9ca3af;font-style:italic">— change a user\'s role</span>\n'
         f"  {_s(rose,'deactivate user &lt;username&gt;')}"
         f'  <span style="color:#9ca3af;font-style:italic">— disable login (user kept in DB)</span>\n'
@@ -600,8 +610,15 @@ def analyze_logs(logs: str) -> dict:
 
 
 def run_tests() -> dict:
-    import subprocess
+    global _test_running
     import sys
+    from datetime import datetime
+
+    with _test_lock:
+        if _test_running:
+            return {"response": "A test run is already in progress. Use `show test logs` to check for results when it completes."}
+        _test_running = True
+
     test_files = [
         "tests/test_chatops_actions.py",
         "tests/test_chatops_router.py",
@@ -613,34 +630,148 @@ def run_tests() -> dict:
         "tests/test_chatops_kb.py",
         "tests/test_chatops_auth.py",
     ]
-    try:
-        result = subprocess.run(
-            [sys.executable, "-m", "pytest"] + test_files + ["--tb=short", "-v"],
-            capture_output=True, text=True, timeout=300,
-        )
-        output = (result.stdout + result.stderr).strip()
-        lines = [l for l in output.splitlines() if l.strip()]
-        summary = "\n".join(lines[-10:] if len(lines) > 10 else lines)
-        status = "ALL PASSED" if result.returncode == 0 else "FAILURES DETECTED"
 
-        from datetime import datetime
-        log_dir = os.path.join(os.path.dirname(__file__), "..", "sample_logs")
-        os.makedirs(log_dir, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_path = os.path.join(log_dir, f"pytest_{timestamp}.log")
-        log_filename = f"pytest_{timestamp}.log"
-        with open(log_path, "w") as f:
-            f.write(output)
+    started_at = datetime.now()
+    started_str = started_at.strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = started_at.strftime("%Y%m%d_%H%M%S")
+    log_filename = f"pytest_{timestamp}.log"
+    log_dir = os.path.join(os.path.dirname(__file__), "..", "sample_logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, log_filename)
 
-        return {
-            "response": f"Test Run — {status}\n\n{summary}\n\n📄 Log saved: {log_filename}",
-            "status": status,
-            "log_file": log_filename,
-        }
-    except subprocess.TimeoutExpired:
-        return {"response": "Tests timed out after 180 seconds.", "status": "TIMEOUT"}
-    except Exception as e:
-        return {"response": f"Error running tests: {e}", "status": "ERROR"}
+    def _run_in_background():
+        global _test_running
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "pytest"] + test_files + ["--tb=short", "-v"],
+                capture_output=True, text=True, timeout=1200,
+            )
+            finished_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            output = (result.stdout + result.stderr).strip()
+            status = "ALL PASSED" if result.returncode == 0 else "FAILURES DETECTED"
+            header = (
+                f"{'='*60}\n"
+                f"  ChatOps Test Run\n"
+                f"  Started:  {started_str}\n"
+                f"  Finished: {finished_str}\n"
+                f"  Status:   {status}\n"
+                f"{'='*60}\n\n"
+            )
+            with open(log_path, "w") as f:
+                f.write(header + output)
+        except subprocess.TimeoutExpired:
+            with open(log_path, "w") as f:
+                f.write(f"Test run timed out after 20 minutes. Started: {started_str}\n")
+        except Exception as e:
+            with open(log_path, "w") as f:
+                f.write(f"Error running tests: {e}\nStarted: {started_str}\n")
+        finally:
+            global _test_running
+            _test_running = False
+
+    thread = threading.Thread(target=_run_in_background, daemon=True)
+    thread.start()
+
+    return {
+        "response": (
+            f"Test run started at {started_str}.\n\n"
+            f"Tests take ~12 minutes to complete. Use `show test logs` to see results when done.\n\n"
+            f"📄 Log will be saved as: {log_filename}"
+        ),
+        "status": "RUNNING",
+    }
+
+
+def get_prometheus_metrics() -> dict:
+    from chatops.db import unacked_count
+    from chatops.analytics import get_alert_stats, get_mttr_stats, get_command_stats
+    import time
+
+    stats = get_alert_stats(7)
+    mttr = get_mttr_stats(7)
+    disk = check_disk()
+    mem = check_memory()
+    cpu = check_cpu()
+    top_cmds = get_command_stats(7)[:5]
+
+    lines = ["```"]
+    lines += [
+        "# HELP chatops_alerts_total Total alerts by severity (last 7d)",
+        "# TYPE chatops_alerts_total gauge",
+    ]
+    for sev, cnt in stats.get("by_severity", {}).items():
+        lines.append(f'chatops_alerts_total{{severity="{sev}"}} {cnt}')
+    lines += [
+        "",
+        "# HELP chatops_alerts_unacked Unacknowledged alerts",
+        "# TYPE chatops_alerts_unacked gauge",
+        f"chatops_alerts_unacked {unacked_count()}",
+        "",
+        "# HELP chatops_mttr_minutes_avg Average MTTR in minutes (last 7d)",
+        "# TYPE chatops_mttr_minutes_avg gauge",
+        f"chatops_mttr_minutes_avg {mttr['avg_minutes'] if mttr['avg_minutes'] is not None else 'NaN'}",
+        "",
+        "# HELP chatops_system_usage_percent Current resource usage %",
+        "# TYPE chatops_system_usage_percent gauge",
+        f'chatops_system_usage_percent{{resource="disk"}}   {disk.get("percent_used", "N/A")}',
+        f'chatops_system_usage_percent{{resource="memory"}} {mem.get("percent_used", "N/A")}',
+        f'chatops_system_usage_percent{{resource="cpu"}}    {cpu.get("percent_used", "N/A")}',
+    ]
+    if top_cmds:
+        lines += [
+            "",
+            "# HELP chatops_top_commands_total Command usage count (last 7d)",
+            "# TYPE chatops_top_commands_total gauge",
+        ]
+        for cmd in top_cmds:
+            safe = cmd["command"].replace('"', '\\"')
+            lines.append(f'chatops_top_commands_total{{command="{safe}"}} {cmd["count"]}')
+    lines += [f"", f"# Generated at {int(time.time())}", "```"]
+    return {"response": "\n".join(lines)}
+
+
+def analyze_test_log(filename: str) -> dict:
+    import re
+    log_dir = os.path.join(os.path.dirname(__file__), "..", "sample_logs")
+    log_path = os.path.join(log_dir, filename)
+    if not re.fullmatch(r"pytest_\d{8}_\d{6}\.log", filename):
+        return {"response": "Invalid log filename."}
+    if not os.path.isfile(log_path):
+        return {"response": f"Log file not found: {filename}"}
+
+    with open(log_path) as f:
+        content = f.read()
+
+    # Send at most ~6000 chars to stay within LLM token budget
+    truncated = content[-6000:] if len(content) > 6000 else content
+
+    from .llm import ask as _llm_ask, is_configured as _llm_ok
+    if not _llm_ok():
+        # Rule-based fallback
+        passed = len(re.findall(r" PASSED", content))
+        failed = len(re.findall(r" FAILED", content))
+        errors = re.findall(r"^FAILED (.+)$", content, re.MULTILINE)
+        lines = [f"Test Log Analysis — {filename}",
+                 f"Passed: {passed}  |  Failed: {failed}"]
+        if errors:
+            lines.append("\nFailed tests:")
+            lines.extend(f"  • {e}" for e in errors[:10])
+        lines.append("\n(Enable LLM for AI-powered insights)")
+        return {"response": "\n".join(lines)}
+
+    prompt = (
+        f"Analyse this pytest log and provide:\n"
+        f"1. A one-line overall health summary\n"
+        f"2. List of failed tests with likely root cause (if any)\n"
+        f"3. Any patterns or recurring issues\n"
+        f"4. Actionable fix suggestions\n\n"
+        f"Log ({filename}):\n{truncated}"
+    )
+    answer = _llm_ask(prompt, system=(
+        "You are a senior QA engineer. Be concise and practical. "
+        "Format output with clear sections. No filler text."
+    ))
+    return {"response": f"🤖 AI Test Log Analysis — {filename}\n\n{answer}"}
 
 
 def copy_ssh_key(target: str) -> dict:

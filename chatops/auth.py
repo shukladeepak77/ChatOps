@@ -7,7 +7,7 @@ SECRET_KEY = os.environ.get("CHATOPS_SECRET", "chatops-dev-secret-change-in-prod
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 8
 
-ROLE_LEVEL = {"viewer": 1, "operator": 2, "admin": 3}
+ROLE_LEVEL = {"viewer": 1, "operator": 2, "developer": 3, "admin": 4}
 
 
 def hash_password(plain: str) -> str:

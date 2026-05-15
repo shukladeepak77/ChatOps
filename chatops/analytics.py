@@ -39,11 +39,15 @@ def get_alert_stats(days: int = 7) -> dict:
     }
 
 
-def get_mttr_stats() -> dict:
+def get_mttr_stats(days: int = 7) -> dict:
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
     with _conn() as conn:
+        # Filter on acked_at so we measure alerts *resolved* in the period
         rows = conn.execute(
             "SELECT timestamp, acked_at FROM alerts "
-            "WHERE acked=1 AND acked_at IS NOT NULL AND acked_at != ''",
+            "WHERE acked=1 AND acked_at IS NOT NULL AND acked_at != '' "
+            "AND acked_at >= ?",
+            (since,),
         ).fetchall()
     if not rows:
         return {"avg_minutes": None, "sample_size": 0}
@@ -53,7 +57,7 @@ def get_mttr_stats() -> dict:
             created = datetime.strptime(r["timestamp"][:19], "%Y-%m-%d %H:%M:%S")
             resolved = datetime.strptime(r["acked_at"][:19], "%Y-%m-%d %H:%M:%S")
             diff = (resolved - created).total_seconds() / 60
-            if 0 < diff < 1440:
+            if diff > 0:
                 durations.append(diff)
         except Exception:
             pass
@@ -82,7 +86,7 @@ def generate_pdf_report(days: int = 7) -> bytes:
     from fpdf import FPDF, XPos, YPos
 
     alerts = get_alert_stats(days)
-    mttr = get_mttr_stats()
+    mttr = get_mttr_stats(days)
     cmds = get_command_stats(days)
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 

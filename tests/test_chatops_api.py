@@ -305,3 +305,78 @@ def test_slack_url_verification(client):
 def _admin_token(client):
     resp = client.post("/chatops/auth/login", json={"username": "admin", "password": "admin"})
     return resp.json()["token"]
+
+
+# ── Prometheus metrics endpoint ───────────────────────────────────────────────
+
+def test_prometheus_endpoint_returns_200(client):
+    resp = client.get("/chatops/metrics/prometheus")
+    assert resp.status_code == 200
+
+
+def test_prometheus_content_type(client):
+    resp = client.get("/chatops/metrics/prometheus")
+    assert "text/plain" in resp.headers["content-type"]
+
+
+def test_prometheus_has_alert_metrics(client):
+    resp = client.get("/chatops/metrics/prometheus")
+    assert "chatops_alerts_total" in resp.text
+
+
+def test_prometheus_has_unacked_metric(client):
+    resp = client.get("/chatops/metrics/prometheus")
+    assert "chatops_alerts_unacked" in resp.text
+
+
+def test_prometheus_has_mttr_metric(client):
+    resp = client.get("/chatops/metrics/prometheus")
+    assert "chatops_mttr_minutes_avg" in resp.text
+
+
+def test_prometheus_has_system_usage(client):
+    resp = client.get("/chatops/metrics/prometheus")
+    assert "chatops_system_usage_percent" in resp.text
+    assert 'resource="disk"' in resp.text
+    assert 'resource="memory"' in resp.text
+    assert 'resource="cpu"' in resp.text
+
+
+def test_prometheus_has_top_commands(client):
+    resp = client.get("/chatops/metrics/prometheus")
+    assert "chatops_top_commands_total" in resp.text
+
+
+def test_prometheus_unauthorized(client):
+    resp = client.get("/chatops/metrics/prometheus", headers={"Authorization": "Bearer bad_token"})
+    assert resp.status_code in (401, 403)
+
+
+def test_prometheus_valid_format(client):
+    resp = client.get("/chatops/metrics/prometheus")
+    for line in resp.text.splitlines():
+        if line and not line.startswith("#"):
+            # Each metric line must have a space separating name/labels from value
+            assert " " in line
+
+
+# ── Dry-run API (via message endpoint) ───────────────────────────────────────
+
+def test_dry_run_via_message(client):
+    resp = client.post("/chatops/message", json={"message": "dry run clear_tmp"})
+    assert resp.status_code == 200
+    assert "[DRY RUN]" in resp.json()["response"]
+
+
+def test_dry_run_unknown_via_message(client):
+    resp = client.post("/chatops/message", json={"message": "dry run xyz_nonexistent"})
+    assert resp.status_code == 200
+    assert "Unknown" in resp.json()["response"] or "Available" in resp.json()["response"]
+
+
+# ── Predictive alerts API (via message endpoint) ──────────────────────────────
+
+def test_predictive_alerts_via_message(client):
+    resp = client.post("/chatops/message", json={"message": "show predictive alerts"})
+    assert resp.status_code == 200
+    assert resp.json()["response"]

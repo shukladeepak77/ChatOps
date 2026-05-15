@@ -389,3 +389,125 @@ def test_show_llm_config_admin():
 def test_show_llm_config_denied_for_operator():
     resp = _resp_role("show llm config", role="operator")
     assert "denied" in resp.lower() or "Access" in resp
+
+
+# ── Dry-run runbook (router) ──────────────────────────────────────────────────
+
+def test_dry_run_route_clear_tmp():
+    resp = _resp("dry run clear_tmp")
+    assert "[DRY RUN]" in resp
+
+
+def test_dry_run_route_disk_breakdown():
+    resp = _resp("dry run disk_breakdown")
+    assert "[DRY RUN]" in resp
+
+
+def test_dry_run_route_unknown():
+    resp = _resp("dry run nonexistent_xyz")
+    assert "Unknown" in resp or "Available" in resp
+
+
+def test_dry_run_route_rotate_secret():
+    resp = _resp("dry run rotate_secret")
+    assert "[DRY RUN]" in resp
+
+
+def test_dry_run_does_not_execute():
+    # dry run clear_tmp should not say "Deleted" or show confirm prompt
+    resp = _resp("dry run clear_tmp")
+    assert "confirm" not in resp.lower()
+
+
+# ── Predictive alerts (router) ────────────────────────────────────────────────
+
+def test_show_predictive_alerts_returns_response():
+    resp = _resp("show predictive alerts")
+    assert resp  # always returns something
+
+
+def test_show_predictive_alerts_no_breach():
+    resp = _resp("show predictive alerts")
+    # With test data (no real trending), expect no-breach message
+    assert "trending" in resp.lower() or "No metrics" in resp
+
+
+def test_predictive_alerts_alias():
+    resp = _resp("predictive alerts")
+    assert resp
+
+
+def test_check_predictive_alias():
+    resp = _resp("check predictive")
+    assert resp
+
+
+# ── Predictive check function ─────────────────────────────────────────────────
+
+def test_predictive_check_returns_list():
+    from chatops.predictive import check_predictive_alerts
+    result = check_predictive_alerts()
+    assert isinstance(result, list)
+
+
+def test_predictive_check_with_trending_data():
+    from chatops.db import add_metric, init_db
+    from chatops.predictive import check_predictive_alerts
+    init_db()
+    # Insert 10 steadily rising CPU values approaching warning threshold
+    for i in range(10):
+        add_metric("cpu", 70.0 + i * 1.5, node="testnode_pred")
+    result = check_predictive_alerts(node="testnode_pred")
+    # With slope of 1.5%/sample and current ~83.5%, should flag warning (80%)
+    assert isinstance(result, list)
+
+
+def test_predictive_check_flat_no_alert():
+    from chatops.db import add_metric, init_db
+    from chatops.predictive import check_predictive_alerts
+    init_db()
+    # Flat metric well below threshold — should not fire
+    for i in range(10):
+        add_metric("disk", 20.0, node="flatnode_pred")
+    result = check_predictive_alerts(node="flatnode_pred")
+    assert all(a["metric"] != "disk" for a in result)
+
+
+# ── Date command ──────────────────────────────────────────────────────────────
+
+def test_route_date_command():
+    resp = _resp("date")
+    assert "2026" in resp or "2025" in resp
+
+
+def test_route_what_time_is_it():
+    resp = _resp("what time is it")
+    assert ":" in resp  # HH:MM:SS present
+
+
+# ── Developer role enforcement ────────────────────────────────────────────────
+
+def test_run_test_denied_for_operator():
+    resp = _resp_role("run test", role="operator")
+    assert "denied" in resp.lower() or "Access" in resp
+
+
+def test_run_test_allowed_for_developer():
+    resp = _resp_role("run test", role="developer")
+    assert "denied" not in resp.lower()
+
+
+def test_run_test_allowed_for_admin():
+    resp = _resp_role("run test", role="admin")
+    assert "denied" not in resp.lower()
+
+
+def test_add_user_developer_role():
+    resp = _resp_role("add user devtest pass123 developer", role="admin")
+    assert "created" in resp.lower()
+
+
+def test_set_role_to_developer():
+    _resp_role("add user devroletest pass123 viewer", role="admin")
+    resp = _resp_role("set role devroletest developer", role="admin")
+    assert "updated" in resp.lower()

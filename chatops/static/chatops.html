@@ -125,6 +125,20 @@
     /* ── Config tab ── */
     #tab-config { padding: 24px; overflow-y: auto; }
     #tab-help { overflow-y: auto; }
+    #tab-kb { padding: 20px; overflow-y: auto; }
+    .kb-toolbar { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; align-items:center; }
+    .kb-toolbar input { flex:1; min-width:180px; padding:7px 12px; border:1px solid #d1d5db; border-radius:6px; font-size:.9rem; }
+    .kb-toolbar button { padding:7px 14px; border:none; border-radius:6px; cursor:pointer; font-size:.85rem; font-weight:500; }
+    .kb-card { background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:14px 16px; margin-bottom:10px; }
+    .kb-card-title { font-weight:600; color:#1e3a8a; font-size:.95rem; cursor:pointer; }
+    .kb-card-title:hover { text-decoration:underline; }
+    .kb-card-meta { font-size:.78rem; color:#9ca3af; margin-top:3px; }
+    .kb-card-tags { display:inline-block; background:#eff6ff; color:#1d4ed8; font-size:.72rem; padding:1px 7px; border-radius:10px; margin-right:4px; }
+    .kb-card-body { margin-top:10px; font-size:.85rem; color:#374151; white-space:pre-wrap; border-top:1px solid #f3f4f6; padding-top:10px; display:none; }
+    .kb-add-form { background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; padding:16px; margin-bottom:16px; display:none; }
+    .kb-add-form input, .kb-add-form textarea { width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #d1d5db; border-radius:6px; font-size:.88rem; margin-bottom:8px; font-family:inherit; }
+    .kb-add-form textarea { min-height:90px; resize:vertical; }
+    .kb-empty { color:#9ca3af; text-align:center; padding:40px; font-style:italic; }
     .config-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; max-width: 560px; }
     .config-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 18px; color: #111; }
     .config-group { margin-bottom: 20px; }
@@ -207,6 +221,7 @@
     </button>
     <button data-tab="metrics" onclick="switchTab('metrics', this)">Metrics</button>
     <button data-tab="config" onclick="switchTab('config', this)">Config</button>
+    <button data-tab="kb" onclick="switchTab('kb', this); loadKB()">KB</button>
     <button data-tab="help" onclick="switchTab('help', this)">Help</button>
     <div class="user-info" id="user-info" style="display:none">
       <span id="user-display"></span>
@@ -370,6 +385,31 @@
       </div>
       <p style="margin-top:12px;font-size:.78rem;color:#9ca3af">Manage nodes via chat: <code>add node</code> · <code>remove node</code> · <code>copy ssh key</code></p>
     </div>
+  </div>
+</div>
+
+<!-- ── KNOWLEDGE BASE ── -->
+<div id="tab-kb" class="tab-content">
+  <div style="max-width:860px;margin:0 auto;">
+    <h2 style="font-size:1.2rem;font-weight:700;color:#1e3a8a;margin-bottom:14px">📚 Knowledge Base</h2>
+    <div class="kb-toolbar">
+      <input id="kb-search-input" type="text" placeholder="Type to search by title, tag or content…" oninput="searchKB(this.value)" onkeydown="if(event.key==='Escape'){this.value='';searchKB('');}">
+      <button style="background:#6b7280;color:#fff;" onclick="searchKB(document.getElementById('kb-search-input').value)">🔍 Search</button>
+      <button style="background:#f3f4f6;color:#374151;" onclick="document.getElementById('kb-search-input').value='';searchKB('');">✕ Clear</button>
+      <button style="background:#3b82f6;color:#fff;" onclick="toggleKBForm()">＋ Add Article</button>
+      <button style="background:#f3f4f6;color:#374151;" onclick="loadKB()">↺ Refresh</button>
+    </div>
+    <div class="kb-add-form" id="kb-add-form">
+      <strong style="font-size:.88rem;color:#374151;">New Article</strong>
+      <input id="kb-new-title" type="text" placeholder="Title">
+      <input id="kb-new-tags" type="text" placeholder="Tags (comma-separated, optional)">
+      <textarea id="kb-new-content" placeholder="Article content…"></textarea>
+      <div style="display:flex;gap:8px;">
+        <button style="background:#10b981;color:#fff;padding:6px 16px;border:none;border-radius:6px;cursor:pointer;font-size:.85rem;" onclick="submitKBArticle()">Save</button>
+        <button style="background:#f3f4f6;color:#374151;padding:6px 16px;border:none;border-radius:6px;cursor:pointer;font-size:.85rem;" onclick="toggleKBForm()">Cancel</button>
+      </div>
+    </div>
+    <div id="kb-list"></div>
   </div>
 </div>
 
@@ -594,6 +634,93 @@ function switchTab(name, btn) {
   if (name === 'config') loadConfig();
 }
 
+// ── Knowledge Base ────────────────────────────────────────────────────────────
+let _kbArticles = [];
+
+async function loadKB() {
+  const res = await authFetch('/chatops/kb');
+  if (!res.ok) return;
+  _kbArticles = (await res.json()).articles || [];
+  renderKB(_kbArticles);
+}
+
+function renderKB(articles) {
+  const el = document.getElementById('kb-list');
+  if (!articles.length) {
+    el.innerHTML = '<div class="kb-empty">No articles yet. Click "+ Add Article" to create one.</div>';
+    return;
+  }
+  el.innerHTML = articles.map(a => `
+    <div class="kb-card" id="kb-card-${a.id}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+          <div class="kb-card-title" onclick="toggleKBBody(${a.id})">#${a.id} ${a.title}</div>
+          <div class="kb-card-meta">
+            ${a.tags ? a.tags.split(',').map(t => `<span class="kb-card-tags">${t.trim()}</span>`).join('') : ''}
+            <span>Added ${a.created_at ? a.created_at.slice(0,10) : ''}</span>
+          </div>
+        </div>
+        <button onclick="deleteKBArticle(${a.id})"
+          style="background:#fee2e2;color:#dc2626;border:none;border-radius:5px;padding:3px 10px;cursor:pointer;font-size:.76em;white-space:nowrap;">
+          🗑 Delete
+        </button>
+      </div>
+      <div class="kb-card-body" id="kb-body-${a.id}"></div>
+    </div>
+  `).join('');
+}
+
+async function toggleKBBody(id) {
+  const body = document.getElementById(`kb-body-${id}`);
+  if (body.style.display === 'block') { body.style.display = 'none'; return; }
+  if (!body.dataset.loaded) {
+    const res = await authFetch(`/chatops/kb/${id}`);
+    if (!res.ok) { body.textContent = 'Could not load article.'; }
+    else { body.textContent = (await res.json()).content || '(no content)'; }
+    body.dataset.loaded = '1';
+  }
+  body.style.display = 'block';
+}
+
+function searchKB(query) {
+  if (!query.trim()) { renderKB(_kbArticles); return; }
+  const q = query.toLowerCase();
+  renderKB(_kbArticles.filter(a =>
+    a.title.toLowerCase().includes(q) ||
+    (a.tags || '').toLowerCase().includes(q)
+  ));
+}
+
+function toggleKBForm() {
+  const f = document.getElementById('kb-add-form');
+  f.style.display = f.style.display === 'block' ? 'none' : 'block';
+}
+
+async function submitKBArticle() {
+  const title = document.getElementById('kb-new-title').value.trim();
+  const tags  = document.getElementById('kb-new-tags').value.trim();
+  const content = document.getElementById('kb-new-content').value.trim();
+  if (!title || !content) { alert('Title and content are required.'); return; }
+  const res = await authFetch('/chatops/kb', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, content, tags }),
+  });
+  if (!res.ok) { alert('Could not save article.'); return; }
+  document.getElementById('kb-new-title').value = '';
+  document.getElementById('kb-new-tags').value = '';
+  document.getElementById('kb-new-content').value = '';
+  toggleKBForm();
+  loadKB();
+}
+
+async function deleteKBArticle(id) {
+  if (!confirm(`Delete KB article #${id}?`)) return;
+  const res = await authFetch(`/chatops/kb/${id}`, { method: 'DELETE' });
+  if (res.ok) loadKB();
+  else alert('Could not delete article.');
+}
+
 // ── Chat ──────────────────────────────────────────────────────────────────────
 const chatWin = document.getElementById('chat-window');
 
@@ -615,6 +742,41 @@ function addBubble(text, sender, scroll = true) {
   chatWin.appendChild(el);
   if (scroll) chatWin.scrollTop = chatWin.scrollHeight;
   return el;
+}
+
+async function deleteTestLog(filename, rowEl) {
+  if (!confirm(`Delete ${filename}?`)) return;
+  try {
+    const res = await authFetch(`/chatops/test-log/${filename}`, { method: 'DELETE' });
+    if (res.ok) {
+      rowEl.style.opacity = '0.4';
+      rowEl.style.pointerEvents = 'none';
+      const note = document.createElement('span');
+      note.style.cssText = 'font-size:0.75em;color:#dc2626;margin-left:4px;';
+      note.textContent = 'deleted';
+      rowEl.appendChild(note);
+    } else {
+      alert('Could not delete log file.');
+    }
+  } catch(e) {
+    alert('Could not delete log file.');
+  }
+}
+
+async function downloadPdfReport(days) {
+  try {
+    const res = await authFetch(`/chatops/analytics/report.pdf?days=${days}`);
+    if (!res.ok) { alert('Could not generate PDF report.'); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `chatops_analytics_${days}d.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    alert('Could not download PDF report.');
+  }
 }
 
 async function openTestLog(filename) {
@@ -647,7 +809,7 @@ async function sendMessage() {
   const isRunTest = /^run\s+tests?/i.test(text);
   const pendingEl = document.createElement('div');
   pendingEl.className = 'bubble bot pending';
-  pendingEl.textContent = isRunTest ? 'Test execution in progress… this may take a few minutes.' : isRunbook ? 'Executing runbook…' : 'Working…';
+  pendingEl.textContent = isRunTest ? 'Starting test run in background…' : isRunbook ? 'Executing runbook…' : 'Working…';
   chatWin.appendChild(pendingEl);
   chatWin.scrollTop = chatWin.scrollHeight;
   sendBtn.disabled = true;
@@ -660,13 +822,73 @@ async function sendMessage() {
     });
     const data = await res.json();
     pendingEl.remove();
-    const bubble = addBubble(data?.response || 'No response', 'bot');
+    // For test_logs, only show the header line — the grid replaces the file list
+    const displayText = data?.test_logs
+      ? (data.response || '').split('\n')[0]
+      : (data?.response || 'No response');
+    const bubble = addBubble(displayText, 'bot');
     if (data?.log_file) {
-      const btn = document.createElement('button');
-      btn.textContent = '📋 Open Full Log';
-      btn.style.cssText = 'display:inline-block;margin-top:8px;padding:4px 12px;background:#3b82f6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:0.82em;';
-      btn.onclick = () => openTestLog(data.log_file);
-      bubble.appendChild(btn);
+      const btnBar = document.createElement('div');
+      btnBar.style.cssText = 'display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;';
+      const btnStyle = 'padding:4px 12px;border:none;border-radius:6px;cursor:pointer;font-size:0.82em;color:#fff;';
+
+      const viewBtn = document.createElement('button');
+      viewBtn.textContent = '📋 Open Full Log';
+      viewBtn.style.cssText = btnStyle + 'background:#3b82f6;';
+      viewBtn.onclick = () => openTestLog(data.log_file);
+
+      const aiBtn = document.createElement('button');
+      aiBtn.textContent = '🤖 Analyse with AI';
+      aiBtn.style.cssText = btnStyle + 'background:#7c3aed;';
+      aiBtn.onclick = () => {
+        input.value = `analyze test log ${data.log_file}`;
+        sendMessage();
+      };
+
+      btnBar.appendChild(viewBtn);
+      btnBar.appendChild(aiBtn);
+      bubble.appendChild(btnBar);
+    }
+    if (data?.test_logs && data.test_logs.length > 0) {
+      const grid = document.createElement('div');
+      grid.style.cssText = 'margin-top:10px;display:flex;flex-direction:column;gap:5px;white-space:normal;';
+      const btnStyle = 'padding:2px 9px;border:none;border-radius:5px;cursor:pointer;font-size:0.76em;color:#fff;white-space:nowrap;';
+      data.test_logs.forEach(log => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:6px;white-space:normal;';
+        const lbl = document.createElement('span');
+        lbl.style.cssText = 'font-size:0.78em;color:#6b7280;width:140px;flex-shrink:0;';
+        lbl.textContent = log.label;
+        const sizeEl = document.createElement('span');
+        sizeEl.style.cssText = 'font-size:0.75em;color:#9ca3af;width:42px;flex-shrink:0;';
+        sizeEl.textContent = `${log.size_kb} KB`;
+        const openBtn = document.createElement('button');
+        openBtn.textContent = '📋 Open';
+        openBtn.style.cssText = btnStyle + 'background:#3b82f6;';
+        openBtn.onclick = () => openTestLog(log.filename);
+        const aiBtn = document.createElement('button');
+        aiBtn.textContent = '🤖 Analyse';
+        aiBtn.style.cssText = btnStyle + 'background:#7c3aed;';
+        aiBtn.onclick = () => { input.value = `analyze test log ${log.filename}`; sendMessage(); };
+        const delBtn = document.createElement('button');
+        delBtn.textContent = '🗑 Delete';
+        delBtn.style.cssText = btnStyle + 'background:#dc2626;';
+        delBtn.onclick = () => deleteTestLog(log.filename, row);
+        row.appendChild(lbl);
+        row.appendChild(sizeEl);
+        row.appendChild(openBtn);
+        row.appendChild(aiBtn);
+        row.appendChild(delBtn);
+        grid.appendChild(row);
+      });
+      bubble.appendChild(grid);
+    }
+    if (data?.pdf_report) {
+      const pdfBtn = document.createElement('button');
+      pdfBtn.textContent = '📥 Download PDF Report';
+      pdfBtn.style.cssText = 'display:inline-block;margin-top:8px;padding:4px 12px;background:#059669;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:0.82em;';
+      pdfBtn.onclick = () => downloadPdfReport(data.pdf_days || 7);
+      bubble.appendChild(pdfBtn);
     }
   } catch (e) {
     pendingEl.remove();

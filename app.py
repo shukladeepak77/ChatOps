@@ -129,6 +129,11 @@ async def _health_check_loop():
             await loop.run_in_executor(None, _poll_remote_nodes_sync)
         except Exception:
             pass
+        try:
+            from chatops.predictive import run_predictive_check
+            await loop.run_in_executor(None, run_predictive_check)
+        except Exception:
+            pass
         await asyncio.sleep(interval)
 
 
@@ -443,6 +448,18 @@ def get_test_log(filename: str, user=Depends(_require_role("viewer"))):
         return PlainTextResponse(f.read())
 
 
+@app.delete("/chatops/test-log/{filename}")
+def delete_test_log(filename: str, user=Depends(_require_role("developer"))):
+    import re, os
+    if not re.fullmatch(r"pytest_\d{8}_\d{6}\.log", filename):
+        raise HTTPException(status_code=400, detail="Invalid log filename")
+    log_path = os.path.join(os.path.dirname(__file__), "sample_logs", filename)
+    if not os.path.isfile(log_path):
+        raise HTTPException(status_code=404, detail="Log file not found")
+    os.remove(log_path)
+    return {"status": "deleted", "filename": filename}
+
+
 @app.post("/chatops/upload-log")
 async def upload_log(file: UploadFile = File(...), user=Depends(_require_role("admin"))):
     content = await file.read()
@@ -473,7 +490,7 @@ def get_analytics(days: int = 7, user=Depends(_require_role("viewer"))):
     from chatops.analytics import get_alert_stats, get_mttr_stats, get_command_stats
     return {
         "alert_stats": get_alert_stats(days),
-        "mttr": get_mttr_stats(),
+        "mttr": get_mttr_stats(days),
         "top_commands": get_command_stats(days),
     }
 
@@ -487,6 +504,93 @@ def download_pdf_report(days: int = 7, user=Depends(_require_role("viewer"))):
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=chatops_report_{days}d.pdf"},
     )
+
+
+# ── Prometheus metrics ────────────────────────────────────────────────────────
+
+@app.get("/chatops/metrics/prometheus")
+def prometheus_metrics(user=Depends(_require_role("viewer"))):
+    from fastapi.responses import PlainTextResponse
+    from chatops.db import get_alerts, unacked_count, get_metric_history
+    from chatops.analytics import get_alert_stats, get_mttr_stats, get_command_stats
+    from chatops.actions import check_disk, check_memory, check_cpu
+    import time
+
+    lines = [
+        "# HELP chatops_alerts_total Total alerts by severity",
+        "# TYPE chatops_alerts_total gauge",
+    ]
+    stats = get_alert_stats(7)
+    for sev, cnt in stats.get("by_severity", {}).items():
+        lines.append(f'chatops_alerts_total{{severity="{sev}"}} {cnt}')
+    lines += [
+        "# HELP chatops_alerts_unacked Unacknowledged alerts",
+        "# TYPE chatops_alerts_unacked gauge",
+        f"chatops_alerts_unacked {unacked_count()}",
+        "# HELP chatops_mttr_minutes_avg Average MTTR in minutes (last 7 days)",
+        "# TYPE chatops_mttr_minutes_avg gauge",
+    ]
+    mttr = get_mttr_stats(7)
+    lines.append(f"chatops_mttr_minutes_avg {mttr['avg_minutes'] if mttr['avg_minutes'] is not None else 'NaN'}")
+    lines += [
+        "# HELP chatops_system_usage_percent Current system resource usage",
+        "# TYPE chatops_system_usage_percent gauge",
+    ]
+    try:
+        lines.append(f'chatops_system_usage_percent{{resource="disk"}} {check_disk()["percent_used"]}')
+    except Exception:
+        pass
+    try:
+        lines.append(f'chatops_system_usage_percent{{resource="memory"}} {check_memory()["percent_used"]}')
+    except Exception:
+        pass
+    try:
+        lines.append(f'chatops_system_usage_percent{{resource="cpu"}} {check_cpu()["percent_used"]}')
+    except Exception:
+        pass
+    lines += [
+        "# HELP chatops_top_commands_total Command usage count (last 7 days)",
+        "# TYPE chatops_top_commands_total gauge",
+    ]
+    for cmd in get_command_stats(7)[:10]:
+        safe = cmd["command"].replace('"', '\\"')
+        lines.append(f'chatops_top_commands_total{{command="{safe}"}} {cmd["count"]}')
+    lines.append(f"\n# Generated at {int(time.time())}")
+    return PlainTextResponse("\n".join(lines) + "\n", media_type="text/plain; version=0.0.4")
+
+
+# ── Knowledge Base REST API ───────────────────────────────────────────────────
+
+class KBArticleRequest(BaseModel):
+    title: str
+    content: str
+    tags: str = ""
+
+@app.get("/chatops/kb")
+def kb_list_endpoint(user=Depends(_require_role("viewer"))):
+    from chatops.db import kb_list
+    return {"articles": kb_list()}
+
+@app.get("/chatops/kb/{article_id}")
+def kb_get_endpoint(article_id: int, user=Depends(_require_role("viewer"))):
+    from chatops.db import kb_get
+    article = kb_get(article_id)
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    return article
+
+@app.post("/chatops/kb")
+def kb_create_endpoint(req: KBArticleRequest, user=Depends(_require_role("operator"))):
+    from chatops.db import kb_add
+    aid = kb_add(req.title, req.content, tags=req.tags, created_by=user.get("username", "admin"))
+    return {"id": aid, "title": req.title}
+
+@app.delete("/chatops/kb/{article_id}")
+def kb_delete_endpoint(article_id: int, user=Depends(_require_role("admin"))):
+    from chatops.db import kb_delete
+    if not kb_delete(article_id):
+        raise HTTPException(status_code=404, detail="Article not found")
+    return {"status": "deleted", "id": article_id}
 
 
 # ── Slack inbound bot ─────────────────────────────────────────────────────────

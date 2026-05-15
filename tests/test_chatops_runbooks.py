@@ -1,4 +1,4 @@
-from chatops.runbooks import list_runbooks, request_runbook, confirm_runbook, cancel_runbook
+from chatops.runbooks import list_runbooks, request_runbook, confirm_runbook, cancel_runbook, dry_run_runbook
 
 
 def test_list_runbooks_returns_all():
@@ -83,3 +83,63 @@ def test_runbook_rotate_logs_request():
     result = request_runbook("rotate_logs")
     assert result["status"] == "confirm"
     assert "rotate_logs" in result["message"]
+
+
+# ── Dry-run mode ──────────────────────────────────────────────────────────────
+
+def test_dry_run_unknown_runbook():
+    result = dry_run_runbook("nonexistent_xyz")
+    assert result["status"] == "error"
+    assert "Available" in result["message"]
+
+
+def test_dry_run_clear_tmp_returns_ok():
+    result = dry_run_runbook("clear_tmp")
+    assert result["status"] == "ok"
+    assert "[DRY RUN]" in result["output"]
+
+
+def test_dry_run_clear_tmp_no_deletion():
+    result = dry_run_runbook("clear_tmp")
+    # Should describe intent, not confirm deletion
+    assert "Would delete" in result["output"]
+
+
+def test_dry_run_disk_breakdown():
+    result = dry_run_runbook("disk_breakdown")
+    assert result["status"] == "ok"
+    assert "[DRY RUN]" in result["output"]
+
+
+def test_dry_run_large_logs():
+    result = dry_run_runbook("large_logs")
+    assert result["status"] == "ok"
+    assert "[DRY RUN]" in result["output"]
+
+
+def test_dry_run_flush_cache():
+    result = dry_run_runbook("flush_cache")
+    assert result["status"] == "ok"
+    assert "[DRY RUN]" in result["output"]
+
+
+def test_dry_run_rotate_logs():
+    result = dry_run_runbook("rotate_logs")
+    assert result["status"] == "ok"
+    assert "[DRY RUN]" in result["output"]
+    assert "dry" in result["output"].lower() or "debug" in result["output"].lower()
+
+
+def test_dry_run_rotate_secret_no_secret_generated():
+    result = dry_run_runbook("rotate_secret")
+    assert result["status"] == "ok"
+    assert "[DRY RUN]" in result["output"]
+    # No actual secret should be produced
+    assert "would generate" in result["output"].lower() or "no secret" in result["output"].lower()
+
+
+def test_dry_run_does_not_require_confirmation():
+    # dry_run should work without any _pending state
+    cancel_runbook()
+    result = dry_run_runbook("clear_tmp")
+    assert result["status"] == "ok"

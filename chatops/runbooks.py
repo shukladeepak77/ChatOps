@@ -30,8 +30,8 @@ RUNBOOKS: Dict[str, dict] = {
     },
     "rotate_logs": {
         "description": "Force log rotation for all configured log files",
-        "command": "logrotate -f /etc/logrotate.conf 2>&1 && echo 'Log rotation complete.'",
-        "preview": "logrotate -f /etc/logrotate.conf",
+        "command": "sudo /usr/sbin/logrotate -f /etc/logrotate.conf 2>&1 && echo 'Log rotation complete.'",
+        "preview": "sudo logrotate -f /etc/logrotate.conf",
         "shell": True,
     },
     "rotate_secret": {
@@ -102,3 +102,64 @@ def cancel_runbook() -> dict:
     global _pending
     _pending = None
     return {"status": "ok", "message": "Cancelled."}
+
+
+# Dry-run safe commands: map runbook name -> safe read-only equivalent
+_DRY_RUN_CMDS: Dict[str, dict] = {
+    "clear_tmp": {
+        "command": ["find", "/tmp", "-maxdepth", "1", "-type", "f", "-mtime", "+1", "-print"],
+        "note": "Would delete the files listed above (omitting -delete flag).",
+    },
+    "disk_breakdown": None,          # identical to live — read-only already
+    "large_logs": None,              # identical to live — read-only already
+    "listening_services": None,      # identical to live — read-only already
+    "flush_cache": {
+        "command": "sync && free -h",
+        "shell": True,
+        "note": "Would flush OS page/dentry/inode cache. Memory preview (before flush):",
+    },
+    "rotate_logs": {
+        "command": "sudo /usr/sbin/logrotate --debug /etc/logrotate.conf 2>&1 | head -40",
+        "shell": True,
+        "note": "Logrotate debug output — no files are rotated in dry-run mode.",
+    },
+    "rotate_secret": {
+        "command": None,
+        "note": "Would generate a new 64-char hex secret via secrets.token_hex(32). No secret generated in dry-run.",
+    },
+}
+
+
+def dry_run_runbook(name: str) -> dict:
+    rb = RUNBOOKS.get(name)
+    if not rb:
+        available = ", ".join(RUNBOOKS.keys())
+        return {"status": "error", "message": f"Unknown runbook '{name}'. Available: {available}"}
+
+    dr = _DRY_RUN_CMDS.get(name)
+    note = dr["note"] if dr else "This runbook is read-only — output is identical to a live run."
+
+    # Determine command to run in safe mode
+    if dr is None:
+        cmd, shell = rb["command"], rb.get("shell", False)
+    elif dr.get("command") is None:
+        return {
+            "status": "ok",
+            "output": f"[DRY RUN] {rb['description']}\n\n{note}",
+        }
+    else:
+        cmd, shell = dr["command"], dr.get("shell", False)
+
+    try:
+        result = subprocess.run(cmd, shell=shell, capture_output=True, text=True, timeout=30)
+        stdout = result.stdout.strip()
+        stderr = "\n".join(l for l in result.stderr.splitlines() if "Permission denied" not in l).strip()
+        output = stdout or stderr or "(no output)"
+        return {
+            "status": "ok",
+            "output": f"[DRY RUN] {rb['description']}\n{note}\n\n{output[:1500]}",
+        }
+    except subprocess.TimeoutExpired:
+        return {"status": "error", "message": "Dry-run timed out after 30 seconds."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

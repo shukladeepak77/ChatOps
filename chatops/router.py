@@ -1,4 +1,5 @@
 import re
+import os
 import subprocess as _subprocess
 from typing import Dict
 
@@ -22,10 +23,12 @@ from .actions import (
     help_text as help_text_action,
     alert_status,
     run_tests,
+    analyze_test_log,
     copy_ssh_key,
+    get_prometheus_metrics,
 )
 from .config import load_config
-from .runbooks import list_runbooks, request_runbook, confirm_runbook, cancel_runbook
+from .runbooks import list_runbooks, request_runbook, confirm_runbook, cancel_runbook, dry_run_runbook
 
 # Intent keyword map — order matters: more specific phrases listed first
 _INTENTS: Dict[str, list] = {
@@ -131,8 +134,115 @@ def route_message(message: str, caller_role: str = "operator") -> Dict[str, str]
     if not s or s == "help":
         return {"response": help_text_action()}
 
+    if s in ("date", "show date", "current date", "what is the date", "what time is it"):
+        from datetime import datetime
+        now = datetime.now()
+        return {"response": f"📅 {now.strftime('%A, %d %B %Y  %H:%M:%S')}"}
+
+    # ── Command-help questions — answer from our own help system, not LLM ─────
+    _CMD_HELP = {
+        "list kb":              "Lists all Knowledge Base articles stored in ChatOps. Shows ID, title, tags, and creation date. Use 'show kb <id>' to read the full content of any article.",
+        "add kb":               "Adds a new Knowledge Base article. Usage: add kb <Title>: <content>. Tags are optional but searchable. Only operators and above can add articles.",
+        "show kb":              "Displays the full content of a Knowledge Base article by its ID. Usage: show kb <id>.",
+        "search kb":            "Searches KB articles by keyword across title, content, and tags. Usage: search kb <keyword>.",
+        "delete kb":            "Deletes a Knowledge Base article by ID. Admin role required. Usage: delete kb <id>.",
+        "show analytics":       "Displays a 7-day summary: total alerts, severity breakdown, MTTR (mean time to resolution), and top commands used. Append a period like '30d' for a different window.",
+        "show prometheus metrics": "Displays current Prometheus-format metrics inline: alert counts by severity, unacked alerts, MTTR, system resource usage, and top commands.",
+        "show alerts":          "Lists the 20 most recent alerts with severity, message, and acknowledgement status.",
+        "show predictive alerts": "Analyses recent metric trends and shows any metrics projected to breach a WARNING or CRITICAL threshold within the next 10 minutes.",
+        "run test":             "Runs the full ChatOps pytest automation suite (266 tests). Requires developer or admin role. Results are saved as a timestamped log file.",
+        "show test logs":       "Lists all past test-run log files with timestamp and size. Each entry has Open, Analyse with AI, and Delete buttons.",
+        "dry run":              "Simulates a runbook without executing it. Safe preview of what would happen. Usage: dry run <runbook_name>.",
+        "check disk":           "Shows current disk usage — total, used, free GB and percentage. Flags WARNING or CRITICAL based on configured thresholds.",
+        "check memory":         "Shows RAM usage in MB with total, used, and percentage. Includes status badge.",
+        "check cpu":            "Shows current CPU usage percentage and logical core count.",
+        "check uptime":         "Shows how long the server has been running in days, hours, minutes.",
+        "check ports":          "Lists all open/listening TCP and UDP ports on the server.",
+        "system health":        "Full health summary — disk, memory, CPU, and uptime in one response with OK/WARNING/CRITICAL badges.",
+        "top processes":        "Lists top 5 processes by CPU usage, showing PID, name, CPU%, and memory%.",
+        "show services":        "Lists all active systemd services that have a running process ID. Supports optional keyword filter, e.g. 'show services nginx'.",
+        "service status":       "Shows the current status of a specific systemd service. Usage: service status <name>.",
+        "restart":              "Requests a restart of a named service with a confirmation step. Usage: restart <service>.",
+        "check dns":            "Performs a DNS lookup for a domain — returns A, AAAA, MX, NS, TXT, and CNAME records. Usage: check dns <domain>.",
+        "check ip":             "Shows all network interface IP addresses on the server.",
+        "check routes":         "Displays the routing table.",
+        "check connections":    "Lists active network connections.",
+        "show report":          "Generates a system health report across all configured nodes.",
+        "list runbooks":        "Shows all available runbooks with name and description.",
+        "list nodes":           "Lists all configured nodes (servers) the platform monitors.",
+        "add node":             "Registers a new remote node for monitoring. Usage: add node <name> <user@host>.",
+        "list users":           "Lists all users with their roles and active status. Admin only.",
+        "add user":             "Creates a new user account. Usage: add user <username> <password> <role>. Roles: viewer, operator, developer, admin.",
+        "remove user":          "Deletes a user account. Admin only. Usage: remove user <username>.",
+        "deactivate user":      "Disables a user's login without deleting them. Admin only.",
+        "set role":             "Changes a user's role. Admin only. Usage: set role <username> <role>.",
+        "show llm config":      "Shows the active LLM provider, model, and API key status. Admin only.",
+        "explain alert":        "Uses AI to explain a specific alert and suggest remediation. Usage: explain alert <id>.",
+        "analyze logs":         "Analyses pasted log content using AI — identifies severity, root cause, impact, and suggested actions.",
+        "config":               "Shows current threshold configuration for disk, memory, and CPU warnings and critical levels.",
+        "help":                 "Displays the full command reference grouped by category.",
+        "date":                 "Shows the current server date and time.",
+        "show system config":   "Shows enriched system info: hostname, IP, OS, live metrics, and ChatOps platform stats.",
+        "kill process":         "Sends SIGTERM to a process by PID with a confirmation step. Usage: kill process <pid>.",
+    }
+    _cmd_q = re.match(
+        r"^(?:what\s+is\s+(?:the\s+)?(?:purpose\s+of\s+)?|"
+        r"what\s+does\s+|"
+        r"explain\s+(?:the\s+)?(?:command\s+)?|"
+        r"purpose\s+of\s+(?:the\s+)?(?:command\s+)?|"
+        r"help\s+(?:with\s+|on\s+|for\s+)?(?:the\s+)?(?:command\s+)?|"
+        r"how\s+(?:do\s+(?:i|we|you)\s+)?(?:to\s+)?(?:use\s+|run\s+|execute\s+)?(?:the\s+)?(?:command\s+)?)"
+        r"['\"]?([\w\s]+?)['\"]?\s*(?:command|cmd)?\s*\??$",
+        s,
+    )
+    if _cmd_q:
+        query = _cmd_q.group(1).strip().lower()
+        # exact match first, then prefix match
+        desc = _CMD_HELP.get(query)
+        if not desc:
+            for key, val in _CMD_HELP.items():
+                if query == key or query.startswith(key) or key.startswith(query):
+                    desc = val
+                    query = key
+                    break
+        if desc:
+            return {"response": f"**{query}** — {desc}\n\nType `help` to see all commands."}
+
+    if s in ("show test logs", "list test logs", "show test runs", "test logs"):
+        if caller_role not in ("developer", "admin"):
+            return {"response": "Access denied. Test logs are available to developer and admin roles only."}
+        import glob
+        log_dir = os.path.join(os.path.dirname(__file__), "..", "sample_logs")
+        pattern = os.path.join(log_dir, "pytest_[0-9]*.log")
+        files = sorted(glob.glob(pattern), reverse=True)
+        if not files:
+            return {"response": "No test run logs found."}
+        entries = []
+        for f in files:
+            fname = os.path.basename(f)
+            size_kb = os.path.getsize(f) // 1024
+            # parse date from filename: pytest_YYYYMMDD_HHMMSS.log
+            try:
+                from datetime import datetime
+                dt = datetime.strptime(fname, "pytest_%Y%m%d_%H%M%S.log")
+                label = dt.strftime("%Y-%m-%d %H:%M:%S")
+            except Exception:
+                label = fname
+            entries.append({"filename": fname, "label": label, "size_kb": size_kb})
+        summary = f"Test Run Logs — {len(entries)} execution(s) found\n"
+        summary += "\n".join(f"  {e['label']}  ({e['size_kb']} KB)  {e['filename']}" for e in entries)
+        return {"response": summary, "test_logs": entries}
+
     if re.match(r"^run\s+tests?(\s+suite)?$", s) or s in ("pytest", "test suite", "run test cases", "run chatops tests", "run test suite"):
+        if caller_role not in ("developer", "admin"):
+            return {"response": "Access denied. 'run test' is available to developer and admin roles only."}
         return run_tests()
+
+    test_log_m = re.match(r"^analyze\s+test\s+log\s+(pytest_\S+\.log)$", s)
+    if test_log_m:
+        if caller_role not in ("developer", "admin"):
+            return {"response": "Access denied. Test log analysis is available to developer and admin roles only."}
+        return analyze_test_log(test_log_m.group(1))
 
     # Inline log analysis
     log_match = re.match(r"^(?:analyze\s+logs?|check\s+logs?)\s*:?\s+(.+)$", s, re.DOTALL)
@@ -244,6 +354,18 @@ def route_message(message: str, caller_role: str = "operator") -> Dict[str, str]
             return {"response": result["message"]}
         return {"response": f"SSH key copy failed:\n{result['message']}"}
 
+    # Runbook: dry run <name>
+    dry_run_match = re.match(r"^(?:dry[\s\-]run|run\s+[\w\-]+\s+--dry[\-\s]?run)\s*([\w\-]*)", s)
+    if not dry_run_match:
+        dry_run_match = re.match(r"^dry[\s\-]?run\s+([\w\-]+)", s)
+    if dry_run_match:
+        name = dry_run_match.group(1).strip()
+        if name:
+            result = dry_run_runbook(name)
+            if result["status"] == "ok":
+                return {"response": result["output"]}
+            return {"response": result["message"]}
+
     # Runbook: run <name>
     run_match = re.match(r"^run\s+([\w\-]+)", s)
     if run_match:
@@ -273,15 +395,15 @@ def route_message(message: str, caller_role: str = "operator") -> Dict[str, str]
     if _is_user_cmd and caller_role != "admin":
         return {"response": "Access denied. User management commands are available to admin users only."}
 
-    if re.match(r'^add\s+user\b', s) and not re.match(r'^add\s+user\s+(\S+)\s+(\S+)\s+(viewer|operator|admin)$', s):
+    if re.match(r'^add\s+user\b', s) and not re.match(r'^add\s+user\s+(\S+)\s+(\S+)\s+(viewer|operator|developer|admin)$', s):
         return {"response": (
             "Invalid syntax. Usage:\n"
-            "  add user &lt;username&gt; &lt;password&gt; &lt;viewer|operator|admin&gt;\n\n"
+            "  add user &lt;username&gt; &lt;password&gt; &lt;viewer|operator|developer|admin&gt;\n\n"
             "Example:\n"
             "  add user john secret123 operator"
         )}
 
-    add_user_m = re.match(r'^add\s+user\s+(\S+)\s+(\S+)\s+(viewer|operator|admin)$', s)
+    add_user_m = re.match(r'^add\s+user\s+(\S+)\s+(\S+)\s+(viewer|operator|developer|admin)$', s)
     if add_user_m:
         from .db import create_user as _db_create_user
         from chatops.auth import hash_password as _hp
@@ -313,15 +435,15 @@ def route_message(message: str, caller_role: str = "operator") -> Dict[str, str]
             return {"response": f"User '{uname}' deleted."}
         return {"response": f"User '{uname}' not found."}
 
-    if re.match(r'^set\s+role\b', s) and not re.match(r'^set\s+role\s+(\S+)\s+(viewer|operator|admin)$', s):
+    if re.match(r'^set\s+role\b', s) and not re.match(r'^set\s+role\s+(\S+)\s+(viewer|operator|developer|admin)$', s):
         return {"response": (
             "Invalid syntax. Usage:\n"
-            "  set role &lt;username&gt; &lt;viewer|operator|admin&gt;\n\n"
+            "  set role &lt;username&gt; &lt;viewer|operator|developer|admin&gt;\n\n"
             "Example:\n"
             "  set role john operator"
         )}
 
-    set_role_m = re.match(r'^set\s+role\s+(\S+)\s+(viewer|operator|admin)$', s)
+    set_role_m = re.match(r'^set\s+role\s+(\S+)\s+(viewer|operator|developer|admin)$', s)
     if set_role_m:
         from .db import update_user_role as _update_role
         uname, role = set_role_m.group(1), set_role_m.group(2)
@@ -489,7 +611,7 @@ def route_message(message: str, caller_role: str = "operator") -> Dict[str, str]
         days = int(analytics_m.group(1)) if analytics_m and analytics_m.group(1) else 7
         from .analytics import get_alert_stats, get_mttr_stats, get_command_stats
         a = get_alert_stats(days)
-        m = get_mttr_stats()
+        m = get_mttr_stats(days)
         cmds = get_command_stats(days)
         sev_line = "  ".join(f"{k}: {v}" for k, v in sorted(a["by_severity"].items())) or "none"
         mttr_line = (f"{m['avg_minutes']} min avg  (min {m['min_minutes']}  max {m['max_minutes']}  n={m['sample_size']})"
@@ -509,8 +631,11 @@ def route_message(message: str, caller_role: str = "operator") -> Dict[str, str]
         ]
         for c in cmds[:5]:
             lines.append(f"  {c['command'][:50]:<50}  {c['count']}x")
-        lines.append(f"\nTip: download full PDF report from  {cfg.get('base_url','http://<server>:8001')}/chatops/analytics/report.pdf")
-        return {"response": "\n".join(lines)}
+        return {"response": "\n".join(lines), "pdf_report": True, "pdf_days": days}
+
+    # ── Prometheus metrics ─────────────────────────────────────────────────────
+    if s in ("prometheus", "show prometheus", "prometheus metrics", "show prometheus metrics", "metrics"):
+        return get_prometheus_metrics()
 
     # ── Knowledge Base ─────────────────────────────────────────────────────────
     if s in ("list kb", "show kb", "kb list"):
@@ -664,6 +789,20 @@ def route_message(message: str, caller_role: str = "operator") -> Dict[str, str]
 
     # ── Intent detection ───────────────────────────────────────────────────────
     intent = _detect_intent(s)
+
+    if s in ("show predictive alerts", "predictive alerts", "check predictive"):
+        from .predictive import check_predictive_alerts
+        alerts = check_predictive_alerts()
+        if not alerts:
+            return {"response": "No metrics currently trending toward a threshold breach."}
+        lines = ["Predictive Alerts — metrics trending toward threshold:"]
+        for a in alerts:
+            lines.append(
+                f"  ⚠ {a['metric'].capitalize()}: {a['current']}% now → "
+                f"~{a['projected']}% in {a['eta_minutes']} min "
+                f"(threshold: {a['threshold_value']}% {a['threshold_type']})"
+            )
+        return {"response": "\n".join(lines)}
 
     # ── Intents handled locally even when a node is specified ─────────────────
     if intent == "alerts":
