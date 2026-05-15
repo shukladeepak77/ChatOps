@@ -599,6 +599,7 @@
           <select id="ct-node"><option value="local">local</option></select>
         </div>
       </div>
+      <div class="m-field"><label>Link to Alert ID <span style="font-size:.72rem;opacity:.6">(optional)</span></label><input id="ct-alert-id" type="number" min="1" placeholder="e.g. 42 — auto-links ticket to that alert" /></div>
       <div class="m-field"><label>Description</label><textarea id="ct-desc" placeholder="Additional details (optional)"></textarea></div>
       <div class="m-result" id="ct-result"></div>
     </div>
@@ -793,6 +794,74 @@
   </div>
 </div>
 
+<!-- Runbook Builder -->
+<div class="modal-backdrop" id="modal-runbook-builder">
+  <div class="modal-box modal-wide">
+    <div class="modal-header"><span class="modal-icon">🔧</span><span class="modal-title">Runbook Builder</span><button class="modal-close" onclick="closeModal('modal-runbook-builder')">✕</button></div>
+    <div class="modal-body">
+      <div id="rb-builder-list-section">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <span style="font-size:.85rem;color:var(--text2);">Custom Runbooks</span>
+          <button class="m-btn m-btn-primary" style="padding:4px 14px;font-size:.8rem;" onclick="showRbBuilderForm()">➕ New Runbook</button>
+        </div>
+        <div id="rb-list-body"><div class="m-empty"><span class="m-spinner"></span> Loading…</div></div>
+        <div class="m-result" id="rb-list-result"></div>
+      </div>
+      <div id="rb-builder-form-section" style="display:none;">
+        <div class="m-field"><label>Name * <span style="font-size:.72rem;opacity:.6">(no spaces, e.g. restart_nginx)</span></label><input id="rbb-name" type="text" placeholder="my_runbook" /></div>
+        <div class="m-field"><label>Description</label><input id="rbb-desc" type="text" placeholder="What does this runbook do?" /></div>
+        <div class="m-field">
+          <label>Steps <span style="font-size:.72rem;opacity:.6">(each step = one shell command)</span></label>
+          <div id="rb-steps-container" style="display:flex;flex-direction:column;gap:6px;margin-top:4px;"></div>
+          <button class="m-btn" style="margin-top:8px;padding:4px 12px;font-size:.78rem;background:rgba(99,102,241,.2);border:1px solid rgba(99,102,241,.3);color:#c7d2fe;" onclick="addRbStep()">➕ Add Step</button>
+        </div>
+        <div class="m-result" id="rb-form-result"></div>
+      </div>
+    </div>
+    <div class="modal-footer" id="rb-footer-list">
+      <button class="m-btn m-btn-secondary" onclick="closeModal('modal-runbook-builder')">Close</button>
+    </div>
+    <div class="modal-footer" id="rb-footer-form" style="display:none;">
+      <button class="m-btn m-btn-secondary" onclick="hideRbBuilderForm()">← Back</button>
+      <button class="m-btn m-btn-primary" onclick="submitCreateRunbook()">💾 Save Runbook</button>
+    </div>
+  </div>
+</div>
+
+<!-- Webhook Integrations -->
+<div class="modal-backdrop" id="modal-integrations">
+  <div class="modal-box modal-wide">
+    <div class="modal-header"><span class="modal-icon">🔗</span><span class="modal-title">Webhook Integrations</span><button class="modal-close" onclick="closeModal('modal-integrations')">✕</button></div>
+    <div class="modal-body">
+      <p style="color:var(--text2);font-size:.83rem;margin-bottom:14px;">Configure external tools to push alerts into ChatOps via webhooks. Point your tool to the URLs below.</p>
+      <div class="m-field">
+        <label>🟣 PagerDuty Webhook URL</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input id="pd-url-display" type="text" readonly style="font-family:monospace;font-size:.78rem;flex:1;" />
+          <button class="m-btn" style="padding:4px 12px;font-size:.78rem;" onclick="copyIntegUrl('pd-url-display')">📋 Copy</button>
+        </div>
+        <div style="font-size:.75rem;color:var(--text3);margin-top:4px;">In PagerDuty: Integrations → Webhooks → Add V3 Webhook → URL above, Events: incident.triggered/acknowledged/resolved</div>
+      </div>
+      <div class="m-field" style="margin-top:14px;">
+        <label>🟠 Datadog Webhook URL</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input id="dd-url-display" type="text" readonly style="font-family:monospace;font-size:.78rem;flex:1;" />
+          <button class="m-btn" style="padding:4px 12px;font-size:.78rem;" onclick="copyIntegUrl('dd-url-display')">📋 Copy</button>
+        </div>
+        <div style="font-size:.75rem;color:var(--text3);margin-top:4px;">In Datadog: Integrations → Webhooks → New Webhook → URL above. Monitor notifications will create alerts in ChatOps.</div>
+      </div>
+      <div class="m-field" style="margin-top:14px;">
+        <label>📋 Recent Inbound Webhook Alerts</label>
+        <div id="integ-recent-alerts" style="max-height:140px;overflow-y:auto;font-size:.78rem;color:var(--text2);padding:8px;background:rgba(0,0,0,.18);border-radius:6px;margin-top:4px;font-family:monospace;">Loading…</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="m-btn m-btn-secondary" onclick="closeModal('modal-integrations')">Close</button>
+      <button class="m-btn m-btn-primary" onclick="loadIntegrationAlerts()">🔄 Refresh Alerts</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 
 <!-- ── APP MENU BAR ── -->
@@ -863,8 +932,10 @@
     <button class="menu-trigger" onclick="toggleMenu('dd-runbooks')">Runbooks <span class="arrow">▼</span></button>
     <div class="dropdown-menu" id="dd-runbooks">
       <div class="drop-item" onclick="menuCmd('list runbooks')"><span class="di">📚</span> List Runbooks</div>
+      <div class="drop-item" onclick="menuCmd('list custom runbooks')"><span class="di">🗂</span> Custom Runbooks</div>
+      <div class="drop-item" onclick="openModal('modal-runbook-builder');loadCustomRunbooksModal();closeAllMenus()"><span class="di">🔧</span> Runbook Builder…</div>
       <div class="drop-sep"></div>
-      <div class="drop-label">Run</div>
+      <div class="drop-label">Run Built-in</div>
       <div class="drop-item" onclick="openRunbookModal('disk_breakdown');closeAllMenus()"><span class="di">💾</span> Disk Breakdown</div>
       <div class="drop-item" onclick="openRunbookModal('large_logs');closeAllMenus()"><span class="di">📄</span> Large Logs</div>
       <div class="drop-item" onclick="openRunbookModal('listening_services');closeAllMenus()"><span class="di">👂</span> Listening Services</div>
@@ -922,6 +993,9 @@
       <div class="drop-item" onclick="switchTab('kb', null); loadKB(); closeAllMenus();"><span class="di">📚</span> Open KB Panel</div>
       <div class="drop-item" onclick="menuCmd('show audit log')"><span class="di">📜</span> Audit Log</div>
       <div class="drop-item" onclick="menuCmd('test slack')"><span class="di">💬</span> Test Slack</div>
+      <div class="drop-sep"></div>
+      <div class="drop-label">Integrations</div>
+      <div class="drop-item" onclick="openModal('modal-integrations');closeAllMenus()"><span class="di">🔗</span> Webhook Integrations…</div>
       <div class="drop-sep"></div>
       <div class="drop-item" onclick="menuCmd('run tests')"><span class="di">🧪</span> Run Tests</div>
       <div class="drop-item" onclick="menuCmd('show test logs')"><span class="di">📋</span> Test Logs</div>
@@ -1415,6 +1489,13 @@ function openModal(id) {
       sel.appendChild(o);
     });
   });
+  // Integrations modal: auto-populate webhook URLs
+  if (id === 'modal-integrations') {
+    const base = window.location.origin;
+    document.getElementById('pd-url-display').value = `${base}/chatops/webhooks/pagerduty`;
+    document.getElementById('dd-url-display').value = `${base}/chatops/webhooks/datadog`;
+    loadIntegrationAlerts();
+  }
 }
 function closeModal(id) {
   document.getElementById(id).classList.remove('active');
@@ -1440,14 +1521,18 @@ async function submitCreateTicket() {
   if (!title) { showModalResult('ct-result','Title is required.',false); return; }
   const priority = document.getElementById('ct-priority').value;
   const desc = document.getElementById('ct-desc').value.trim();
-  const cmd = `create ticket ${title} priority ${priority}${desc ? ' | ' + desc : ''}`;
+  const alertId = document.getElementById('ct-alert-id').value.trim();
+  let cmd = `create ticket ${title} priority ${priority}`;
+  if (alertId) cmd += ` alert ${alertId}`;
   try {
     const res = await authFetch('/chatops/message', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({message: cmd})});
     const data = await res.json();
     showModalResult('ct-result', data.response, true);
-    syncToChat(`🎫 Ticket created: "${title}" [${priority}]\n${data.response}`);
+    const linkNote = alertId ? ` (linked to alert #${alertId})` : '';
+    syncToChat(`🎫 Ticket created: "${title}" [${priority}]${linkNote}\n${data.response}`);
     document.getElementById('ct-title').value = '';
     document.getElementById('ct-desc').value = '';
+    document.getElementById('ct-alert-id').value = '';
   } catch(e) { showModalResult('ct-result', 'Error: ' + e.message, false); }
 }
 
@@ -1642,6 +1727,148 @@ async function submitRCA() {
   } catch(e) { showModalResult('rca-result','Error: '+e.message,false); }
   finally { btn.disabled=false; btn.innerHTML='🔬 Generate RCA'; }
 }
+
+// ── Runbook Builder ───────────────────────────────────────────────────────────
+let _rbStepCount = 0;
+
+function showRbBuilderForm() {
+  document.getElementById('rb-builder-list-section').style.display = 'none';
+  document.getElementById('rb-builder-form-section').style.display = '';
+  document.getElementById('rb-footer-list').style.display = 'none';
+  document.getElementById('rb-footer-form').style.display = '';
+  document.getElementById('rbb-name').value = '';
+  document.getElementById('rbb-desc').value = '';
+  document.getElementById('rb-steps-container').innerHTML = '';
+  document.getElementById('rb-form-result').textContent = '';
+  _rbStepCount = 0;
+  addRbStep();
+}
+
+function hideRbBuilderForm() {
+  document.getElementById('rb-builder-list-section').style.display = '';
+  document.getElementById('rb-builder-form-section').style.display = 'none';
+  document.getElementById('rb-footer-list').style.display = '';
+  document.getElementById('rb-footer-form').style.display = 'none';
+}
+
+function addRbStep() {
+  _rbStepCount++;
+  const container = document.getElementById('rb-steps-container');
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:6px;align-items:center;';
+  row.id = `rb-step-row-${_rbStepCount}`;
+  const num = document.createElement('span');
+  num.style.cssText = 'font-size:.75rem;color:var(--text3);width:18px;text-align:right;flex-shrink:0;';
+  num.textContent = _rbStepCount + '.';
+  const lbl = document.createElement('input');
+  lbl.type = 'text'; lbl.placeholder = 'Label (optional)';
+  lbl.style.cssText = 'flex:.9;padding:5px 8px;background:rgba(255,255,255,.06);border:1px solid rgba(99,102,241,.25);border-radius:5px;color:var(--text);font-size:.78rem;';
+  lbl.id = `rb-step-label-${_rbStepCount}`;
+  const cmd = document.createElement('input');
+  cmd.type = 'text'; cmd.placeholder = 'Shell command, e.g. df -h';
+  cmd.style.cssText = 'flex:2;padding:5px 8px;background:rgba(255,255,255,.06);border:1px solid rgba(99,102,241,.25);border-radius:5px;color:var(--text);font-size:.78rem;font-family:monospace;';
+  cmd.id = `rb-step-cmd-${_rbStepCount}`;
+  const del = document.createElement('button');
+  del.textContent = '✕'; del.className = 'm-btn';
+  del.style.cssText = 'padding:3px 8px;font-size:.75rem;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#fca5a5;flex-shrink:0;';
+  del.onclick = () => row.remove();
+  row.appendChild(num); row.appendChild(lbl); row.appendChild(cmd); row.appendChild(del);
+  container.appendChild(row);
+}
+
+async function submitCreateRunbook() {
+  const name = document.getElementById('rbb-name').value.trim().replace(/\s+/g,'_');
+  if (!name) { showModalResult('rb-form-result','Name is required.',false); return; }
+  const desc = document.getElementById('rbb-desc').value.trim();
+  const stepRows = document.querySelectorAll('#rb-steps-container [id^="rb-step-row-"]');
+  const steps = [];
+  stepRows.forEach(row => {
+    const idx = row.id.split('-').pop();
+    const lbl = document.getElementById(`rb-step-label-${idx}`)?.value?.trim() || '';
+    const cmd = document.getElementById(`rb-step-cmd-${idx}`)?.value?.trim() || '';
+    if (cmd) steps.push({label: lbl || cmd, command: cmd});
+  });
+  if (!steps.length) { showModalResult('rb-form-result','Add at least one step.',false); return; }
+  try {
+    const res = await authFetch('/chatops/custom-runbooks', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name, description: desc, steps: JSON.stringify(steps)}),
+    });
+    const data = await res.json();
+    if (!res.ok) { showModalResult('rb-form-result', data.detail || 'Error creating runbook.', false); return; }
+    showModalResult('rb-form-result', `Runbook "${name}" saved with ${steps.length} step(s).`, true);
+    syncToChat(`🔧 Runbook "${name}" created with ${steps.length} step(s).`);
+    setTimeout(() => { hideRbBuilderForm(); loadCustomRunbooksModal(); }, 1200);
+  } catch(e) { showModalResult('rb-form-result','Error: '+e.message,false); }
+}
+
+async function loadCustomRunbooksModal() {
+  const body = document.getElementById('rb-list-body');
+  body.innerHTML = '<div class="m-empty"><span class="m-spinner"></span> Loading…</div>';
+  try {
+    const res = await authFetch('/chatops/custom-runbooks');
+    const data = await res.json();
+    if (!data.length) { body.innerHTML = '<div class="m-empty">No custom runbooks yet. Click ➕ New Runbook to create one.</div>'; return; }
+    let html = '<table class="m-table"><thead><tr><th>Name</th><th>Description</th><th>Steps</th><th>Created</th><th></th></tr></thead><tbody>';
+    data.forEach(rb => {
+      let steps = 0;
+      try { steps = JSON.parse(rb.steps).length; } catch(e) {}
+      html += `<tr>
+        <td><strong>${rb.name}</strong></td>
+        <td style="color:var(--text2);font-size:.8rem">${rb.description||'—'}</td>
+        <td style="text-align:center">${steps}</td>
+        <td style="color:var(--text3);font-size:.75rem">${(rb.created_at||'').slice(0,10)}</td>
+        <td style="display:flex;gap:5px;flex-wrap:wrap;">
+          <button class="m-btn" style="padding:2px 9px;font-size:.73rem;background:rgba(99,102,241,.2);border:1px solid rgba(99,102,241,.3);color:#c7d2fe;" onclick="runCustomRbFromModal('${rb.name}')">▶ Run</button>
+          <button class="m-btn" style="padding:2px 9px;font-size:.73rem;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#fca5a5;" onclick="deleteCustomRbFromModal('${rb.name}')">🗑</button>
+        </td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    body.innerHTML = html;
+  } catch(e) { body.innerHTML = `<div class="m-empty">Error loading runbooks: ${e.message}</div>`; }
+}
+
+async function runCustomRbFromModal(name) {
+  showModalResult('rb-list-result', `Running custom runbook "${name}"…`, true);
+  try {
+    const res = await authFetch('/chatops/message', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:`run custom runbook ${name}`})});
+    const data = await res.json();
+    showModalResult('rb-list-result', data.response, true);
+    syncToChat(`🔧 Custom runbook "${name}":\n${data.response}`);
+  } catch(e) { showModalResult('rb-list-result','Error: '+e.message,false); }
+}
+
+async function deleteCustomRbFromModal(name) {
+  if (!confirm(`Delete custom runbook "${name}"? This cannot be undone.`)) return;
+  try {
+    const res = await authFetch(`/chatops/custom-runbooks/${encodeURIComponent(name)}`, {method:'DELETE'});
+    if (res.ok) { showModalResult('rb-list-result', `Runbook "${name}" deleted.`, true); loadCustomRunbooksModal(); }
+    else { const d = await res.json(); showModalResult('rb-list-result', d.detail||'Delete failed.',false); }
+  } catch(e) { showModalResult('rb-list-result','Error: '+e.message,false); }
+}
+
+// ── Webhook Integrations ──────────────────────────────────────────────────────
+async function loadIntegrationAlerts() {
+  const el = document.getElementById('integ-recent-alerts');
+  el.textContent = 'Loading…';
+  try {
+    const res = await authFetch('/chatops/message', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:'show alerts 10'})});
+    const data = await res.json();
+    const lines = (data.response||'').split('\n').filter(l => /pagerduty|datadog/i.test(l) || /^\s*#\d+/.test(l));
+    el.textContent = lines.length ? lines.join('\n') : 'No inbound webhook alerts yet.';
+  } catch(e) { el.textContent = 'Error: ' + e.message; }
+}
+
+function copyIntegUrl(inputId) {
+  const el = document.getElementById(inputId);
+  navigator.clipboard.writeText(el.value).then(() => {
+    const orig = el.style.borderColor;
+    el.style.borderColor = '#10b981';
+    setTimeout(() => el.style.borderColor = orig, 1000);
+  });
+}
+
 
 // Close modal on backdrop click
 document.querySelectorAll('.modal-backdrop').forEach(el => {
@@ -1956,6 +2183,28 @@ async function sendMessage() {
       pdfBtn.style.cssText = 'display:inline-block;margin-top:8px;padding:5px 13px;background:#059669;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:0.8em;font-weight:500;';
       pdfBtn.onclick = () => downloadPdfReport(data.pdf_days || 7);
       bubble.appendChild(pdfBtn);
+    }
+
+    if (data?.nlu_suggestions && data.nlu_suggestions.length > 0) {
+      const suggWrap = document.createElement('div');
+      suggWrap.style.cssText = 'margin-top:10px;white-space:normal;';
+      const label = document.createElement('div');
+      label.style.cssText = 'font-size:.72rem;color:rgba(255,255,255,.55);margin-bottom:5px;';
+      label.textContent = `Did you mean one of these? (${(data.nlu_confidence||'MEDIUM').toLowerCase()} confidence)`;
+      suggWrap.appendChild(label);
+      const btnRow = document.createElement('div');
+      btnRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;';
+      data.nlu_suggestions.forEach(alt => {
+        const altBtn = document.createElement('button');
+        altBtn.textContent = alt;
+        altBtn.style.cssText = 'padding:4px 12px;border:1px solid rgba(167,139,250,.45);border-radius:14px;background:rgba(167,139,250,.12);color:#e0d0ff;font-size:.78rem;cursor:pointer;';
+        altBtn.onmouseenter = () => altBtn.style.background = 'rgba(167,139,250,.28)';
+        altBtn.onmouseleave = () => altBtn.style.background = 'rgba(167,139,250,.12)';
+        altBtn.onclick = () => { input.value = alt; sendMessage(); };
+        btnRow.appendChild(altBtn);
+      });
+      suggWrap.appendChild(btnRow);
+      bubble.appendChild(suggWrap);
     }
   } catch (e) {
     pendingEl.remove();

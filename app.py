@@ -17,6 +17,7 @@ from chatops.db import (
     get_user, create_user as db_create_user, list_users as db_list_users,
     update_user_role, set_user_active,
     add_audit, get_audit_log,
+    runbook_create, runbook_list, runbook_get, runbook_delete,
 )
 from chatops.config import load_config, save_config
 from chatops.runbooks import list_runbooks
@@ -653,5 +654,92 @@ async def slack_events(request: Request):
         _ur.urlopen(req, timeout=10)
     except _ue.URLError:
         pass
+
+
+# ── Webhook ingestion: PagerDuty ──────────────────────────────────────────────
+
+@app.post("/chatops/webhooks/pagerduty")
+async def pagerduty_webhook(request: Request):
+    import json as _j
+    body = await request.body()
+    try:
+        payload = _j.loads(body)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    messages = payload.get("messages") or []
+    if not messages:
+        # v3 envelope
+        messages = [payload]
+
+    created = []
+    for msg in messages:
+        event = msg.get("event", {})
+        data  = event.get("data", {})
+        title = data.get("title") or msg.get("message", {}).get("summary", "PagerDuty alert")
+        sev_map = {"critical": "CRITICAL", "error": "ERROR", "warning": "WARNING", "info": "INFO"}
+        sev = sev_map.get((data.get("severity") or "info").lower(), "INFO")
+        alert_id = add_alert(title, sev, source="pagerduty")
+        created.append(alert_id)
+
+    return {"received": len(created), "alert_ids": created}
+
+
+# ── Webhook ingestion: Datadog ────────────────────────────────────────────────
+
+@app.post("/chatops/webhooks/datadog")
+async def datadog_webhook(request: Request):
+    import json as _j
+    body = await request.body()
+    try:
+        payload = _j.loads(body)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    title = payload.get("title") or payload.get("event_title") or "Datadog alert"
+    sev_raw = (payload.get("alert_type") or payload.get("priority") or "info").lower()
+    sev_map = {"error": "CRITICAL", "warning": "WARNING", "info": "INFO", "success": "INFO"}
+    sev = sev_map.get(sev_raw, "INFO")
+    alert_id = add_alert(title, sev, source="datadog")
+
+    return {"received": 1, "alert_id": alert_id}
+
+
+# ── Custom Runbooks CRUD ───────────────────────────────────────────────────────
+
+class RunbookCreate(BaseModel):
+    name: str
+    description: str = ""
+    steps: str = "[]"
+
+
+@app.get("/chatops/custom-runbooks")
+def list_custom_runbooks(user=Depends(_get_current_user)):
+    return runbook_list()
+
+
+@app.post("/chatops/custom-runbooks")
+def create_custom_runbook(req: RunbookCreate, user=Depends(_require_role("operator"))):
+    import json as _j
+    try:
+        steps_parsed = _j.loads(req.steps)
+        if not isinstance(steps_parsed, list):
+            raise ValueError
+    except Exception:
+        raise HTTPException(status_code=400, detail="steps must be a JSON array")
+    try:
+        rb_id = runbook_create(req.name, req.description, req.steps, created_by=user["sub"])
+    except Exception:
+        raise HTTPException(status_code=409, detail="A runbook with that name already exists")
+    add_audit(user["sub"], f"runbook create {req.name}")
+    return {"id": rb_id, "name": req.name}
+
+
+@app.delete("/chatops/custom-runbooks/{name}")
+def delete_custom_runbook(name: str, user=Depends(_require_role("admin"))):
+    if not runbook_delete(name):
+        raise HTTPException(status_code=404, detail="Runbook not found")
+    add_audit(user["sub"], f"runbook delete {name}")
+    return {"deleted": name}
 
     return {"ok": True}

@@ -74,6 +74,14 @@ def init_db():
                 updated_at  TEXT    NOT NULL DEFAULT (datetime('now')),
                 closed_at   TEXT
             );
+            CREATE TABLE IF NOT EXISTS custom_runbooks (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT    NOT NULL UNIQUE,
+                description TEXT    NOT NULL DEFAULT '',
+                steps       TEXT    NOT NULL DEFAULT '[]',
+                created_by  TEXT    NOT NULL DEFAULT 'system',
+                created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+            );
         """)
         for table in ('metrics_history', 'alerts'):
             cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
@@ -459,4 +467,33 @@ def ticket_update(ticket_id: int, **fields) -> bool:
     vals = [v for k, v in updates.items() if k != "updated_at"]
     with _conn() as conn:
         cur = conn.execute(f"UPDATE tickets SET {set_clause} WHERE id=?", vals + [ticket_id])
+    return cur.rowcount > 0
+
+
+# ── Custom Runbooks ───────────────────────────────────────────────────────────
+
+def runbook_create(name: str, description: str, steps: str, created_by: str = "system") -> int:
+    with _conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO custom_runbooks (name, description, steps, created_by) VALUES (?,?,?,?)",
+            (name, description, steps, created_by),
+        )
+    return cur.lastrowid
+
+
+def runbook_list() -> List[Dict]:
+    with _conn() as conn:
+        rows = conn.execute("SELECT * FROM custom_runbooks ORDER BY id DESC").fetchall()
+    return [dict(r) for r in rows]
+
+
+def runbook_get(name: str) -> Dict | None:
+    with _conn() as conn:
+        row = conn.execute("SELECT * FROM custom_runbooks WHERE name=?", (name,)).fetchone()
+    return dict(row) if row else None
+
+
+def runbook_delete(name: str) -> bool:
+    with _conn() as conn:
+        cur = conn.execute("DELETE FROM custom_runbooks WHERE name=?", (name,))
     return cur.rowcount > 0

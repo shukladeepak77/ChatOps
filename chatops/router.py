@@ -787,14 +787,22 @@ def route_message(message: str, caller_role: str = "operator", _nlu_depth: int =
     create_ticket_m = re.match(r'^create\s+ticket\s+(.+)$', s)
     if create_ticket_m:
         title = create_ticket_m.group(1).strip()
-        # Check for priority hint: "create ticket <title> priority high/medium/low"
+        # Extract priority and alert id from the full title string before any trimming
         pri_m = re.search(r'\bpriority\s+(high|medium|low)\b', title, re.IGNORECASE)
         priority = pri_m.group(1).lower() if pri_m else "medium"
-        if pri_m:
-            title = title[:pri_m.start()].strip()
+        alert_link_m = re.search(r'\balert\s+(\d+)\b', title, re.IGNORECASE)
+        linked_alert_id = int(alert_link_m.group(1)) if alert_link_m else None
+        # Strip modifiers from title (remove the rightmost one first to preserve positions)
+        markers = sorted(
+            [m for m in [pri_m, alert_link_m] if m],
+            key=lambda m: m.start(), reverse=True
+        )
+        for m in markers:
+            title = (title[:m.start()] + title[m.end():]).strip()
         from .db import ticket_create
-        tid = ticket_create(title=title, priority=priority, created_by=caller_role)
-        return {"response": f"Ticket #{tid} created: **{title}** [{priority.upper()}]\nUse `show ticket {tid}` to view details, or open **Incidents → Show Tickets** from the menu."}
+        tid = ticket_create(title=title, priority=priority, created_by=caller_role, alert_id=linked_alert_id)
+        link_note = f"\nLinked to alert #{linked_alert_id}." if linked_alert_id else ""
+        return {"response": f"Ticket #{tid} created: **{title}** [{priority.upper()}]{link_note}\nUse `show ticket {tid}` to view details, or open **Incidents → Show Tickets** from the menu."}
 
     close_ticket_m = re.match(r'^close\s+ticket\s+(\d+)$', s)
     if close_ticket_m:
@@ -816,6 +824,67 @@ def route_message(message: str, caller_role: str = "operator", _nlu_depth: int =
                              (int(link_ticket_m.group(2)), int(link_ticket_m.group(1))))
             return {"response": f"Ticket #{link_ticket_m.group(1)} linked to alert #{link_ticket_m.group(2)}."}
         return {"response": f"Ticket #{link_ticket_m.group(1)} not found."}
+
+    # ── Custom Runbooks (user-defined) ─────────────────────────────────────────
+    if s in ("list custom runbooks", "show custom runbooks", "custom runbooks"):
+        from .db import runbook_list as _rb_list
+        rbs = _rb_list()
+        if not rbs:
+            return {"response": "No custom runbooks defined yet.\nUse **Runbooks → Runbook Builder** from the menu to create one."}
+        lines = [f"Custom Runbooks ({len(rbs)}):"]
+        for rb in rbs:
+            import json as _j
+            try:
+                step_count = len(_j.loads(rb["steps"]))
+            except Exception:
+                step_count = 0
+            lines.append(f"  #{rb['id']}  {rb['name']} — {rb['description'] or '(no description)'}  ({step_count} steps)")
+        return {"response": "\n".join(lines)}
+
+    run_custom_rb_m = re.match(r'^run\s+custom\s+runbook\s+([\w\-]+)$', s)
+    if run_custom_rb_m:
+        from .db import runbook_get as _rb_get
+        import json as _j, subprocess as _sp
+        name = run_custom_rb_m.group(1)
+        rb = _rb_get(name)
+        if not rb:
+            return {"response": f"Custom runbook '{name}' not found."}
+        try:
+            steps = _j.loads(rb["steps"])
+        except Exception:
+            return {"response": f"Runbook '{name}' has malformed steps JSON."}
+        if not steps:
+            return {"response": f"Runbook '{name}' has no steps to execute."}
+        output_lines = [f"Running custom runbook: {name}"]
+        for i, step in enumerate(steps, 1):
+            cmd = step.get("command", "").strip()
+            label = step.get("label") or cmd
+            if not cmd:
+                continue
+            output_lines.append(f"\nStep {i}: {label}")
+            try:
+                result = _sp.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+                out = (result.stdout or "").strip()
+                err = (result.stderr or "").strip()
+                if out:
+                    output_lines.append(out[:500])
+                if err:
+                    output_lines.append(f"[stderr] {err[:200]}")
+                if result.returncode != 0:
+                    output_lines.append(f"[exit code {result.returncode}]")
+            except Exception as e:
+                output_lines.append(f"[error] {e}")
+        return {"response": "\n".join(output_lines)}
+
+    delete_custom_rb_m = re.match(r'^delete\s+custom\s+runbook\s+([\w\-]+)$', s)
+    if delete_custom_rb_m:
+        if caller_role != "admin":
+            return {"response": "Access denied. Only admins can delete custom runbooks."}
+        from .db import runbook_delete as _rb_delete
+        name = delete_custom_rb_m.group(1)
+        if _rb_delete(name):
+            return {"response": f"Custom runbook '{name}' deleted."}
+        return {"response": f"Custom runbook '{name}' not found."}
 
     # ── Kill process ───────────────────────────────────────────────────────────
     kill_m = re.match(r'^kill\s+process\s+(\d+)$', s)
@@ -1320,8 +1389,9 @@ def route_message(message: str, caller_role: str = "operator", _nlu_depth: int =
             "show services | show services <keyword> | service status <name> | "
             "restart <name> | check failed services | kill process <pid> | "
             "list runbooks | run <runbook> | dry run <runbook> | "
+            "list custom runbooks | run custom runbook <name> | delete custom runbook <name> | "
             "show tickets | show all tickets | show ticket <id> | "
-            "create ticket <title> [priority high|medium|low] | close ticket <id> | "
+            "create ticket <title> [priority high|medium|low] [alert <id>] | close ticket <id> | "
             "link ticket <id> alert <id> | "
             "list kb | search kb <keyword> | show kb <id> | "
             "add kb <title>: <content> | delete kb <id> | "
@@ -1341,17 +1411,22 @@ def route_message(message: str, caller_role: str = "operator", _nlu_depth: int =
             "You are a command router for a ChatOps platform. "
             "The user has typed a natural language message that did not match any known command. "
             "Your job is to either:\n"
-            "1. Map it to an exact command from the list below and reply ONLY with: EXECUTE: <command>\n"
+            "1. Map it to an exact command from the list below and reply with:\n"
+            "   EXECUTE: <command>\n"
+            "   CONFIDENCE: HIGH|MEDIUM|LOW\n"
+            "   ALTERNATIVES: <cmd1> | <cmd2>  (optional, 1-2 alternatives if confidence is MEDIUM/LOW)\n"
             "2. If it is a general DevOps/Linux/ops question with no direct command match, answer it in under 150 words.\n"
             "3. If it is completely unrelated to operations (weather, sports, cooking, etc.), reply: UNKNOWN\n\n"
             "Rules:\n"
-            "- Only use EXECUTE: if you are confident the user wants that specific action.\n"
+            "- Use HIGH confidence when the mapping is obvious and unambiguous.\n"
+            "- Use MEDIUM confidence when the intent is probable but a parameter is inferred or another command could fit.\n"
+            "- Use LOW confidence when you are guessing — also suggest 1-2 alternatives.\n"
+            "- Only use EXECUTE: if you are at least MEDIUM confident the user wants that action.\n"
             "- Fill in parameters exactly as shown in the command syntax. Examples:\n"
-            "    'check if nginx is running' → EXECUTE: service status nginx\n"
-            "    'run rca on alert 1' → EXECUTE: rca 1\n"
-            "    'generate rca for alert 5' → EXECUTE: rca 5\n"
-            "    'show me open tickets' → EXECUTE: show tickets\n"
-            "    'how full is the disk' → EXECUTE: check disk\n"
+            "    'check if nginx is running' → EXECUTE: service status nginx / CONFIDENCE: HIGH\n"
+            "    'run rca on alert 1' → EXECUTE: rca 1 / CONFIDENCE: HIGH\n"
+            "    'show me open tickets' → EXECUTE: show tickets / CONFIDENCE: HIGH\n"
+            "    'how full is the disk' → EXECUTE: check disk / CONFIDENCE: HIGH\n"
             "- Parameters are positional numbers or names — never use key=value format.\n"
             "- Never guess a parameter that is not explicitly in the user's message.\n\n"
             f"Available commands:\n{_NLU_COMMANDS}"
@@ -1359,14 +1434,33 @@ def route_message(message: str, caller_role: str = "operator", _nlu_depth: int =
         nlu_result = _llm_ask(raw, system=_nlu_system)
         nlu_clean = nlu_result.strip()
 
-        if nlu_clean.upper().startswith("EXECUTE:"):
-            cmd = nlu_clean[len("EXECUTE:"):].strip()
-            routed = route_message(cmd, caller_role=caller_role, _nlu_depth=1)
-            # Prepend a subtle note showing what command was inferred
-            routed["response"] = f"_(mapped: `{cmd}`)_\n\n{routed['response']}"
-            return routed
+        if "EXECUTE:" in nlu_clean.upper():
+            lines_nlu = nlu_clean.splitlines()
+            cmd = ""
+            confidence = "HIGH"
+            alternatives = []
+            for ln in lines_nlu:
+                ln_upper = ln.upper().strip()
+                if ln_upper.startswith("EXECUTE:"):
+                    cmd = ln[ln.upper().index("EXECUTE:") + len("EXECUTE:"):].strip()
+                elif ln_upper.startswith("CONFIDENCE:"):
+                    confidence = ln[ln.upper().index("CONFIDENCE:") + len("CONFIDENCE:"):].strip().upper()
+                elif ln_upper.startswith("ALTERNATIVES:"):
+                    alt_raw = ln[ln.upper().index("ALTERNATIVES:") + len("ALTERNATIVES:"):].strip()
+                    alternatives = [a.strip() for a in alt_raw.split("|") if a.strip()]
 
-        if nlu_clean.upper() == "UNKNOWN":
+            if cmd:
+                routed = route_message(cmd, caller_role=caller_role, _nlu_depth=1)
+                if confidence == "HIGH":
+                    routed["response"] = f"_(mapped: `{cmd}`)_\n\n{routed['response']}"
+                else:
+                    routed["response"] = f"_(mapped: `{cmd}` — {confidence} confidence)_\n\n{routed['response']}"
+                if alternatives:
+                    routed["nlu_suggestions"] = alternatives
+                    routed["nlu_confidence"] = confidence
+                return routed
+
+        if nlu_clean.upper().strip() == "UNKNOWN":
             return {
                 "response": (
                     "Hmm, I'm not sure what you mean by that. 🤔\n\n"
