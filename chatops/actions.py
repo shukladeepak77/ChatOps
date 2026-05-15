@@ -10,128 +10,132 @@ _test_running = False
 
 def help_text() -> str:
     def _s(color: str, text: str) -> str:
-        return f'<span style="color:{color};font-weight:600">{text}</span>'
+        return (f'<span style="color:{color};font-weight:700;'
+                f'background:rgba(0,0,0,.18);border-radius:3px;padding:1px 5px;">{text}</span>')
 
-    blue   = "#1e90ff"
-    green  = "#10b981"
-    orange = "#f97316"
-    purple = "#8b5cf6"
-    gray   = "#6b7280"
-    cyan   = "#06b6d4"
-    amber  = "#d97706"
-    rose   = "#f43f5e"
+    def _h(icon: str, label: str, color: str) -> str:
+        return (f'<span style="color:{color};font-weight:800;font-size:.92em;'
+                f'letter-spacing:.06em;text-transform:uppercase;'
+                f'border-left:3px solid {color};padding-left:7px;">{icon} {label}</span>')
+
+    def _note(text: str) -> str:
+        return f'<span style="color:#fde68a;font-style:italic;font-size:.85em;">{text}</span>'
+
+    sky    = "#7dd3fc"
+    green  = "#6ee7b7"
+    amber  = "#fcd34d"
+    violet = "#d8b4fe"
+    cyan   = "#67e8f9"
+    orange = "#fdba74"
+    rose   = "#fda4af"
+    silver = "#e2e8f0"
 
     return (
-        '<span style="color:#374151;font-weight:700">System Monitoring:</span>\n'
-        f"  {_s(blue,'check disk')} | {_s(blue,'check memory')} | {_s(blue,'check cpu')}"
-        f" | {_s(blue,'check uptime')} | {_s(blue,'check ports')}\n"
-        f"  {_s(blue,'top processes')} | {_s(blue,'system health')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— live resource snapshot across all metrics</span>\n'
-        f"  {_s(blue,'show predictive alerts')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— metrics trending toward WARNING/CRITICAL in next 10 min</span>\n'
+        f'{_h("📊","System Monitoring","#7dd3fc")}\n'
+        f"  {_s(sky,'check disk')} | {_s(sky,'check memory')} | {_s(sky,'check cpu')}"
+        f" | {_s(sky,'check uptime')} | {_s(sky,'check ports')}\n"
+        f"  {_s(sky,'top processes')} | {_s(sky,'system health')}  "
+        f'{_note("— live resource snapshot across all metrics")}\n'
+        f"  {_s(sky,'show predictive alerts')}  "
+        f'{_note("— metrics trending toward WARNING/CRITICAL in next 10 min")}\n'
         "\n"
-        '<span style="color:#374151;font-weight:700">Alerts:</span>\n'
-        f"  {_s(purple,'show alerts')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— 20 most recent alerts with severity and ack status</span>\n'
-        f"  {_s(purple,'show alerts &lt;N&gt;')} | {_s(purple,'show critical alerts')} | {_s(purple,'show unacked alerts')}\n"
+        f'{_h("🔔","Alerts","#d8b4fe")}\n'
+        f"  {_s(violet,'show alerts')}  "
+        f'{_note("— 20 most recent alerts with severity and ack status")}\n'
+        f"  {_s(violet,'show alerts &lt;N&gt;')} | {_s(violet,'show critical alerts')} | {_s(violet,'show unacked alerts')}\n"
         "\n"
-        '<span style="color:#374151;font-weight:700">AI-Powered Analysis:</span>\n'
-        f"  {_s(green,'analyze logs: &lt;content&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— paste inline or upload a log file for AI analysis</span>\n'
-        f"  {_s(green,'explain alert &lt;id&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— AI root cause analysis and fix suggestions for an alert</span>\n'
-        f"  {_s(green,'rca &lt;alert_id&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— full AI-drafted RCA: summary, root cause, timeline, actions</span>\n'
-        f'  <span style="color:#9ca3af;font-style:italic">  Ask anything: "how do I reduce swap?" → answered by AI</span>\n'
+        f'{_h("🤖","AI-Powered Analysis","#6ee7b7")}\n'
+        f"  {_s(green,'analyze logs: &lt;content&gt;')}  "
+        f'{_note("— paste inline or upload a log file for AI analysis")}\n'
+        f"  {_s(green,'explain alert &lt;id&gt;')}  "
+        f'{_note("— AI root cause analysis and fix suggestions for an alert")}\n'
+        f"  {_s(green,'rca &lt;alert_id&gt;')}  "
+        f'{_note("— full AI-drafted RCA: summary, root cause, timeline, actions")}\n'
+        f"  {_note('Ask anything: how do I reduce swap? — answered by AI')}\n"
         "\n"
-        '<span style="color:#374151;font-weight:700">Runbooks:</span>\n'
-        f"  {_s(purple,'list runbooks')} | {_s(purple,'run &lt;runbook&gt;')}"
-        f" | {_s(purple,'confirm &lt;runbook&gt;')} | {_s(purple,'cancel')}\n"
-        f"  {_s(purple,'dry run &lt;runbook&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— simulate without executing (safe preview)</span>\n'
-        f'  <span style="color:#9ca3af;font-style:italic">  Available: clear_tmp, disk_breakdown, large_logs, listening_services, flush_cache, rotate_logs, rotate_secret</span>\n'
+        f'{_h("📋","Runbooks","#d8b4fe")}\n'
+        f"  {_s(violet,'list runbooks')} | {_s(violet,'run &lt;runbook&gt;')}"
+        f" | {_s(violet,'confirm &lt;runbook&gt;')} | {_s(violet,'cancel')}\n"
+        f"  {_s(violet,'dry run &lt;runbook&gt;')}  "
+        f'{_note("— simulate without executing (safe preview)")}\n'
+        f'  {_note("Available: clear_tmp, disk_breakdown, large_logs, listening_services, flush_cache, rotate_logs, rotate_secret")}\n'
         "\n"
-        '<span style="color:#374151;font-weight:700">ITSM Tickets:</span>\n'
-        f"  {_s(orange,'show tickets')} | {_s(orange,'show all tickets')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— list open tickets / all tickets (open + closed)</span>\n'
-        f"  {_s(orange,'show ticket &lt;id&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— full ticket details</span>\n'
+        f'{_h("🎫","ITSM Tickets","#fdba74")}\n'
+        f"  {_s(orange,'show tickets')} | {_s(orange,'show all tickets')}  "
+        f'{_note("— list open / all tickets")}\n'
+        f"  {_s(orange,'show ticket &lt;id&gt;')}  {_note('— full ticket details')}\n"
         f"  {_s(orange,'create ticket &lt;title&gt; [priority high|medium|low]')}\n"
         f"  {_s(orange,'close ticket &lt;id&gt;')} | {_s(orange,'link ticket &lt;id&gt; alert &lt;id&gt;')}\n"
         "\n"
-        '<span style="color:#374151;font-weight:700">Knowledge Base:</span>\n'
-        f"  {_s(cyan,'list kb')} | {_s(cyan,'search kb &lt;keyword&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— list all / search by title, content or tags</span>\n'
+        f'{_h("📚","Knowledge Base","#67e8f9")}\n'
+        f"  {_s(cyan,'list kb')} | {_s(cyan,'search kb &lt;keyword&gt;')}  "
+        f'{_note("— list all / search by title, content or tags")}\n'
         f"  {_s(cyan,'show kb &lt;id&gt;')} | {_s(cyan,'add kb &lt;title&gt;: &lt;content&gt;')}"
-        f" | {_s(cyan,'delete kb &lt;id&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— (admin only)</span>\n'
+        f" | {_s(cyan,'delete kb &lt;id&gt;')}  {_note('— (admin only)')}\n"
         "\n"
-        '<span style="color:#374151;font-weight:700">Services:</span>\n'
-        f"  {_s(amber,'show services')} | {_s(amber,'show services &lt;keyword&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— list all / filter by name</span>\n'
+        f'{_h("⚙️","Services","#fcd34d")}\n'
+        f"  {_s(amber,'show services')} | {_s(amber,'show services &lt;keyword&gt;')}  "
+        f'{_note("— list all / filter by name")}\n'
         f"  {_s(amber,'service status &lt;name&gt;')} | {_s(amber,'restart &lt;name&gt;')}"
         f" | {_s(amber,'confirm restart &lt;name&gt;')} | {_s(amber,'check failed services')}\n"
-        f"  {_s(amber,'kill process &lt;pid&gt;')} | {_s(amber,'confirm kill &lt;pid&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— terminate a process by PID (SIGTERM)</span>\n'
+        f"  {_s(amber,'kill process &lt;pid&gt;')} | {_s(amber,'confirm kill &lt;pid&gt;')}  "
+        f'{_note("— terminate a process by PID")}\n'
         "\n"
-        '<span style="color:#374151;font-weight:700">Network:</span>\n'
+        f'{_h("🌐","Network","#67e8f9")}\n'
         f"  {_s(cyan,'check ip')} | {_s(cyan,'check routes')} | {_s(cyan,'check network')}"
         f" | {_s(cyan,'check connections')}\n"
-        f"  {_s(cyan,'check dns')} | {_s(cyan,'check dns &lt;domain&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— connectivity check / full DNS lookup (A, MX, NS, TXT, CNAME)</span>\n'
+        f"  {_s(cyan,'check dns')} | {_s(cyan,'check dns &lt;domain&gt;')}  "
+        f'{_note("— full DNS lookup (A, MX, NS, TXT, CNAME)")}\n'
         "\n"
-        '<span style="color:#374151;font-weight:700">Multi-Node:</span>\n'
+        f'{_h("🖥️","Multi-Node","#fda4af")}\n'
         f"  {_s(rose,'add node &lt;name&gt; &lt;user&gt;@&lt;host&gt;')} | {_s(rose,'list nodes')}"
         f" | {_s(rose,'remove node &lt;name&gt;')}\n"
         f"  {_s(rose,'&lt;any command&gt; on &lt;node&gt;')} | {_s(rose,'&lt;any command&gt; on all')}\n"
         f"  {_s(rose,'copy ssh key &lt;user&gt;@&lt;host&gt;')} | {_s(rose,'confirm copy ssh key')}\n"
         "\n"
-        '<span style="color:#374151;font-weight:700">Analytics:</span>\n'
-        f"  {_s(green,'show analytics')} | {_s(green,'show analytics &lt;N&gt;d')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— alert stats, MTTR trend chart, team leaderboard  e.g. show analytics 30d</span>\n'
-        f"  {_s(green,'show prometheus metrics')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— Prometheus-format metrics inline (alerts, MTTR, resources, KB, runbooks)</span>\n'
+        f'{_h("📈","Analytics","#6ee7b7")}\n'
+        f"  {_s(green,'show analytics')} | {_s(green,'show analytics &lt;N&gt;d')}  "
+        f'{_note("— alert stats, MTTR trend, team leaderboard")}\n'
+        f"  {_s(green,'show prometheus metrics')}  "
+        f'{_note("— Prometheus-format metrics inline")}\n'
         f"  {_s(green,'configure prometheus')} | {_s(green,'enable metric &lt;name&gt;')} | {_s(green,'disable metric &lt;name&gt;')}\n"
-        f"  {_s(green,'analyze prometheus')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— AI interpretation and recommended actions</span>\n'
-        f"  {_s(green,'download PDF')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— download analytics report as PDF</span>\n'
+        f"  {_s(green,'analyze prometheus')}  {_note('— AI interpretation and recommendations')}\n"
+        f"  {_s(green,'download PDF')}  {_note('— download analytics report as PDF')}\n"
         "\n"
-        '<span style="color:#374151;font-weight:700">Testing (developer+ only):</span>\n'
-        f"  {_s(gray,'run tests')} | {_s(gray,'show test logs')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— run full test suite in background / list past runs</span>\n'
-        f"  {_s(gray,'analyze test log &lt;filename&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— AI analysis of a test run log</span>\n'
+        f'{_h("🧪","Testing","#e2e8f0")} {_note("(developer+ only)")}\n'
+        f"  {_s(silver,'run tests')} | {_s(silver,'show test logs')}  "
+        f'{_note("— run full test suite / list past runs")}\n'
+        f"  {_s(silver,'analyze test log &lt;filename&gt;')}  "
+        f'{_note("— AI analysis of a test run log")}\n'
         "\n"
-        '<span style="color:#374151;font-weight:700">Audit &amp; Reports:</span>\n'
-        f"  {_s(gray,'show audit log')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— last 50 commands with user, timestamp and result</span>\n'
-        f"  {_s(gray,'show report')} | {_s(gray,'config set report on')} | {_s(gray,'config set report off')}"
-        f" | {_s(gray,'config set report hour &lt;0-23&gt;')}\n"
+        f'{_h("🗂️","Audit &amp; Reports","#e2e8f0")}\n'
+        f"  {_s(silver,'show audit log')}  {_note('— last 50 commands with user, timestamp and result')}\n"
+        f"  {_s(silver,'show report')} | {_s(silver,'config set report on')} | {_s(silver,'config set report off')}"
+        f" | {_s(silver,'config set report hour &lt;0-23&gt;')}\n"
         "\n"
-        '<span style="color:#374151;font-weight:700">Slack:</span>\n'
-        f"  {_s(gray,'config set slack_webhook &lt;url&gt;')} | {_s(gray,'test slack')}"
-        f" | {_s(gray,'config set alert suppress &lt;minutes&gt;')}\n"
-        f"  {_s(gray,'config set slack bot token &lt;token&gt;')} | {_s(gray,'config set slack signing secret &lt;secret&gt;')}\n"
+        f'{_h("💬","Slack","#e2e8f0")}\n'
+        f"  {_s(silver,'config set slack_webhook &lt;url&gt;')} | {_s(silver,'test slack')}"
+        f" | {_s(silver,'config set alert suppress &lt;minutes&gt;')}\n"
+        f"  {_s(silver,'config set slack bot token &lt;token&gt;')} | {_s(silver,'config set slack signing secret &lt;secret&gt;')}\n"
         "\n"
-        '<span style="color:#374151;font-weight:700">AI / LLM:</span>\n'
-        f"  {_s(green,'test llm')} | {_s(green,'show llm config')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— test connection / show provider and model (admin only)</span>\n'
-        f"  {_s(gray,'config set llm provider &lt;ollama|groq|claude|none&gt;')}\n"
-        f"  {_s(gray,'config set llm api key &lt;key&gt;')} | {_s(gray,'config set llm model &lt;model&gt;')}"
-        f" | {_s(gray,'config set ollama url &lt;url&gt;')}\n"
+        f'{_h("🧠","AI / LLM","#6ee7b7")}\n'
+        f"  {_s(green,'test llm')} | {_s(green,'show llm config')}  "
+        f'{_note("— test connection / show provider and model (admin only)")}\n'
+        f"  {_s(silver,'config set llm provider &lt;ollama|groq|claude|none&gt;')}\n"
+        f"  {_s(silver,'config set llm api key &lt;key&gt;')} | {_s(silver,'config set llm model &lt;model&gt;')}"
+        f" | {_s(silver,'config set ollama url &lt;url&gt;')}\n"
         "\n"
-        '<span style="color:#374151;font-weight:700">User Management (admin only):</span>\n'
-        f"  {_s(rose,'add user &lt;username&gt; &lt;password&gt; &lt;viewer|operator|developer|admin&gt;')}"
-        f'  <span style="color:#9ca3af;font-style:italic">— roles: viewer &lt; operator &lt; developer &lt; admin</span>\n'
+        f'{_h("👤","User Management","#fda4af")} {_note("(admin only)")}\n'
+        f"  {_s(rose,'add user &lt;username&gt; &lt;password&gt; &lt;viewer|operator|developer|admin&gt;')}  "
+        f'{_note("— roles: viewer &lt; operator &lt; developer &lt; admin")}\n'
         f"  {_s(rose,'list users')} | {_s(rose,'set role &lt;username&gt; &lt;role&gt;')}"
         f" | {_s(rose,'deactivate user &lt;username&gt;')} | {_s(rose,'remove user &lt;username&gt;')}\n"
         "\n"
-        '<span style="color:#374151;font-weight:700">General:</span>\n'
-        f"  {_s(gray,'show system config')} | {_s(gray,'date')} | {_s(gray,'help')}\n"
+        f'{_h("✦","General","#fcd34d")}\n'
+        f"  {_s(amber,'show system config')} | {_s(amber,'date')} | {_s(amber,'help')}\n"
         "\n"
-        '<span style="color:#374151;font-weight:700">UI Only:</span>\n'
-        f'  <span style="color:#7c3aed;font-weight:600;">Alert thresholds and config are managed via the <span style="color:#4f46e5;text-decoration:underline;">Config tab</span>. KB articles via the <span style="color:#4f46e5;text-decoration:underline;">KB tab</span>.</span>'
+        f'{_h("🖱️","UI Only","#fcd34d")}\n'
+        f'  {_note("Alert thresholds and config are managed via the Config tab. KB articles via the KB tab.")}'
     )
 
 

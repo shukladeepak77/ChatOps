@@ -1279,6 +1279,17 @@ def route_message(message: str, caller_role: str = "operator", _nlu_depth: int =
             lines.append(f"  {n} — {info['user']}@{info['host']}  (key: {info['key_path']})")
         return {"response": "\n".join(lines)}
 
+    # ── Greeting / chitchat shortcut ─────────────────────────────────────────────
+    _greetings = {"hello", "hi", "hey", "howdy", "hiya", "yo", "sup", "greetings", "good morning", "good afternoon", "good evening"}
+    if s in _greetings or raw.lower().strip().rstrip("!").rstrip(".") in _greetings:
+        import random
+        _greeting_replies = [
+            "👋 Hey there! I'm your ChatOps assistant.\n\nI can help you monitor systems, check alerts, manage services, run runbooks, and much more.\n\nType `help` to see everything I can do, or just ask me naturally — like *\"check disk space\"* or *\"show critical alerts\"*.",
+            "Hello! 😊 Ready to help with your infrastructure.\n\nTry asking things like:\n• `system health` — full system overview\n• `show alerts` — recent alerts\n• `list runbooks` — available runbooks\n\nOr type `help` for the full command list.",
+            "Hi! I'm your ops assistant. 🚀\n\nAsk me anything about your systems — health checks, alerts, services, deployments, and more.\n\nNot sure where to start? Type `system health` for a quick overview.",
+        ]
+        return {"response": random.choice(_greeting_replies)}
+
     # ── NLU fallback: map natural language to a command or answer directly ───────
     from .llm import ask as _llm_ask, is_configured as _llm_ok
     if _llm_ok() and raw and _nlu_depth == 0:
@@ -1338,7 +1349,13 @@ def route_message(message: str, caller_role: str = "operator", _nlu_depth: int =
         if nlu_clean.upper() == "UNKNOWN":
             return {
                 "response": (
-                    "I didn't understand that. Type `help` to see all available commands."
+                    "Hmm, I'm not sure what you mean by that. 🤔\n\n"
+                    "I'm best at ops tasks — try something like:\n"
+                    "• `system health` — overall system status\n"
+                    "• `show alerts` — recent alerts\n"
+                    "• `check disk` — disk usage\n"
+                    "• `list runbooks` — available runbooks\n\n"
+                    "Type `help` to see the full command list."
                 )
             }
 
@@ -1346,7 +1363,13 @@ def route_message(message: str, caller_role: str = "operator", _nlu_depth: int =
 
     return {
         "response": (
-            "I didn't understand that. Type `help` to see all available commands."
+            "Hmm, I'm not sure what you mean by that. 🤔\n\n"
+            "I'm best at ops tasks — try something like:\n"
+            "• `system health` — overall system status\n"
+            "• `show alerts` — recent alerts\n"
+            "• `check disk` — disk usage\n"
+            "• `list runbooks` — available runbooks\n\n"
+            "Type `help` to see the full command list."
         )
     }
 
