@@ -126,12 +126,38 @@ All sections completing without errors = connectivity confirmed.
 
 **What changes each reservation:**
 - VPN username and password (always check Quick Access tab)
+- IOS-XRv SSH host key resets to DSA (must redo Step 9 below each time)
 
 **What stays the same:**
 - All device IPs (10.10.20.x)
 - All device SSH credentials
 - VPN host: `devnetsandbox-usw1-reservation.cisco.com:20175`
 - ChatOps device registrations (no need to re-register)
+
+---
+
+## Step 9 — Fix IOS-XRv SSH Key (required each new reservation)
+
+IOS-XRv starts with a DSA (`ssh-dss`) host key which modern paramiko cannot verify.
+Must replace it with RSA each time a new sandbox is reserved.
+
+```bash
+# In Ubuntu WSL2 — SSH to DevBox first
+ssh developer@10.10.20.50
+
+# From DevBox — SSH to IOS-XRv (DevBox has legacy SSH support for ssh-dss)
+ssh -o HostKeyAlgorithms=+ssh-dss -o PubkeyAcceptedKeyTypes=+ssh-dss developer@10.10.20.35
+
+# On IOS-XR — generate RSA host key
+crypto key generate rsa
+# Enter 2048 when prompted for modulus size
+
+# Exit back
+exit
+exit
+```
+
+After this, `.\network_tests.ps1 xr` will work.
 
 ---
 
