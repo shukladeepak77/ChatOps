@@ -929,6 +929,7 @@
         <input id="nm-ping-target" type="text" placeholder="8.8.8.8">
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">
+        <button class="m-btn m-btn-secondary" onclick="runNetMonitor('interfaces')">🖧 Interfaces</button>
         <button class="m-btn m-btn-secondary" onclick="runNetMonitor('routes')">🗺 Routes</button>
         <button class="m-btn m-btn-secondary" onclick="runNetMonitor('cpu')">⚙️ CPU/Memory</button>
         <button class="m-btn m-btn-secondary" onclick="runNetMonitor('bgp')">🔗 BGP Neighbors</button>
@@ -936,7 +937,7 @@
         <button class="m-btn m-btn-secondary" onclick="togglePingTarget()">📡 Ping Device</button>
         <button class="m-btn m-btn-secondary" onclick="runNetMonitor('backup-view')">💾 View Backup</button>
       </div>
-      <div class="m-result" id="nm-result"></div>
+      <div class="m-result" id="nm-result" style="white-space:normal"></div>
     </div>
     <div class="modal-footer">
       <button class="m-btn m-btn-secondary" onclick="closeModal('modal-net-monitor')">Close</button>
@@ -2217,25 +2218,225 @@ function togglePingTarget() {
   else runNetMonitor('ping');
 }
 
+// ── Network Monitor result formatters ────────────────────────────────────────
+
+function _nmTitle(icon, title, sub) {
+  return `<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px">
+    <span style="font-size:1rem">${icon}</span>
+    <strong style="font-size:.88rem;color:#e2e8f0">${title}</strong>
+    ${sub ? `<span style="font-size:.74rem;color:#64748b">${sub}</span>` : ''}
+  </div>`;
+}
+
+function _nmPre(text) {
+  const esc = (text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return `<pre style="font-family:monospace;font-size:.75rem;background:rgba(0,0,0,.32);border:1px solid rgba(255,255,255,.07);
+    border-radius:7px;padding:12px 14px;overflow:auto;max-height:300px;
+    color:#94a3b8;white-space:pre;line-height:1.55;margin:0">${esc}</pre>`;
+}
+
+function _nmEmpty(msg) {
+  return `<div style="color:#64748b;font-size:.82rem;padding:8px 0">${msg}</div>`;
+}
+
+function _nmBoxRoutes(name, data) {
+  let html = _nmTitle('🗺', `Routing Table — ${name}`);
+  if (data.raw && data.raw.trim()) {
+    html += _nmPre(data.raw);
+  } else if ((data.routes||[]).length) {
+    html += '<table class="m-table"><thead><tr><th>Code</th><th>Network</th><th>Next Hop</th><th>Dist</th><th>Metric</th></tr></thead><tbody>';
+    data.routes.forEach(r => {
+      html += `<tr><td style="font-family:monospace;font-size:.76rem">${r.code}</td>
+        <td style="font-family:monospace">${r.network}</td>
+        <td style="font-family:monospace">${r.next_hop}</td>
+        <td style="color:#64748b">${r.distance}</td>
+        <td style="color:#64748b">${r.metric}</td></tr>`;
+    });
+    html += '</tbody></table>';
+  } else {
+    html += _nmEmpty('No routes found.');
+  }
+  return html;
+}
+
+function _nmBoxCpu(name, data) {
+  const cpu = data.cpu_5sec || '—';
+  const used = data.mem_used_bytes || '—';
+  const free = data.mem_free_bytes || '—';
+  const cpuNum = parseFloat(cpu);
+  const cpuColor = isNaN(cpuNum) ? '#94a3b8' : cpuNum > 80 ? '#f87171' : cpuNum > 50 ? '#fbbf24' : '#6ee7b7';
+  let html = _nmTitle('⚙️', `CPU & Memory — ${name}`);
+  html += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px">
+    <div style="background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:12px;text-align:center">
+      <div style="font-size:1.6rem;font-weight:700;color:${cpuColor};font-family:monospace">${cpu}%</div>
+      <div style="font-size:.7rem;color:#64748b;margin-top:3px;text-transform:uppercase;letter-spacing:.05em">CPU 5 sec</div>
+    </div>
+    <div style="background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:12px;text-align:center">
+      <div style="font-size:1.1rem;font-weight:700;color:#a5b4fc;font-family:monospace">${used}</div>
+      <div style="font-size:.7rem;color:#64748b;margin-top:3px;text-transform:uppercase;letter-spacing:.05em">Mem Used</div>
+    </div>
+    <div style="background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:12px;text-align:center">
+      <div style="font-size:1.1rem;font-weight:700;color:#6ee7b7;font-family:monospace">${free}</div>
+      <div style="font-size:.7rem;color:#64748b;margin-top:3px;text-transform:uppercase;letter-spacing:.05em">Mem Free</div>
+    </div>
+  </div>`;
+  if (data.cpu_raw && data.cpu_raw.trim()) html += _nmPre(data.cpu_raw);
+  return html;
+}
+
+function _nmBoxBgp(name, data) {
+  let html = _nmTitle('🔗', `BGP Neighbors — ${name}`);
+  const neighbors = data.neighbors || [];
+  if (neighbors.length) {
+    html += '<table class="m-table"><thead><tr><th>Neighbor</th><th>AS</th><th>State</th><th>Prefixes</th><th>Up/Down</th></tr></thead><tbody>';
+    neighbors.forEach(n => {
+      const cls = n.state === 'Established' ? 'm-badge-green' : 'm-badge-red';
+      html += `<tr>
+        <td style="font-family:monospace">${n.neighbor}</td>
+        <td>${n.as}</td>
+        <td><span class="m-badge ${cls}">${n.state}</span></td>
+        <td style="font-family:monospace">${n.prefixes}</td>
+        <td style="font-size:.76rem;color:#64748b">${n.updown}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+  } else {
+    const isLinux = (data.raw||'').includes('Linux host');
+    html += _nmEmpty(isLinux ? 'N/A — Linux host, BGP not applicable.' : 'No BGP neighbors (BGP not configured on this device).');
+  }
+  return html;
+}
+
+function _nmBoxArp(name, data) {
+  const entries = data.entries || [];
+  let html = _nmTitle('📋', `ARP Table — ${name}`, `${entries.length} entr${entries.length===1?'y':'ies'}`);
+  if (entries.length) {
+    html += '<table class="m-table"><thead><tr><th>IP Address</th><th>MAC Address</th><th>Interface</th></tr></thead><tbody>';
+    entries.forEach(e => {
+      html += `<tr>
+        <td style="font-family:monospace">${e.ip}</td>
+        <td style="font-family:monospace;color:#94a3b8">${e.mac}</td>
+        <td style="font-size:.78rem">${e.interface}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+  } else {
+    html += _nmEmpty('No ARP entries found.');
+  }
+  return html;
+}
+
+function _nmBoxPing(name, target, data) {
+  const rate = parseInt(data.success_rate || '0');
+  const color = rate === 100 ? '#6ee7b7' : rate >= 60 ? '#fbbf24' : '#f87171';
+  let html = _nmTitle('📡', `Ping — ${name}`, `→ ${target}`);
+  html += `<div style="display:flex;align-items:center;gap:16px;padding:14px 16px;
+    background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.08);border-radius:8px;margin-bottom:10px">
+    <div style="font-size:2rem;font-weight:800;color:${color};font-family:monospace">${rate}%</div>
+    <div>
+      <div style="font-size:.84rem;color:#e2e8f0;font-weight:600">Success Rate</div>
+      <div style="font-size:.74rem;color:#64748b;margin-top:2px">Target: ${target}</div>
+    </div>
+  </div>`;
+  if (data.raw) html += _nmPre(data.raw);
+  return html;
+}
+
+function _nmBoxBackup(name, data) {
+  let html = _nmTitle('💾', `Config Backup — ${name}`, data.lines ? `${data.lines} lines` : '');
+  if (data.config_text && data.config_text.trim()) {
+    html += _nmPre(data.config_text);
+  } else {
+    html += _nmEmpty('No backup found. Use "Backup Config" from the Network menu to create one first.');
+  }
+  return html;
+}
+
 async function runNetMonitor(action) {
   const name = document.getElementById('nm-device').value;
-  if (!name) { document.getElementById('nm-result').innerHTML = '<span style="color:#f87171">Select a device first.</span>'; return; }
   const el = document.getElementById('nm-result');
-  el.innerHTML = '<span style="opacity:.6">Running…</span>';
-  let cmd;
-  if (action === 'routes')      cmd = `show routes ${name}`;
-  else if (action === 'cpu')    cmd = `show device cpu ${name}`;
-  else if (action === 'bgp')    cmd = `show bgp neighbors ${name}`;
-  else if (action === 'arp')    cmd = `show arp ${name}`;
-  else if (action === 'ping') {
-    const target = document.getElementById('nm-ping-target').value.trim() || '8.8.8.8';
-    cmd = `ping device ${name} ${target}`;
-    document.getElementById('nm-ping-target-field').style.display = 'none';
-  } else if (action === 'backup-view') {
-    cmd = `show config backup ${name}`;
+  if (!name) {
+    el.style.cssText = 'display:block;white-space:normal';
+    el.className = 'm-result err';
+    el.innerHTML = 'Select a device first.';
+    return;
   }
-  closeModal('modal-net-monitor');
-  menuCmd(cmd);
+  el.style.cssText = 'display:block;white-space:normal';
+  el.className = 'm-result ok';
+  el.innerHTML = '<span style="opacity:.6"><span class="m-spinner"></span> Connecting…</span>';
+
+  try {
+    const base = `/chatops/network/devices/${encodeURIComponent(name)}`;
+    let html = '';
+
+    if (action === 'interfaces') {
+      const res = await authFetch(`${base}/interfaces`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Request failed');
+      const ifaces = data.interfaces || [];
+      const up = ifaces.filter(i => (i.status||'').toLowerCase() === 'up').length;
+      let ifHtml = _nmTitle('🖧', `Interfaces — ${name}`, `${ifaces.length} total · <span style="color:#6ee7b7">${up} up</span> · <span style="color:#f87171">${ifaces.length-up} down</span>`);
+      ifHtml += '<table class="m-table"><thead><tr><th>Interface</th><th>IP</th><th>Status</th><th>Protocol</th><th>In bps</th><th>Out bps</th></tr></thead><tbody>';
+      ifaces.forEach(i => {
+        const stBadge = (i.status||'').toLowerCase() === 'up'
+          ? '<span class="m-badge m-badge-green">up</span>'
+          : `<span class="m-badge m-badge-red">${i.status||'?'}</span>`;
+        ifHtml += `<tr>
+          <td style="font-family:monospace;font-size:.78rem"><strong>${i.interface}</strong></td>
+          <td style="font-family:monospace;font-size:.76rem">${i.ip||'—'}</td>
+          <td>${stBadge}</td>
+          <td style="font-size:.76rem;color:#94a3b8">${i.protocol||'—'}</td>
+          <td style="font-size:.76rem">${i.in_rate != null ? i.in_rate.toLocaleString() : '—'}</td>
+          <td style="font-size:.76rem">${i.out_rate != null ? i.out_rate.toLocaleString() : '—'}</td>
+        </tr>`;
+      });
+      ifHtml += '</tbody></table>';
+      html = ifHtml;
+
+    } else if (action === 'routes') {
+      const res = await authFetch(`${base}/routes`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Request failed');
+      html = _nmBoxRoutes(name, data);
+
+    } else if (action === 'cpu') {
+      const res = await authFetch(`${base}/cpu`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Request failed');
+      html = _nmBoxCpu(name, data);
+
+    } else if (action === 'bgp') {
+      const res = await authFetch(`${base}/bgp`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Request failed');
+      html = _nmBoxBgp(name, data);
+
+    } else if (action === 'arp') {
+      const res = await authFetch(`${base}/arp`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Request failed');
+      html = _nmBoxArp(name, data);
+
+    } else if (action === 'ping') {
+      const target = document.getElementById('nm-ping-target').value.trim() || '8.8.8.8';
+      document.getElementById('nm-ping-target-field').style.display = 'none';
+      const res = await authFetch(`${base}/ping?target=${encodeURIComponent(target)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Request failed');
+      html = _nmBoxPing(name, target, data);
+
+    } else if (action === 'backup-view') {
+      const res = await authFetch(`${base}/backups/latest`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'No backup found');
+      html = _nmBoxBackup(name, data);
+    }
+
+    el.innerHTML = html;
+  } catch(e) {
+    el.className = 'm-result err';
+    el.innerHTML = `Error: ${e.message}`;
+  }
 }
 
 async function loadInterfacesModal() {

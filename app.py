@@ -942,3 +942,15 @@ def network_device_arp(name: str, user=Depends(_get_current_user)):
     if result["status"] == "error":
         raise HTTPException(status_code=502, detail=result["error"])
     return result
+
+
+@app.get("/chatops/network/devices/{name}/ping")
+def network_device_ping(name: str, target: str = "8.8.8.8", user=Depends(_get_current_user)):
+    from chatops.network import ping_device
+    dev = netdev_get(name)
+    if not dev:
+        raise HTTPException(status_code=404, detail="Device not found")
+    result = ping_device(dev, target=target)
+    if result["status"] == "error":
+        raise HTTPException(status_code=502, detail=result["error"])
+    return result
