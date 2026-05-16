@@ -118,8 +118,8 @@ def get_cpu_memory(device: dict) -> dict:
     """Return CPU and memory utilization."""
     try:
         with _netmiko_conn(device) as conn:
-            cpu_out  = conn.send_command("show processes cpu sorted | head 6", read_timeout=15)
-            mem_out  = conn.send_command("show processes memory sorted | head 4", read_timeout=15)
+            cpu_out  = conn.send_command("show processes cpu | include CPU utilization", read_timeout=15)
+            mem_out  = conn.send_command("show processes memory | include Processor", read_timeout=15)
         cpu_pct  = _parse_field(cpu_out, r"CPU utilization.*?(\d+)%/")
         mem_used = _parse_field(mem_out, r"Processor\s+(\d+)\s+\d+")
         mem_free = _parse_field(mem_out, r"Processor\s+\d+\s+(\d+)")

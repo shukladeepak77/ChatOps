@@ -902,6 +902,20 @@
   </div>
 </div>
 
+<!-- DevNet Quick Connect -->
+<div class="modal-backdrop" id="modal-devnet-connect">
+  <div class="modal-box modal-wide">
+    <div class="modal-header"><span class="modal-icon">🧪</span><span class="modal-title">DevNet Sandbox — Quick Connect</span><button class="modal-close" onclick="closeModal('modal-devnet-connect')">✕</button></div>
+    <div class="modal-body">
+      <div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:6px;padding:10px 14px;margin-bottom:16px;font-size:.82rem;color:#fcd34d;">
+        ⚠️ VPN must be connected first — run <code style="background:rgba(0,0,0,.3);padding:1px 5px;border-radius:3px;">sudo openconnect --protocol=anyconnect devnetsandbox-usw1-reservation.cisco.com:20175</code> in Ubuntu WSL2, then add Windows route.
+      </div>
+      <div id="devnet-device-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"></div>
+      <div id="devnet-result" style="margin-top:12px;"></div>
+    </div>
+  </div>
+</div>
+
 <!-- Network Monitor -->
 <div class="modal-backdrop" id="modal-net-monitor">
   <div class="modal-box modal-wide">
@@ -1019,13 +1033,8 @@
       <div class="drop-item" onclick="menuCmd('top processes')"><span class="di">📊</span> Top Processes</div>
       <div class="drop-item" onclick="menuCmd('check ports')"><span class="di">🔌</span> Check Ports</div>
       <div class="drop-item" onclick="menuCmd('check failed services')"><span class="di">⚠️</span> Failed Services</div>
-    </div>
-  </div>
-
-  <!-- Network -->
-  <div class="menu-group">
-    <button class="menu-trigger" onclick="toggleMenu('dd-network')">Network <span class="arrow">▼</span></button>
-    <div class="dropdown-menu" id="dd-network">
+      <div class="drop-sep"></div>
+      <div class="drop-label">Node Network</div>
       <div class="drop-item" onclick="menuCmd('check ip')"><span class="di">🌐</span> Check IP</div>
       <div class="drop-item" onclick="menuCmd('check routes')"><span class="di">🗺</span> Check Routes</div>
       <div class="drop-item" onclick="menuCmd('check network')"><span class="di">📡</span> Network Stats</div>
@@ -1080,6 +1089,9 @@
       <div class="drop-item" onclick="loadNetdevSelects();openModal('modal-net-backup');closeAllMenus()"><span class="di">💾</span> Backup Config…</div>
       <div class="drop-item" onclick="loadNetdevSelects('nm-device');openModal('modal-net-monitor');closeAllMenus()"><span class="di">💿</span> View Latest Backup…</div>
       <div class="drop-item" onclick="loadNetdevSelects();openModal('modal-net-push');closeAllMenus()"><span class="di">📤</span> Push Config…</div>
+      <div class="drop-sep"></div>
+      <div class="drop-label">DevNet Sandbox</div>
+      <div class="drop-item" onclick="openDevnetModal();closeAllMenus()"><span class="di">🧪</span> Quick Connect…</div>
     </div>
   </div>
 
@@ -2036,6 +2048,81 @@ function copyIntegUrl(inputId) {
   });
 }
 
+
+// ── DevNet Sandbox Quick Connect ──────────────────────────────────────────────
+
+const DEVNET_DEVICES = [
+  { name:'cat8kv',    host:'10.10.20.48', port:22,  username:'developer', password:'C1sco12345', device_type:'cisco_xe',   label:'Catalyst 8000v',  icon:'🔀', color:'#6ee7b7' },
+  { name:'ios-xrv',   host:'10.10.20.35', port:22,  username:'developer', password:'C1sco12345', device_type:'cisco_xr',   label:'IOS-XRv 9000',    icon:'🔁', color:'#93c5fd' },
+  { name:'nexus9k',   host:'10.10.20.40', port:22,  username:'admin',     password:'RG!_Yw200',  device_type:'cisco_nxos', label:'Nexus 9K',        icon:'🔃', color:'#c4b5fd' },
+  { name:'devbox',    host:'10.10.20.50', port:22,  username:'developer', password:'C1sco12345', device_type:'linux',      label:'Developer Box',   icon:'🖥', color:'#fcd34d' },
+];
+
+async function openDevnetModal() {
+  openModal('modal-devnet-connect');
+  const grid = document.getElementById('devnet-device-grid');
+  grid.innerHTML = '<div style="grid-column:1/-1;color:var(--text3);font-size:.8rem">Checking registered devices…</div>';
+  let registered = [];
+  try {
+    const res = await authFetch('/chatops/network/devices');
+    const devs = await res.json();
+    registered = devs.map(d => d.name);
+  } catch(e) {}
+  grid.innerHTML = DEVNET_DEVICES.map(d => {
+    const isReg = registered.includes(d.name);
+    const typeLabels = {cisco_xe:'IOS-XE',cisco_xr:'IOS-XR',cisco_nxos:'NX-OS',linux:'Linux'};
+    return `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:14px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <span style="font-size:1.4rem">${d.icon}</span>
+        <div>
+          <div style="font-weight:600;color:${d.color}">${d.label}</div>
+          <div style="font-size:.75rem;color:var(--text3);font-family:monospace">${d.host}:${d.port}</div>
+        </div>
+        <div style="margin-left:auto;">
+          <span class="m-badge ${isReg ? 'm-badge-green' : 'm-badge-gray'}">${isReg ? '✓ Registered' : 'Not registered'}</span>
+        </div>
+      </div>
+      <div style="font-size:.75rem;color:var(--text3);margin-bottom:10px;">
+        Type: <strong>${typeLabels[d.device_type]||d.device_type}</strong> &nbsp;|&nbsp; User: <code>${d.username}</code>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button class="m-btn m-btn-primary" style="flex:1;font-size:.78rem;" onclick="devnetRegister('${d.name}')" ${isReg ? 'disabled' : ''}>${isReg ? '✓ Already registered' : '➕ Register'}</button>
+        ${isReg ? `<button class="m-btn" style="font-size:.78rem;background:rgba(99,102,241,.2);border:1px solid rgba(99,102,241,.3);color:#c7d2fe;" onclick="devnetCheck('${d.name}')">🔍 Test SSH</button>` : ''}
+        ${isReg ? `<button class="m-btn" style="font-size:.78rem;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#fca5a5;" onclick="deleteNetdev('${d.name}');setTimeout(openDevnetModal,800)">🗑</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function devnetRegister(name) {
+  const d = DEVNET_DEVICES.find(x => x.name === name);
+  if (!d) return;
+  showModalResult('devnet-result', `Registering ${d.label}…`, true);
+  try {
+    const res = await authFetch('/chatops/network/devices', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name:d.name, host:d.host, port:d.port, username:d.username, password:d.password, device_type:d.device_type, description:`DevNet Sandbox — ${d.label}`}),
+    });
+    const data = await res.json();
+    if (!res.ok) { showModalResult('devnet-result', data.detail||'Error registering device.', false); return; }
+    showModalResult('devnet-result', `✓ ${d.label} registered (${d.host}).`, true);
+    syncToChat(`🧪 DevNet device registered: ${d.label} (${d.host})`);
+    setTimeout(openDevnetModal, 600);
+  } catch(e) { showModalResult('devnet-result','Error: '+e.message,false); }
+}
+
+async function devnetCheck(name) {
+  showModalResult('devnet-result', `Testing SSH to ${name}…`, true);
+  try {
+    const res = await authFetch(`/chatops/network/devices/${encodeURIComponent(name)}/info`);
+    const data = await res.json();
+    if (data.status === 'ok') {
+      showModalResult('devnet-result', `✓ ${name} reachable — ${data.hostname} running IOS ${data.version}, uptime: ${data.uptime}`, true);
+    } else {
+      showModalResult('devnet-result', `✗ ${name} unreachable — ${data.error}`, false);
+    }
+  } catch(e) { showModalResult('devnet-result','Error: '+e.message,false); }
+}
 
 // ── Network Device Modals ─────────────────────────────────────────────────────
 
