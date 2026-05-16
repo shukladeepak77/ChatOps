@@ -53,6 +53,7 @@ try {
     } else { Show-Error $r.error }
 } catch { Show-Error $_.Exception.Message }
 
+if ($os -eq "xr") { Start-Sleep -Seconds 3 }
 Section "INTERFACES (show ip interface brief)"
 try {
     $r = Invoke-RestMethod -Method GET -Uri "$base/interfaces" -Headers $headers
@@ -66,6 +67,7 @@ try {
     } else { Show-Error $r.error }
 } catch { Show-Error $_.Exception.Message }
 
+if ($os -eq "xr") { Start-Sleep -Seconds 3 }
 Section "ROUTING TABLE (show ip route)"
 try {
     $r = Invoke-RestMethod -Method GET -Uri "$base/routes" -Headers $headers
@@ -81,6 +83,7 @@ try {
     } else { Show-Error $r.error }
 } catch { Show-Error $_.Exception.Message }
 
+if ($os -eq "xr") { Start-Sleep -Seconds 3 }
 Section "BGP NEIGHBORS (show bgp summary)"
 try {
     $r = Invoke-RestMethod -Method GET -Uri "$base/bgp" -Headers $headers
@@ -99,6 +102,7 @@ try {
     } else { Show-Error $r.error }
 } catch { Show-Error $_.Exception.Message }
 
+if ($os -eq "xr") { Start-Sleep -Seconds 3 }
 Section "CPU & MEMORY (show processes)"
 try {
     $r = Invoke-RestMethod -Method GET -Uri "$base/cpu" -Headers $headers
@@ -112,6 +116,7 @@ try {
     } else { Show-Error $r.error }
 } catch { Show-Error $_.Exception.Message }
 
+if ($os -eq "xr") { Start-Sleep -Seconds 3 }
 Section "ARP TABLE (show arp)"
 try {
     $r = Invoke-RestMethod -Method GET -Uri "$base/arp" -Headers $headers

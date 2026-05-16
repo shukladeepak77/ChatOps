@@ -8,6 +8,7 @@ import xml.etree.ElementTree as ET
 from typing import Optional
 
 
+
 # ── Credential helpers ────────────────────────────────────────────────────────
 
 def encode_password(pw: str) -> str:
@@ -26,6 +27,17 @@ def decode_password(enc: str) -> str:
 
 def _netmiko_conn(device: dict):
     from netmiko import ConnectHandler
+    import paramiko
+    # Re-enable ssh-dss (DSA) and ssh-rsa for legacy IOS-XR devices.
+    # IOS-XRv 9K only offers ssh-dss host key — disabled in modern paramiko/OpenSSH.
+    try:
+        preferred = list(paramiko.Transport._preferred_keys)
+        for alg in ("ssh-dss", "ssh-rsa"):
+            if alg not in preferred:
+                preferred.append(alg)
+        paramiko.Transport._preferred_keys = preferred
+    except Exception:
+        pass
     pw = decode_password(device.get("password_enc", ""))
     return ConnectHandler(
         device_type=device.get("device_type", "cisco_xe"),
@@ -71,15 +83,25 @@ def _netconf_device_type(dt: str) -> str:
 def get_device_info(device: dict) -> dict:
     """Return hostname, version, uptime via 'show version'."""
     try:
+        dt = device.get("device_type", "cisco_xe")
         with _netmiko_conn(device) as conn:
             output = conn.send_command("show version", read_timeout=20)
-        hostname = _parse_field(output, r"^(\S+)\s+uptime", r"hostname\s+(\S+)")
-        version  = _parse_field(output, r"Version\s+([\d\w\.\(\)]+)")
-        uptime   = _parse_field(output, r"uptime is\s+(.+)")
-        model    = _parse_field(output, r"[Cc]isco\s+([\w\-]+)\s+.*[Pp]rocessor",
-                                        r"Hardware:\s+\S+,\s+(\S+)")
-        serial   = _parse_field(output, r"[Ss]erial [Nn]umber\s*:\s*(\S+)",
-                                        r"System serial number\s*:\s*(\S+)")
+        if dt == "cisco_nxos":
+            hostname = _parse_field(output, r"Device name:\s+(\S+)")
+            version  = _parse_field(output, r"NXOS:\s+version\s+([\d\.\(\)a-zA-Z]+)",
+                                            r"system:\s+version\s+([\d\.\(\)a-zA-Z]+)")
+            uptime   = _parse_field(output, r"Kernel uptime is\s+(.+)")
+            model    = _parse_field(output, r"cisco\s+(Nexus[\w\s]+Series)",
+                                            r"Hardware\s*\n\s+cisco\s+(\S+)")
+            serial   = _parse_field(output, r"Processor Board ID\s+(\S+)")
+        else:
+            hostname = _parse_field(output, r"^(\S+)\s+uptime", r"hostname\s+(\S+)")
+            version  = _parse_field(output, r"Version\s+([\d\w\.\(\)]+)")
+            uptime   = _parse_field(output, r"uptime is\s+(.+)")
+            model    = _parse_field(output, r"[Cc]isco\s+([\w\-]+)\s+.*[Pp]rocessor",
+                                            r"Hardware:\s+\S+,\s+(\S+)")
+            serial   = _parse_field(output, r"[Ss]erial [Nn]umber\s*:\s*(\S+)",
+                                            r"System serial number\s*:\s*(\S+)")
         return {
             "status": "ok", "hostname": hostname, "version": version,
             "uptime": uptime, "model": model, "serial": serial,
@@ -92,11 +114,16 @@ def get_device_info(device: dict) -> dict:
 def get_interfaces(device: dict) -> dict:
     """Return interface list with status, IP, speed."""
     try:
+        dt = device.get("device_type", "cisco_xe")
         with _netmiko_conn(device) as conn:
-            brief = conn.send_command("show ip interface brief", read_timeout=20)
-            stats = conn.send_command("show interfaces", read_timeout=30)
-        ifaces = _parse_ip_int_brief(brief)
-        _enrich_with_stats(ifaces, stats)
+            if dt == "cisco_nxos":
+                brief = conn.send_command("show ip interface brief", read_timeout=20)
+                ifaces = _parse_nxos_ip_int_brief(brief)
+            else:
+                brief = conn.send_command("show ip interface brief", read_timeout=20)
+                stats = conn.send_command("show interfaces", read_timeout=30)
+                ifaces = _parse_ip_int_brief(brief)
+                _enrich_with_stats(ifaces, stats)
         return {"status": "ok", "interfaces": ifaces}
     except Exception as e:
         return {"status": "error", "error": str(e)}
@@ -117,12 +144,20 @@ def get_routes(device: dict, vrf: str = None) -> dict:
 def get_cpu_memory(device: dict) -> dict:
     """Return CPU and memory utilization."""
     try:
+        dt = device.get("device_type", "cisco_xe")
         with _netmiko_conn(device) as conn:
-            cpu_out  = conn.send_command("show processes cpu | include CPU utilization", read_timeout=15)
-            mem_out  = conn.send_command("show processes memory | include Processor", read_timeout=15)
-        cpu_pct  = _parse_field(cpu_out, r"CPU utilization.*?(\d+)%/")
-        mem_used = _parse_field(mem_out, r"Processor\s+(\d+)\s+\d+")
-        mem_free = _parse_field(mem_out, r"Processor\s+\d+\s+(\d+)")
+            if dt == "cisco_nxos":
+                cpu_out = conn.send_command("show processes cpu | grep 'CPU utilization'", read_timeout=15)
+                mem_out = conn.send_command("show system resources | grep 'Memory'", read_timeout=15)
+                cpu_pct  = _parse_field(cpu_out, r"CPU utilization.*?(\d+\.?\d*)%")
+                mem_used = _parse_field(mem_out, r"Memory usage:\s+(\d+)K")
+                mem_free = _parse_field(mem_out, r"Memory usage:\s+\d+K used,\s+(\d+)K")
+            else:
+                cpu_out = conn.send_command("show processes cpu | include CPU utilization", read_timeout=15)
+                mem_out = conn.send_command("show processes memory | include Processor", read_timeout=15)
+                cpu_pct  = _parse_field(cpu_out, r"CPU utilization.*?(\d+)%/")
+                mem_used = _parse_field(mem_out, r"Processor\s+(\d+)\s+\d+")
+                mem_free = _parse_field(mem_out, r"Processor\s+\d+\s+(\d+)")
         return {
             "status": "ok",
             "cpu_5sec": cpu_pct,
@@ -186,8 +221,10 @@ def ping_device(device: dict, target: str = "8.8.8.8", count: int = 5) -> dict:
 def get_arp_table(device: dict) -> dict:
     """Return ARP table entries."""
     try:
+        dt = device.get("device_type", "cisco_xe")
+        cmd = "show ip arp" if dt == "cisco_nxos" else "show arp"
         with _netmiko_conn(device) as conn:
-            output = conn.send_command("show arp", read_timeout=20)
+            output = conn.send_command(cmd, read_timeout=20)
         entries = []
         for line in output.splitlines():
             m = re.match(
@@ -232,6 +269,21 @@ def _parse_field(text: str, *patterns) -> str:
         if m:
             return m.group(1).strip()
     return "unknown"
+
+
+def _parse_nxos_ip_int_brief(text: str) -> list:
+    ifaces = []
+    for line in text.splitlines():
+        m = re.match(r"^(\S+)\s+([\d\.]+/\d+|unassigned)\s+protocol-(\w+)/link-(\w+)/admin-(\w+)", line)
+        if m:
+            ip = m.group(2).split("/")[0] if "/" in m.group(2) else m.group(2)
+            ifaces.append({
+                "interface": m.group(1), "ip": ip,
+                "status":    m.group(4), "protocol": m.group(3),
+                "in_rate": None, "out_rate": None,
+                "errors_in": None, "errors_out": None,
+            })
+    return ifaces
 
 
 def _parse_ip_int_brief(text: str) -> list:
