@@ -15,9 +15,10 @@ if (-not $os) {
     Write-Host "  [1] IOS-XE  -- Cat8kv       (10.10.20.48)" -ForegroundColor Green
     Write-Host "  [2] IOS-XR  -- IOS-XRv 9K   (10.10.20.35)" -ForegroundColor Blue
     Write-Host "  [3] NX-OS   -- Nexus 9K      (10.10.20.40)" -ForegroundColor Magenta
+    Write-Host "  [4] Linux   -- DevBox        (10.10.20.50)" -ForegroundColor Cyan
     Write-Host ""
-    $choice = Read-Host "  Enter 1, 2 or 3"
-    $os = @{"1"="xe";"2"="xr";"3"="nx"}[$choice]
+    $choice = Read-Host "  Enter 1, 2, 3 or 4"
+    $os = @{"1"="xe";"2"="xr";"3"="nx";"4"="db"}[$choice]
     if (-not $os) { Write-Host "Invalid choice. Exiting." -ForegroundColor Red; exit }
 }
 
@@ -25,7 +26,8 @@ switch ($os.ToLower()) {
     "xe"    { $device = "cat8kv";  $os_label = "IOS-XE";  $color = "Green"   }
     "xr"    { $device = "ios-xrv"; $os_label = "IOS-XR";  $color = "Blue"    }
     "nx"    { $device = "nexus9k"; $os_label = "NX-OS";   $color = "Magenta" }
-    default { Write-Host "Unknown OS '$os'. Use xe, xr or nx." -ForegroundColor Red; exit }
+    "db"    { $device = "devbox";  $os_label = "Linux";   $color = "Cyan"    }
+    default { Write-Host "Unknown OS '$os'. Use xe, xr, nx or db." -ForegroundColor Red; exit }
 }
 
 $base = "$base_url/$device"
@@ -85,6 +87,9 @@ try {
 
 if ($os -eq "xr") { Start-Sleep -Seconds 3 }
 Section "BGP NEIGHBORS (show bgp summary)"
+if ($os -eq "db") {
+    Write-Host "  N/A -- Linux host, BGP not applicable." -ForegroundColor DarkGray
+} else {
 try {
     $r = Invoke-RestMethod -Method GET -Uri "$base/bgp" -Headers $headers
     if ($r.status -eq "ok") {
@@ -97,19 +102,21 @@ try {
             }
         } else {
             Write-Host "  No BGP neighbors (BGP not configured on this device)." -ForegroundColor DarkGray
-            if ($r.raw) { Write-Host "  $($r.raw)" -ForegroundColor DarkGray }
         }
     } else { Show-Error $r.error }
 } catch { Show-Error $_.Exception.Message }
+}
 
 if ($os -eq "xr") { Start-Sleep -Seconds 3 }
-Section "CPU & MEMORY (show processes)"
+$cpuTitle = if ($os -eq "db") { "CPU & MEMORY (top / free -m)" } else { "CPU & MEMORY (show processes)" }
+$memUnit  = if ($os -eq "db") { "" } else { " bytes" }
+Section $cpuTitle
 try {
     $r = Invoke-RestMethod -Method GET -Uri "$base/cpu" -Headers $headers
     if ($r.status -eq "ok") {
         Write-Host "  CPU (5sec) : $($r.cpu_5sec)%"
-        Write-Host "  Mem Used   : $($r.mem_used_bytes) bytes"
-        Write-Host "  Mem Free   : $($r.mem_free_bytes) bytes"
+        Write-Host "  Mem Used   : $($r.mem_used_bytes)$memUnit"
+        Write-Host "  Mem Free   : $($r.mem_free_bytes)$memUnit"
         Write-Host ""
         Write-Host "  Raw output:" -ForegroundColor DarkGray
         Write-Host "  $($r.cpu_raw)" -ForegroundColor DarkGray

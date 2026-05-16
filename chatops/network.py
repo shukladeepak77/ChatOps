@@ -84,6 +84,18 @@ def get_device_info(device: dict) -> dict:
     """Return hostname, version, uptime via 'show version'."""
     try:
         dt = device.get("device_type", "cisco_xe")
+        if dt == "linux":
+            with _netmiko_conn(device) as conn:
+                hostname = conn.send_command("hostname", read_timeout=10).strip()
+                uname    = conn.send_command("uname -srm", read_timeout=10).strip()
+                uptime   = conn.send_command("uptime -p 2>/dev/null || uptime", read_timeout=10).strip()
+                os_rel   = conn.send_command("cat /etc/os-release 2>/dev/null", read_timeout=10)
+            version = _parse_field(os_rel, r'PRETTY_NAME="(.+?)"', r'VERSION="(.+?)"')
+            return {
+                "status": "ok", "hostname": hostname, "version": version,
+                "uptime": uptime, "model": "Linux Host", "serial": "N/A",
+                "raw": uname,
+            }
         with _netmiko_conn(device) as conn:
             output = conn.send_command("show version", read_timeout=20)
         if dt == "cisco_nxos":
@@ -116,7 +128,10 @@ def get_interfaces(device: dict) -> dict:
     try:
         dt = device.get("device_type", "cisco_xe")
         with _netmiko_conn(device) as conn:
-            if dt == "cisco_nxos":
+            if dt == "linux":
+                output = conn.send_command("ip -brief addr show", read_timeout=15)
+                ifaces = _parse_linux_interfaces(output)
+            elif dt == "cisco_nxos":
                 brief = conn.send_command("show interface status", read_timeout=20)
                 mgmt_ip = conn.send_command("show ip interface brief vrf management", read_timeout=15)
                 ifaces = _parse_nxos_interface_status(brief, mgmt_ip)
@@ -136,6 +151,11 @@ def get_interfaces(device: dict) -> dict:
 def get_routes(device: dict, vrf: str = None) -> dict:
     """Return IP routing table."""
     try:
+        dt = device.get("device_type", "cisco_xe")
+        if dt == "linux":
+            with _netmiko_conn(device) as conn:
+                output = conn.send_command("ip route show", read_timeout=15)
+            return {"status": "ok", "routes": [], "raw": output[:2000]}
         cmd = f"show ip route vrf {vrf}" if vrf else "show ip route"
         with _netmiko_conn(device) as conn:
             output = conn.send_command(cmd, read_timeout=20)
@@ -150,7 +170,14 @@ def get_cpu_memory(device: dict) -> dict:
     try:
         dt = device.get("device_type", "cisco_xe")
         with _netmiko_conn(device) as conn:
-            if dt == "cisco_nxos":
+            if dt == "linux":
+                cpu_out = conn.send_command("top -bn1 | grep -i 'cpu(s)\\|cpu,'", read_timeout=15)
+                mem_out = conn.send_command("free -m | grep Mem", read_timeout=10)
+                cpu_pct  = _parse_field(cpu_out, r"(\d+\.?\d*)\s*us", r"(\d+\.?\d*)%?\s*user")
+                mem_m    = re.search(r"Mem:\s+\d+\s+(\d+)\s+(\d+)", mem_out)
+                mem_used = mem_m.group(1) + "M" if mem_m else "unknown"
+                mem_free = mem_m.group(2) + "M" if mem_m else "unknown"
+            elif dt == "cisco_nxos":
                 cpu_out = conn.send_command("show processes cpu | grep 'CPU utilization'", read_timeout=15)
                 mem_out = conn.send_command("show system resources | grep 'Memory'", read_timeout=15)
                 cpu_pct  = _parse_field(cpu_out, r"CPU utilization.*?(\d+\.?\d*)%")
@@ -177,6 +204,8 @@ def get_cpu_memory(device: dict) -> dict:
 def get_bgp_neighbors(device: dict) -> dict:
     """Return BGP neighbor summary."""
     try:
+        if device.get("device_type") == "linux":
+            return {"status": "ok", "neighbors": [], "raw": "N/A — Linux host"}
         with _netmiko_conn(device) as conn:
             output = conn.send_command("show bgp summary", read_timeout=20)
             if "Invalid" in output or "not active" in output.lower():
@@ -230,6 +259,16 @@ def get_arp_table(device: dict) -> dict:
     """Return ARP table entries."""
     try:
         dt = device.get("device_type", "cisco_xe")
+        if dt == "linux":
+            with _netmiko_conn(device) as conn:
+                output = conn.send_command("ip neigh show", read_timeout=15)
+            entries = []
+            for line in output.splitlines():
+                # 10.10.20.254 dev eth0 lladdr aa:bb:cc:dd:ee:ff REACHABLE
+                m = re.match(r"^([\d\.]+)\s+dev\s+(\S+)\s+lladdr\s+([\da-fA-F:]+)", line, re.IGNORECASE)
+                if m:
+                    entries.append({"ip": m.group(1), "mac": m.group(3), "interface": m.group(2)})
+            return {"status": "ok", "entries": entries, "raw": output[:1500]}
         cmd = "show ip arp" if dt == "cisco_nxos" else "show arp"
         with _netmiko_conn(device) as conn:
             output = conn.send_command(cmd, read_timeout=20)
@@ -277,6 +316,30 @@ def _parse_field(text: str, *patterns) -> str:
         if m:
             return m.group(1).strip()
     return "unknown"
+
+
+def _parse_linux_interfaces(text: str) -> list:
+    """Parse 'ip -brief addr show' output.
+    Format: lo  UNKNOWN  127.0.0.1/8  / eth0  UP  10.10.20.50/24
+    """
+    ifaces = []
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        name  = parts[0]
+        state = parts[1].lower()   # UP, DOWN, UNKNOWN
+        ips   = [p.split("/")[0] for p in parts[2:] if re.match(r"[\d\.]+/\d+", p)]
+        ip    = ips[0] if ips else "unassigned"
+        ifaces.append({
+            "interface": name,
+            "ip":        ip,
+            "status":    "up" if state in ("up", "unknown") else "down",
+            "protocol":  state,
+            "in_rate":   None, "out_rate":  None,
+            "errors_in": None, "errors_out": None,
+        })
+    return ifaces
 
 
 def _parse_xr_ip_int_brief(text: str) -> list:
