@@ -23,6 +23,7 @@ sample_logs/
 # IDE
 .vscode/
 .idea/
+.vs/
 
 # pytest
 .pytest_cache/
