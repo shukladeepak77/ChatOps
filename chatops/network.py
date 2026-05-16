@@ -117,8 +117,12 @@ def get_interfaces(device: dict) -> dict:
         dt = device.get("device_type", "cisco_xe")
         with _netmiko_conn(device) as conn:
             if dt == "cisco_nxos":
+                brief = conn.send_command("show interface status", read_timeout=20)
+                mgmt_ip = conn.send_command("show ip interface brief vrf management", read_timeout=15)
+                ifaces = _parse_nxos_interface_status(brief, mgmt_ip)
+            elif dt == "cisco_xr":
                 brief = conn.send_command("show ip interface brief", read_timeout=20)
-                ifaces = _parse_nxos_ip_int_brief(brief)
+                ifaces = _parse_xr_ip_int_brief(brief)
             else:
                 brief = conn.send_command("show ip interface brief", read_timeout=20)
                 stats = conn.send_command("show interfaces", read_timeout=30)
@@ -150,8 +154,8 @@ def get_cpu_memory(device: dict) -> dict:
                 cpu_out = conn.send_command("show processes cpu | grep 'CPU utilization'", read_timeout=15)
                 mem_out = conn.send_command("show system resources | grep 'Memory'", read_timeout=15)
                 cpu_pct  = _parse_field(cpu_out, r"CPU utilization.*?(\d+\.?\d*)%")
-                mem_used = _parse_field(mem_out, r"Memory usage:\s+(\d+)K")
-                mem_free = _parse_field(mem_out, r"Memory usage:\s+\d+K used,\s+(\d+)K")
+                mem_used = _parse_field(mem_out, r"(\d+)K used")
+                mem_free = _parse_field(mem_out, r"(\d+)K free")
             else:
                 cpu_out = conn.send_command("show processes cpu | include CPU utilization", read_timeout=15)
                 mem_out = conn.send_command("show processes memory | include Processor", read_timeout=15)
@@ -178,7 +182,11 @@ def get_bgp_neighbors(device: dict) -> dict:
             if "Invalid" in output or "not active" in output.lower():
                 output = conn.send_command("show ip bgp summary", read_timeout=20)
         neighbors = _parse_bgp_summary(output)
-        return {"status": "ok", "neighbors": neighbors, "raw": output[:1500]}
+        clean_raw = "\n".join(
+            l for l in output.splitlines()
+            if "Invalid" not in l and not l.strip().startswith("%") and not re.match(r"^\s*\^\s*$", l)
+        )
+        return {"status": "ok", "neighbors": neighbors, "raw": clean_raw[:1500]}
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
@@ -271,18 +279,68 @@ def _parse_field(text: str, *patterns) -> str:
     return "unknown"
 
 
-def _parse_nxos_ip_int_brief(text: str) -> list:
+def _parse_xr_ip_int_brief(text: str) -> list:
+    """Parse IOS-XR 'show ip interface brief' — columns: Interface IP Status Protocol VRF."""
     ifaces = []
     for line in text.splitlines():
-        m = re.match(r"^(\S+)\s+([\d\.]+/\d+|unassigned)\s+protocol-(\w+)/link-(\w+)/admin-(\w+)", line)
+        # Skip header/timestamp lines
+        if re.match(r"^\s*(Interface|RP/|Mon|Tue|Wed|Thu|Fri|Sat|Sun|\s*$)", line):
+            continue
+        m = re.match(r"^(\S+)\s+([\d\.]+|unassigned)\s+(\S+)\s+(\S+)", line)
         if m:
-            ip = m.group(2).split("/")[0] if "/" in m.group(2) else m.group(2)
             ifaces.append({
-                "interface": m.group(1), "ip": ip,
-                "status":    m.group(4), "protocol": m.group(3),
+                "interface": m.group(1),
+                "ip":        m.group(2),
+                "status":    m.group(3).lower(),
+                "protocol":  m.group(4).lower(),
                 "in_rate": None, "out_rate": None,
                 "errors_in": None, "errors_out": None,
             })
+    return ifaces
+
+
+def _parse_nxos_interface_status(text: str, mgmt_ip_text: str = "") -> list:
+    """Parse NX-OS 'show interface status'.
+    Shows all physical ports regardless of L3 configuration.
+    Format: Port  [Name]  Status  Vlan  Duplex  Speed  Type
+    mgmt_ip_text: output of 'show ip interface brief vrf management' to resolve mgmt0 IP.
+    """
+    status_map = {
+        "connected": "up", "notconnect": "down", "disabled": "down",
+        "err-disabled": "down", "sfpAbsent": "down", "xcvrAbsent": "down",
+        "noOperMembers": "down",
+    }
+    # Extract mgmt0 IP from management VRF output
+    mgmt_ip = "unassigned"
+    for line in mgmt_ip_text.splitlines():
+        m = re.match(r"^mgmt\d+\s+([\d\.]+)", line)
+        if m:
+            mgmt_ip = m.group(1)
+            break
+
+    ifaces = []
+    for line in text.splitlines():
+        parts = line.split()
+        if not parts:
+            continue
+        port = parts[0]
+        if not re.match(r"^(mgmt|Eth|Lo|Vlan|port-channel|Po)", port):
+            continue
+        # Scan parts for a known status keyword — handles optional Name column
+        for p in parts[1:]:
+            if p in status_map:
+                ip = mgmt_ip if port.startswith("mgmt") else "unassigned"
+                ifaces.append({
+                    "interface": port,
+                    "ip":        ip,
+                    "status":    status_map[p],
+                    "protocol":  p,
+                    "in_rate":   None,
+                    "out_rate":  None,
+                    "errors_in": None,
+                    "errors_out": None,
+                })
+                break
     return ifaces
 
 

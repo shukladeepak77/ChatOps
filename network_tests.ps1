@@ -129,7 +129,6 @@ try {
             }
         } else {
             Write-Host "  No ARP entries." -ForegroundColor DarkGray
-            if ($r.raw) { Write-Host $r.raw }
         }
     } else { Show-Error $r.error }
 } catch { Show-Error $_.Exception.Message }
