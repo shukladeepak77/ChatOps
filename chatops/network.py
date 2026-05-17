@@ -253,7 +253,7 @@ def get_ospf_neighbors(device: dict) -> dict:
             if dt == "cisco_nxos":
                 output = conn.send_command("show ip ospf neighbors", read_timeout=20)
             elif dt == "cisco_xr":
-                output = conn.send_command("show ospf neighbor", read_timeout=20)
+                output = conn.send_command("show ospf vrf Mgmt-intf neighbor", read_timeout=20)
             else:
                 output = conn.send_command("show ip ospf neighbor", read_timeout=20)
         neighbors = _parse_ospf_neighbors(output)
@@ -271,10 +271,14 @@ def get_bgp_neighbors(device: dict) -> dict:
     try:
         if device.get("device_type") == "linux":
             return {"status": "ok", "neighbors": [], "raw": "N/A — Linux host"}
+        dt = device.get("device_type", "cisco_xe")
         with _netmiko_conn(device) as conn:
-            output = conn.send_command("show bgp summary", read_timeout=20)
-            if "Invalid" in output or "not active" in output.lower():
-                output = conn.send_command("show ip bgp summary", read_timeout=20)
+            if dt == "cisco_xr":
+                output = conn.send_command("show bgp vrf Mgmt-intf summary", read_timeout=20)
+            else:
+                output = conn.send_command("show bgp summary", read_timeout=20)
+                if "Invalid" in output or "not active" in output.lower():
+                    output = conn.send_command("show ip bgp summary", read_timeout=20)
         neighbors = _parse_bgp_summary(output)
         clean_raw = "\n".join(
             l for l in output.splitlines()
