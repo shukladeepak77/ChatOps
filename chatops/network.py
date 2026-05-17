@@ -280,24 +280,27 @@ def run_traceroute(device: dict, target: str, max_ttl: int = 15) -> dict:
                 resolved = target  # keep original, let device handle it
         with _netmiko_conn(device) as conn:
             if dt == "linux":
+                # -m max hops, -w wait secs, -q 1 probe per hop
                 output = conn.send_command(
-                    f"traceroute -m {max_ttl} -w 2 {resolved}",
-                    read_timeout=60, expect_string=r"\$"
+                    f"traceroute -m {max_ttl} -w 2 -q 1 {resolved}",
+                    read_timeout=max_ttl * 4, expect_string=r"\$"
                 )
             elif dt == "cisco_xr":
+                # ttl 1 N limits max hops; timeout 2, probe 1 keeps it fast
                 output = conn.send_command(
-                    f"traceroute {resolved}",
-                    read_timeout=90, expect_string=r"#"
+                    f"traceroute {resolved} ttl 1 {max_ttl} timeout 2 probe 1",
+                    read_timeout=max_ttl * 4, expect_string=r"#"
                 )
             elif dt == "cisco_nxos":
                 output = conn.send_command(
                     f"traceroute {resolved}",
-                    read_timeout=60, expect_string=r"#"
+                    read_timeout=max_ttl * 6, expect_string=r"#"
                 )
             else:
+                # IOS-XE: ttl 1 N limits max hops; timeout 2, probe 1 keeps it fast
                 output = conn.send_command(
-                    f"traceroute {resolved}",
-                    read_timeout=90, expect_string=r"#"
+                    f"traceroute {resolved} ttl 1 {max_ttl} timeout 2 probe 1",
+                    read_timeout=max_ttl * 4, expect_string=r"#"
                 )
         resolved_note = f" (resolved from {target})" if resolved != target else ""
         hops = _parse_traceroute(output, dt)

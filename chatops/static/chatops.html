@@ -2520,7 +2520,7 @@ async function runNetMonitor(action) {
       const target = document.getElementById('nm-traceroute-target').value.trim();
       if (!target) { el.className = 'm-result err'; el.innerHTML = 'Enter a traceroute target first.'; return; }
       document.getElementById('nm-traceroute-field').style.display = 'none';
-      el.innerHTML = `<span style="opacity:.6"><span class="m-spinner"></span> Tracing route to ${target}… (may take 30–60 sec)</span>`;
+      el.innerHTML = `<span style="opacity:.6"><span class="m-spinner"></span> Tracing route to ${target}… (up to 30 sec)</span>`;
       const res = await authFetch(`${base}/traceroute?target=${encodeURIComponent(target)}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Request failed');
