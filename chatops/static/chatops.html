@@ -2267,7 +2267,7 @@ function _renderPingMatrix(data) {
     html += `<tr><td style="font-family:monospace;font-size:.78rem;font-weight:600;color:#e2e8f0">${src}</td>`;
     devs.forEach(tgt => {
       if (src === tgt) {
-        html += `<td style="text-align:center;color:#334155;font-size:1rem">◼</td>`;
+        html += `<td style="text-align:center;color:#475569;font-size:1rem;background:rgba(71,85,105,.08)">◼</td>`;
       } else {
         const cell = matrix[src]?.[tgt];
         const rate = cell?.success_rate ?? -1;

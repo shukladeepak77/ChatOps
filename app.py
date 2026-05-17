@@ -1046,7 +1046,13 @@ def network_dashboard(user=Depends(_get_current_user)):
 
 @app.post("/chatops/network/ping-matrix")
 def network_ping_matrix(user=Depends(_get_current_user)):
-    """Ping every device from every other device — returns reachability matrix."""
+    """Ping every device from every other device — returns reachability matrix.
+
+    One thread per source device; targets are pinged sequentially within that
+    thread.  This avoids opening multiple concurrent SSH sessions to the same
+    device (IOS-XRv enforces a low session limit, causing random failures when
+    all N pings fan out in parallel).
+    """
     from chatops.network import ping_device
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -1054,27 +1060,29 @@ def network_ping_matrix(user=Depends(_get_current_user)):
     names = [d["name"] for d in devs]
     dev_map = {d["name"]: d for d in devs}
 
-    def run_one(src_name, tgt_name):
-        try:
-            src_dev = netdev_get(src_name) or dev_map[src_name]
-            result = ping_device(src_dev, target=dev_map[tgt_name]["host"], count=3)
-            raw_rate = result.get("success_rate", "0")
-            rate = int(raw_rate) if result["status"] == "ok" and str(raw_rate).isdigit() else 0
-            return src_name, tgt_name, rate
-        except Exception:
-            return src_name, tgt_name, -1
+    def run_from_src(src_name):
+        src_dev = netdev_get(src_name) or dev_map[src_name]
+        results = {}
+        for tgt_name in [n for n in names if n != src_name]:
+            try:
+                result = ping_device(src_dev, target=dev_map[tgt_name]["host"], count=3)
+                raw_rate = result.get("success_rate", "0")
+                rate = int(raw_rate) if result["status"] == "ok" and str(raw_rate).isdigit() else 0
+            except Exception:
+                rate = -1
+            results[tgt_name] = {"success_rate": rate, "reachable": rate > 0}
+        return src_name, results
 
-    pairs = [(s, t) for s in names for t in names if s != t]
     matrix = {n: {} for n in names}
 
-    with ThreadPoolExecutor(max_workers=8) as ex:
-        futures = {ex.submit(run_one, s, t): (s, t) for s, t in pairs}
-        for f in as_completed(futures, timeout=120):
+    with ThreadPoolExecutor(max_workers=len(names)) as ex:
+        futures = {ex.submit(run_from_src, name): name for name in names}
+        for f in as_completed(futures, timeout=180):
             try:
-                src, tgt, rate = f.result()
-                matrix[src][tgt] = {"success_rate": rate, "reachable": rate > 0}
+                src, row = f.result()
+                matrix[src] = row
             except Exception:
-                s, t = futures[f]
-                matrix[s][t] = {"success_rate": -1, "reachable": False}
+                src = futures[f]
+                matrix[src] = {t: {"success_rate": -1, "reachable": False} for t in names if t != src}
 
     return {"devices": names, "matrix": matrix}
