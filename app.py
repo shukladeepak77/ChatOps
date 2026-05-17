@@ -21,6 +21,7 @@ from chatops.db import (
     netdev_add, netdev_get, netdev_list, netdev_delete,
     netdev_save_backup, netdev_get_backup, netdev_list_backups,
     netdev_log_interfaces,
+    get_last_notified, set_last_notified,
 )
 from chatops.config import load_config, save_config
 from chatops.runbooks import list_runbooks
@@ -118,33 +119,74 @@ def _poll_remote_nodes_sync():
 
 
 def _poll_network_devices_sync():
-    """Poll registered network devices — alert on interface down or connection failure."""
-    from chatops.db import netdev_list, netdev_log_interfaces, add_alert as _add_alert
-    from chatops.network import get_interfaces
+    """Poll registered network devices — alert on interface down, BGP neighbor loss, or connection failure."""
+    from datetime import datetime, timezone
+    from chatops.db import netdev_log_interfaces
+    from chatops.network import get_interfaces, get_bgp_neighbors
+    _SUPPRESS_SECS = 1800  # re-alert at most every 30 minutes per condition
+
+    def _suppressed(key: str) -> bool:
+        last = get_last_notified(key)
+        if not last:
+            return False
+        try:
+            last_dt = datetime.fromisoformat(last).replace(tzinfo=timezone.utc)
+            return (datetime.now(timezone.utc) - last_dt).total_seconds() < _SUPPRESS_SECS
+        except Exception:
+            return False
+
+    def _alert(key: str, msg: str, sev: str, source: str):
+        if not _suppressed(key):
+            add_alert(msg, sev, source=source)
+            set_last_notified(key)
+
     try:
         devices = netdev_list()
     except Exception:
         return
+
     for dev_row in devices:
         full_dev = netdev_get(dev_row["name"])
         if not full_dev:
             continue
+        name = dev_row["name"]
+        dt   = full_dev.get("device_type", "cisco_xe")
+
+        # ── Interface check ──────────────────────────────────────────────────
         try:
             result = get_interfaces(full_dev)
             if result["status"] == "error":
-                _add_alert(
-                    f"[{dev_row['name']}] Cannot connect: {result['error'][:120]}",
-                    "CRITICAL", source=dev_row["name"],
-                )
+                _alert(f"{name}:connect", f"[{name}] Cannot connect: {result['error'][:120]}", "CRITICAL", name)
                 continue
             ifaces = result["interfaces"]
-            netdev_log_interfaces(dev_row["name"], ifaces)
+            netdev_log_interfaces(name, ifaces)
             for iface in ifaces:
-                if iface.get("status", "").lower() not in ("up", "connected"):
-                    _add_alert(
-                        f"[{dev_row['name']}] Interface {iface['interface']} is {iface['status']}",
-                        "WARNING", source=dev_row["name"],
-                    )
+                st = (iface.get("status") or "").lower()
+                # skip expected non-up states (admin-down, no cable, etc.)
+                if st in ("up", "connected", "notconnect", "routed", "sfpabsent"):
+                    continue
+                _alert(
+                    f"{name}:iface:{iface['interface']}",
+                    f"[{name}] Interface {iface['interface']} is {iface.get('status','?')}",
+                    "WARNING", name,
+                )
+        except Exception:
+            pass
+
+        # ── BGP neighbor check (Cisco only) ──────────────────────────────────
+        if dt == "linux":
+            continue
+        try:
+            bgp = get_bgp_neighbors(full_dev)
+            if bgp.get("status") == "ok":
+                for nbr in bgp.get("neighbors", []):
+                    state = nbr.get("state", "")
+                    if state != "Established":
+                        _alert(
+                            f"{name}:bgp:{nbr.get('neighbor','?')}",
+                            f"[{name}] BGP neighbor {nbr.get('neighbor','?')} AS{nbr.get('as','?')} state={state or 'unknown'}",
+                            "CRITICAL", name,
+                        )
         except Exception:
             pass
 
@@ -930,6 +972,34 @@ def network_device_push_config(name: str, req: NetworkConfigPush,
         raise HTTPException(status_code=502, detail=result["error"])
     add_audit(user["sub"], f"network push-config {name}: {len(req.commands)} commands")
     return result
+
+
+@app.get("/chatops/network/devices/{name}/config-diff")
+def network_config_diff(name: str, user=Depends(_get_current_user)):
+    """Diff running-config vs last stored backup."""
+    from chatops.network import get_config_diff
+    dev = netdev_get(name)
+    if not dev:
+        raise HTTPException(status_code=404, detail="Device not found")
+    result = get_config_diff(dev)
+    if result["status"] == "error":
+        raise HTTPException(status_code=502, detail=result["error"])
+    return result
+
+
+@app.get("/chatops/network/alerts")
+def network_alerts(limit: int = 100, unacked_only: bool = False, user=Depends(_get_current_user)):
+    """Return alerts whose source matches a registered network device."""
+    device_names = {d["name"] for d in netdev_list()}
+    all_alerts = get_alerts(limit=limit * 4, unacked_only=unacked_only)
+    net_alerts = [a for a in all_alerts if a.get("source") in device_names][:limit]
+    return {"alerts": net_alerts, "total": len(net_alerts)}
+
+
+@app.post("/chatops/network/alerts/{alert_id}/ack")
+def network_ack_alert(alert_id: int, user=Depends(_require_role("operator"))):
+    ack_alert(alert_id)
+    return {"status": "ok"}
 
 
 @app.get("/chatops/network/devices/{name}/arp")

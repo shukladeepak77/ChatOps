@@ -3,6 +3,7 @@ Network device management — SSH/CLI (netmiko) + NETCONF (ncclient).
 Supports Cisco IOS, IOS-XE, IOS-XR, NX-OS, VyOS, and generic SSH devices.
 """
 import base64
+import difflib
 import re
 import xml.etree.ElementTree as ET
 from typing import Optional
@@ -252,6 +253,48 @@ def backup_config(device: dict) -> dict:
         return {"status": "ok", "config": "\n".join(lines), "lines": len(lines)}
     except Exception as e:
         return {"status": "error", "error": str(e)}
+
+
+def get_config_diff(device: dict) -> dict:
+    """Diff the running-config against the last stored backup."""
+    from chatops.db import netdev_get_backup
+    dt = device.get("device_type", "cisco_xe")
+    if dt == "linux":
+        return {"status": "error", "error": "Config diff is not supported for Linux hosts."}
+    backup = netdev_get_backup(device["name"])
+    if not backup:
+        return {"status": "error", "error": "No backup on file. Run a backup first (💾 Backup Config)."}
+    try:
+        with _netmiko_conn(device) as conn:
+            running_raw = conn.send_command("show running-config", read_timeout=60)
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+    # strip lines that change on every run (timestamps, build info)
+    def _clean(text):
+        return [l for l in text.splitlines()
+                if l.strip()
+                and not l.startswith("Building configuration")
+                and not re.match(r"^! Last configuration change", l)
+                and not re.match(r"^! NVRAM config last", l)]
+    running_lines = _clean(running_raw)
+    saved_lines   = _clean(backup.get("config_text", ""))
+    diff = list(difflib.unified_diff(
+        saved_lines, running_lines,
+        fromfile=f"backup ({backup.get('backed_up_at','unknown')})",
+        tofile="running-config (now)",
+        lineterm="", n=3,
+    ))
+    added   = sum(1 for l in diff if l.startswith('+') and not l.startswith('+++'))
+    removed = sum(1 for l in diff if l.startswith('-') and not l.startswith('---'))
+    return {
+        "status":    "ok",
+        "device":    device["name"],
+        "changed":   added + removed > 0,
+        "added":     added,
+        "removed":   removed,
+        "backup_at": backup.get("backed_up_at", "unknown"),
+        "diff_lines": diff[:600],
+    }
 
 
 def push_config(device: dict, commands: list) -> dict:

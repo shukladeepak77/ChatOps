@@ -939,6 +939,7 @@
         <button class="m-btn m-btn-secondary" onclick="toggleTracerouteTarget()">🔀 Traceroute</button>
         <button class="m-btn m-btn-secondary" onclick="toggleLogLines()">📜 Show Logs</button>
         <button class="m-btn m-btn-secondary" onclick="runNetMonitor('backup-view')">💾 View Backup</button>
+        <button class="m-btn m-btn-secondary" onclick="runNetMonitor('config-diff')">📋 Config Diff</button>
       </div>
       <div class="m-field" id="nm-traceroute-field" style="display:none">
         <label>Traceroute Target <span style="font-size:.72rem;opacity:.6">(IP or hostname)</span></label>
@@ -987,6 +988,18 @@
       </div>
       <div id="ndb-matrix">
         <div class="m-empty" style="color:#64748b;font-size:.8rem">Click "Run Ping Test" — pings every device from every other device (~30 sec)</div>
+      </div>
+
+      <!-- Network Alerts -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-top:14px;border-top:1px solid rgba(255,255,255,.06);margin-top:20px">
+        <div>
+          <span style="font-size:.82rem;font-weight:600;color:var(--text2)">🔔 Network Alerts</span>
+          <span id="ndb-alert-badge" style="display:none;margin-left:8px;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:.7rem;font-weight:700"></span>
+        </div>
+        <button class="m-btn m-btn-secondary" style="padding:4px 12px;font-size:.76rem" onclick="loadNetAlerts()">🔄 Refresh</button>
+      </div>
+      <div id="ndb-alerts">
+        <div class="m-empty" style="color:#64748b;font-size:.8rem">Loading…</div>
       </div>
 
     </div>
@@ -2187,6 +2200,58 @@ const _DT_LABEL = { cisco_xe:'IOS-XE', cisco_xr:'IOS-XR', cisco_nxos:'NX-OS', li
 function openNetDashboard() {
   openModal('modal-net-dashboard');
   loadNetDashboard();
+  loadNetAlerts();
+}
+
+async function loadNetAlerts() {
+  const el = document.getElementById('ndb-alerts');
+  const badge = document.getElementById('ndb-alert-badge');
+  el.innerHTML = '<div class="m-empty" style="color:#64748b;font-size:.8rem"><span class="m-spinner"></span> Loading…</div>';
+  try {
+    const res = await authFetch('/chatops/network/alerts?limit=50');
+    const data = await res.json();
+    const alerts = data.alerts || [];
+    const unacked = alerts.filter(a => !a.acked).length;
+    if (unacked > 0) {
+      badge.textContent = unacked;
+      badge.style.display = 'inline';
+    } else {
+      badge.style.display = 'none';
+    }
+    if (!alerts.length) {
+      el.innerHTML = '<div class="m-empty" style="color:#6ee7b7;font-size:.8rem">✓ No network alerts — all devices healthy.</div>';
+      return;
+    }
+    const sevColor = s => s === 'CRITICAL' ? '#f87171' : s === 'WARNING' ? '#fbbf24' : '#94a3b8';
+    const sevBg    = s => s === 'CRITICAL' ? 'rgba(239,68,68,.12)' : s === 'WARNING' ? 'rgba(234,179,8,.1)' : 'transparent';
+    let html = '<table class="m-table" style="font-size:.75rem"><thead><tr><th>Severity</th><th>Message</th><th>Time</th><th></th></tr></thead><tbody>';
+    alerts.forEach(a => {
+      const sev = a.severity || 'INFO';
+      const ts  = (a.timestamp || '').replace('T',' ').substring(0,16);
+      const acked = a.acked ? '<span style="color:#64748b;font-size:.7rem">acked</span>' :
+        `<button class="m-btn" style="font-size:.68rem;padding:2px 8px;background:rgba(99,102,241,.2);border:1px solid rgba(99,102,241,.3);color:#c7d2fe"
+           onclick="ackNetAlert(${a.id},this)">Ack</button>`;
+      html += `<tr style="background:${a.acked ? 'transparent' : sevBg(sev)}">
+        <td><span style="color:${sevColor(sev)};font-weight:700">${sev}</span></td>
+        <td style="color:${a.acked ? '#64748b' : 'var(--text1)'}">${a.message}</td>
+        <td style="color:#64748b;white-space:nowrap">${ts}</td>
+        <td>${acked}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<div class="m-empty" style="color:var(--red)">Error loading alerts: ${e.message}</div>`;
+  }
+}
+
+async function ackNetAlert(id, btn) {
+  try {
+    await authFetch(`/chatops/network/alerts/${id}/ack`, {method:'POST'});
+    btn.closest('tr').style.background = 'transparent';
+    btn.replaceWith(document.createTextNode(''));
+    loadNetAlerts();
+  } catch(e) { /* ignore */ }
 }
 
 async function loadNetDashboard() {
@@ -2608,6 +2673,34 @@ function _nmBoxBackup(name, data) {
   return html;
 }
 
+function _nmBoxConfigDiff(name, data) {
+  const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  let html = _nmTitle('📋', `Config Diff — ${name}`, `vs backup from ${data.backup_at || '?'}`);
+  if (!data.changed) {
+    html += `<div style="padding:14px 16px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.25);border-radius:6px;color:#6ee7b7;font-size:.84rem">
+      ✓ No changes — running-config matches the stored backup.
+    </div>`;
+    return html;
+  }
+  html += `<div style="display:flex;gap:16px;margin-bottom:10px;font-size:.8rem">
+    <span style="color:#6ee7b7">+${data.added} added</span>
+    <span style="color:#f87171">−${data.removed} removed</span>
+  </div>`;
+  const lines = (data.diff_lines || []).map(l => {
+    if (l.startsWith('+++') || l.startsWith('---'))
+      return `<span style="color:#94a3b8;font-style:italic">${esc(l)}</span>`;
+    if (l.startsWith('@@'))
+      return `<span style="color:#60a5fa">${esc(l)}</span>`;
+    if (l.startsWith('+'))
+      return `<span style="background:rgba(16,185,129,.12);color:#6ee7b7;display:block">${esc(l)}</span>`;
+    if (l.startsWith('-'))
+      return `<span style="background:rgba(239,68,68,.12);color:#f87171;display:block">${esc(l)}</span>`;
+    return `<span style="color:#94a3b8">${esc(l)}</span>`;
+  }).join('\n');
+  html += `<pre style="background:#0f172a;border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:12px;font-size:.72rem;overflow:auto;max-height:400px;line-height:1.5">${lines}</pre>`;
+  return html;
+}
+
 async function runNetMonitor(action) {
   const name = document.getElementById('nm-device').value;
   const el = document.getElementById('nm-result');
@@ -2710,6 +2803,13 @@ async function runNetMonitor(action) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'No backup found');
       html = _nmBoxBackup(name, data);
+
+    } else if (action === 'config-diff') {
+      el.innerHTML = '<span style="opacity:.6"><span class="m-spinner"></span> Fetching running-config and comparing to backup…</span>';
+      const res = await authFetch(`${base}/config-diff`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Config diff failed');
+      html = _nmBoxConfigDiff(name, data);
     }
 
     el.innerHTML = html;
