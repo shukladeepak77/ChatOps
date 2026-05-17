@@ -1027,7 +1027,8 @@ def route_message(message: str, caller_role: str = "operator", _nlu_depth: int =
             f"  Mem free:  {result['mem_free_bytes']} bytes"
         )}
 
-    show_ospf_m = re.match(r'^show\s+ospf(?:\s+neighbors?)?\s+(\S+)$', s)
+    show_ospf_m = re.search(r'ospf\s+neighbors?\s+(?:for\s+)?(\S+)$', s) or \
+                  re.match(r'^show\s+ospf(?:\s+neighbors?)?\s+(\S+)$', s)
     if show_ospf_m:
         from .db import netdev_get as _nd_get
         from .network import get_ospf_neighbors as _nd_ospf
@@ -1052,7 +1053,8 @@ def route_message(message: str, caller_role: str = "operator", _nlu_depth: int =
             )
         return {"response": "\n".join(lines), "ospf_neighbors": neighbors}
 
-    show_bgp_m = re.match(r'^show\s+bgp(?:\s+neighbors?)?\s+(\S+)$', s)
+    show_bgp_m = re.search(r'bgp\s+neighbors?\s+(?:for\s+)?(\S+)$', s) or \
+                 re.match(r'^show\s+bgp(?:\s+neighbors?)?\s+(\S+)$', s)
     if show_bgp_m:
         from .db import netdev_get as _nd_get
         from .network import get_bgp_neighbors as _nd_bgp
