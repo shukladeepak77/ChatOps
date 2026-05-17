@@ -1058,7 +1058,8 @@ def network_ping_matrix(user=Depends(_get_current_user)):
         try:
             src_dev = netdev_get(src_name) or dev_map[src_name]
             result = ping_device(src_dev, target=dev_map[tgt_name]["host"], count=3)
-            rate = int(result.get("success_rate", "0")) if result["status"] == "ok" else 0
+            raw_rate = result.get("success_rate", "0")
+            rate = int(raw_rate) if result["status"] == "ok" and str(raw_rate).isdigit() else 0
             return src_name, tgt_name, rate
         except Exception:
             return src_name, tgt_name, -1

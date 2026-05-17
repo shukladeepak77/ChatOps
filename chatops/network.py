@@ -345,12 +345,20 @@ def ping_device(device: dict, target: str = "8.8.8.8", count: int = 5) -> dict:
                 m = re.search(r"(\d+)% packet loss", output)
                 success = str(100 - int(m.group(1))) if m else "0"
             elif dt == "cisco_xr":
-                # IOS-XR management interface is in Mgmt-intf VRF; global table has no route back
+                # IOS-XR management interface is in Mgmt-intf VRF; global table has no route back.
+                # XR ping syntax uses 'repeat' (not 'count' which is NX-OS).
                 output = conn.send_command(
-                    f"ping vrf Mgmt-intf {target} count {count}",
+                    f"ping vrf Mgmt-intf {target} repeat {count}",
                     read_timeout=count * 4 + 10, expect_string=r"#"
                 )
                 success = _parse_field(output, r"Success rate is (\d+) percent")
+                if success == "unknown":
+                    # VRF may not be named Mgmt-intf on this device; fall back to global routing
+                    output = conn.send_command(
+                        f"ping {target} repeat {count}",
+                        read_timeout=count * 4 + 10, expect_string=r"#"
+                    )
+                    success = _parse_field(output, r"Success rate is (\d+) percent")
             elif dt == "cisco_nxos":
                 # NX-OS uses 'count' not 'repeat'; management subnet reachable via management VRF
                 output = conn.send_command(
