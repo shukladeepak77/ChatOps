@@ -1,6 +1,113 @@
 #!/usr/bin/env python3
-from fpdf import FPDF
+"""
+Generate a network topology PDF by pulling live data from the ChatOps API.
+
+Usage:
+    python3 generate_topology_pdf.py [--url URL] [--user USER] [--password PASSWORD]
+
+Defaults:
+    --url      http://localhost:8000
+    --user     admin
+    --password admin123
+"""
+import argparse
+import ipaddress
+import json
+import urllib.request
+import urllib.error
 from datetime import datetime
+from fpdf import FPDF
+
+
+# ── CLI args ──────────────────────────────────────────────────────────────────
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--url",      default="http://localhost:8000")
+parser.add_argument("--user",     default="admin")
+parser.add_argument("--password", default="admin123")
+parser.add_argument("--output",   default="chatops_lab_topology.pdf")
+args = parser.parse_args()
+
+BASE = args.url.rstrip("/")
+
+
+# ── API helpers ───────────────────────────────────────────────────────────────
+
+def _request(path: str, token: str = None) -> dict:
+    req = urllib.request.Request(f"{BASE}{path}")
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.loads(r.read())
+
+
+def login(user: str, password: str) -> str:
+    data = json.dumps({"username": user, "password": password}).encode()
+    req = urllib.request.Request(
+        f"{BASE}/chatops/auth/login", data=data,
+        headers={"Content-Type": "application/json"}, method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.loads(r.read())["token"]
+
+
+def get_devices(token: str) -> list:
+    data = _request("/chatops/network/devices", token)
+    return data if isinstance(data, list) else data.get("devices", [])
+
+
+def get_interfaces(token: str, name: str) -> list:
+    try:
+        data = _request(f"/chatops/network/devices/{name}/interfaces", token)
+        return data.get("interfaces", [])
+    except Exception:
+        return []
+
+
+# ── Subnet inference: find links between devices ──────────────────────────────
+
+def _network(ip_cidr: str) -> str:
+    """Return network address string for an IP/prefix, e.g. '10.0.12.0/24'."""
+    try:
+        return str(ipaddress.ip_interface(ip_cidr).network)
+    except Exception:
+        return ""
+
+
+def infer_links(device_ifaces: dict) -> list:
+    """
+    Given {device_name: [iface_dict, ...]}, return list of
+    (link_id, dev_a, iface_a, ip_a, dev_b, iface_b, ip_b, subnet) tuples
+    by matching interfaces that share the same subnet.
+    """
+    # subnet -> list of (device, interface, ip)
+    subnet_map: dict = {}
+    for dev, ifaces in device_ifaces.items():
+        for iface in ifaces:
+            ip = iface.get("ip", "")
+            if not ip or ip == "unassigned":
+                continue
+            net = _network(ip)
+            if not net:
+                continue
+            subnet_map.setdefault(net, []).append((dev, iface["interface"], ip))
+
+    links = []
+    link_id = 1
+    for subnet, endpoints in subnet_map.items():
+        if len(endpoints) == 2:
+            a, b = endpoints
+            links.append((
+                f"L{link_id}",
+                a[0], a[1], a[2],
+                b[0], b[1], b[2],
+                subnet,
+            ))
+            link_id += 1
+    return links
+
+
+# ── PDF class ─────────────────────────────────────────────────────────────────
 
 class TopologyPDF(FPDF):
     def header(self):
@@ -8,166 +115,174 @@ class TopologyPDF(FPDF):
         self.set_fill_color(30, 41, 59)
         self.set_text_color(255, 255, 255)
         self.rect(0, 0, 210, 20, "F")
-        self.cell(0, 20, "ChatOps Lab - Network Topology", align="C", new_x="LMARGIN", new_y="NEXT")
+        self.cell(0, 20, "ChatOps - Network Topology Report", align="C",
+                  new_x="LMARGIN", new_y="NEXT")
         self.set_text_color(0, 0, 0)
 
     def footer(self):
         self.set_y(-15)
         self.set_font("Helvetica", "I", 8)
         self.set_text_color(100, 100, 100)
-        self.cell(0, 10, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}  |  Page {self.page_no()}", align="C")
+        self.cell(
+            0, 10,
+            f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}  |  "
+            f"Source: {BASE}  |  Page {self.page_no()}",
+            align="C",
+        )
 
+    def section(self, title: str):
+        self.ln(5)
+        self.set_font("Helvetica", "B", 13)
+        self.set_text_color(30, 64, 175)
+        self.cell(0, 8, title, new_x="LMARGIN", new_y="NEXT")
+        self.set_draw_color(30, 64, 175)
+        self.line(10, self.get_y(), 200, self.get_y())
+        self.ln(3)
+        self.set_text_color(0, 0, 0)
+
+    def kv(self, label: str, value: str):
+        self.set_font("Helvetica", "B", 10)
+        self.cell(45, 7, label + ":", new_x="RIGHT", new_y="TOP")
+        self.set_font("Helvetica", "", 10)
+        self.cell(0, 7, value, new_x="LMARGIN", new_y="NEXT")
+
+    def table_header(self, cols: list):
+        self.set_fill_color(30, 41, 59)
+        self.set_text_color(255, 255, 255)
+        self.set_font("Helvetica", "B", 10)
+        for label, width in cols[:-1]:
+            self.cell(width, 8, label, fill=True, border=1)
+        label, width = cols[-1]
+        self.cell(width, 8, label, fill=True, border=1, new_x="LMARGIN", new_y="NEXT")
+        self.set_text_color(0, 0, 0)
+        self.set_font("Helvetica", "", 10)
+
+    def table_row(self, values: list, cols: list, row_idx: int):
+        bg = (248, 250, 252) if row_idx % 2 == 0 else (255, 255, 255)
+        self.set_fill_color(*bg)
+        for (val, (_, width)) in zip(values[:-1], cols[:-1]):
+            self.cell(width, 7, str(val), fill=True, border=1)
+        val, (_, width) = values[-1], cols[-1]
+        self.cell(width, 7, str(val), fill=True, border=1, new_x="LMARGIN", new_y="NEXT")
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+
+print(f"Connecting to ChatOps at {BASE} ...")
+token = login(args.user, args.password)
+print("Logged in. Fetching devices ...")
+devices = get_devices(token)
+print(f"Found {len(devices)} device(s). Fetching interfaces ...")
+
+device_ifaces = {}
+for dev in devices:
+    name = dev["name"]
+    ifaces = get_interfaces(token, name)
+    device_ifaces[name] = ifaces
+    print(f"  {name}: {len(ifaces)} interface(s)")
+
+links = infer_links(device_ifaces)
+print(f"Inferred {len(links)} link(s) from shared subnets.")
+
+# ── Build PDF ─────────────────────────────────────────────────────────────────
 
 pdf = TopologyPDF()
 pdf.add_page()
 pdf.set_auto_page_break(auto=True, margin=15)
 
-# ── Overview ──────────────────────────────────────────────────────────────────
-pdf.ln(5)
-pdf.set_font("Helvetica", "B", 13)
-pdf.set_text_color(30, 64, 175)
-pdf.cell(0, 8, "Lab Overview", new_x="LMARGIN", new_y="NEXT")
-pdf.set_draw_color(30, 64, 175)
-pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-pdf.ln(3)
+# Overview
+pdf.section("Overview")
+pdf.kv("ChatOps URL", BASE)
+pdf.kv("Generated",   datetime.now().strftime("%Y-%m-%d %H:%M"))
+pdf.kv("Devices",     str(len(devices)))
+pdf.kv("Links",       str(len(links)))
 
-pdf.set_font("Helvetica", "", 10)
-pdf.set_text_color(0, 0, 0)
-overview = [
-    ("Platform",      "GCP VM - Debian 13 (trixie), e2-standard-4, 16 GB RAM, 30 GB SSD"),
-    ("Containerlab",  "v0.75.0"),
-    ("Docker",        "v29.5.0"),
-    ("cEOS Image",    "Arista cEOS-lab 4.33.8M (64-bit)"),
-    ("Lab Name",      "chatops-lab"),
-    ("Nodes",         "3 x Arista cEOS routers (ceos1, ceos2, ceos3)"),
-    ("Topology",      "Full mesh (triangle) - each node connected to both others"),
-]
-for label, value in overview:
+# Device summary table
+pdf.section("Registered Devices")
+dev_cols = [("Name", 35), ("Host", 45), ("Type", 35), ("Description", 75)]
+pdf.table_header(dev_cols)
+for i, dev in enumerate(devices):
+    row = [
+        dev.get("name", ""),
+        dev.get("host", ""),
+        dev.get("device_type", ""),
+        (dev.get("description") or "")[:40],
+    ]
+    pdf.table_row(row, dev_cols, i)
+
+# Per-device interface tables
+pdf.section("Interfaces per Device")
+iface_cols = [("Interface", 45), ("IP Address", 50), ("Status", 30), ("Protocol", 30), ("Errors", 35)]
+for dev in devices:
+    name = dev["name"]
+    ifaces = device_ifaces.get(name, [])
     pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(45, 7, label + ":", new_x="RIGHT", new_y="TOP")
-    pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 7, value, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(30, 41, 59)
+    pdf.cell(0, 7, f"{name}  ({dev['host']})", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(0, 0, 0)
+    if not ifaces:
+        pdf.set_font("Helvetica", "I", 9)
+        pdf.cell(0, 6, "  No interfaces found (device may be unreachable)",
+                 new_x="LMARGIN", new_y="NEXT")
+        continue
+    pdf.table_header(iface_cols)
+    for i, iface in enumerate(ifaces):
+        row = [
+            iface.get("interface", ""),
+            iface.get("ip", "unassigned"),
+            iface.get("status", ""),
+            iface.get("protocol", ""),
+            str(iface.get("errors_in") or 0),
+        ]
+        pdf.table_row(row, iface_cols, i)
+    pdf.ln(2)
 
-# ── Node Details ──────────────────────────────────────────────────────────────
-pdf.ln(5)
-pdf.set_font("Helvetica", "B", 13)
-pdf.set_text_color(30, 64, 175)
-pdf.cell(0, 8, "Node Details", new_x="LMARGIN", new_y="NEXT")
-pdf.set_draw_color(30, 64, 175)
-pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-pdf.ln(3)
+# Links table
+if links:
+    pdf.section("Inferred Links (shared subnets)")
+    link_cols = [("Link", 15), ("Device A", 35), ("Interface A", 35),
+                 ("Device B", 35), ("Interface B", 35), ("Subnet", 35)]
+    pdf.table_header(link_cols)
+    for i, (lid, da, ia, ipa, db, ib, ipb, subnet) in enumerate(links):
+        pdf.table_row([lid, da, f"{ia} ({ipa})", db, f"{ib} ({ipb})", subnet],
+                      link_cols, i)
 
-nodes = [
-    ("ceos1", "172.20.20.3", "10.0.12.1/24", "10.0.13.1/24"),
-    ("ceos2", "172.20.20.4", "10.0.12.2/24", "10.0.23.1/24"),
-    ("ceos3", "172.20.20.2", "10.0.23.2/24", "10.0.13.2/24"),
-]
-
-# Table header
-pdf.set_fill_color(30, 41, 59)
-pdf.set_text_color(255, 255, 255)
-pdf.set_font("Helvetica", "B", 10)
-pdf.cell(30, 8, "Node",       fill=True, border=1)
-pdf.cell(40, 8, "Mgmt IP",    fill=True, border=1)
-pdf.cell(50, 8, "Ethernet1",  fill=True, border=1)
-pdf.cell(50, 8, "Ethernet2",  fill=True, border=1, new_x="LMARGIN", new_y="NEXT")
-
-# Table rows
-pdf.set_text_color(0, 0, 0)
-pdf.set_font("Helvetica", "", 10)
-colors = [(248, 250, 252), (255, 255, 255)]
-for i, (name, mgmt, et1, et2) in enumerate(nodes):
-    pdf.set_fill_color(*colors[i % 2])
-    pdf.cell(30, 7, name, fill=True, border=1)
-    pdf.cell(40, 7, mgmt, fill=True, border=1)
-    pdf.cell(50, 7, et1,  fill=True, border=1)
-    pdf.cell(50, 7, et2,  fill=True, border=1, new_x="LMARGIN", new_y="NEXT")
-
-# ── Links ─────────────────────────────────────────────────────────────────────
-pdf.ln(5)
-pdf.set_font("Helvetica", "B", 13)
-pdf.set_text_color(30, 64, 175)
-pdf.cell(0, 8, "Links (Virtual Ethernet Cables)", new_x="LMARGIN", new_y="NEXT")
-pdf.set_draw_color(30, 64, 175)
-pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-pdf.ln(3)
-
-pdf.set_fill_color(30, 41, 59)
-pdf.set_text_color(255, 255, 255)
-pdf.set_font("Helvetica", "B", 10)
-pdf.cell(20, 8, "Link",       fill=True, border=1)
-pdf.cell(50, 8, "Side A",     fill=True, border=1)
-pdf.cell(50, 8, "Side B",     fill=True, border=1)
-pdf.cell(60, 8, "Subnet",     fill=True, border=1, new_x="LMARGIN", new_y="NEXT")
-
-links = [
-    ("L1", "ceos1 - Ethernet1 (10.0.12.1)", "ceos2 - Ethernet1 (10.0.12.2)", "10.0.12.0/24"),
-    ("L2", "ceos2 - Ethernet2 (10.0.23.1)", "ceos3 - Ethernet1 (10.0.23.2)", "10.0.23.0/24"),
-    ("L3", "ceos1 - Ethernet2 (10.0.13.1)", "ceos3 - Ethernet2 (10.0.13.2)", "10.0.13.0/24"),
-]
-
-pdf.set_text_color(0, 0, 0)
-pdf.set_font("Helvetica", "", 10)
-for i, (link, a, b, subnet) in enumerate(links):
-    pdf.set_fill_color(*colors[i % 2])
-    pdf.cell(20, 7, link,   fill=True, border=1)
-    pdf.cell(50, 7, a,      fill=True, border=1)
-    pdf.cell(50, 7, b,      fill=True, border=1)
-    pdf.cell(60, 7, subnet, fill=True, border=1, new_x="LMARGIN", new_y="NEXT")
-
-# ── ASCII Topology Diagram ────────────────────────────────────────────────────
-pdf.ln(5)
-pdf.set_font("Helvetica", "B", 13)
-pdf.set_text_color(30, 64, 175)
-pdf.cell(0, 8, "Topology Diagram", new_x="LMARGIN", new_y="NEXT")
-pdf.set_draw_color(30, 64, 175)
-pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-pdf.ln(3)
-
-pdf.set_font("Courier", "", 9)
+# ASCII topology diagram (devices + connections)
+pdf.section("Topology Diagram")
+pdf.set_font("Courier", "", 8)
 pdf.set_text_color(30, 41, 59)
-diagram = """
-                  +---------------------------+
-                  |  ceos1 (172.20.20.3)      |
-                  |  Et1: 10.0.12.1/24        |
-                  |  Et2: 10.0.13.1/24        |
-                  +----------+----------------+
-                             |           |
-             10.0.12.0/24    |           |   10.0.13.0/24
-                             |           |
-          +------------------+       +---+----------------+
-          |  ceos2 (172.20.20.4)     |  ceos3 (172.20.20.2) |
-          |  Et1: 10.0.12.2/24       |  Et1: 10.0.23.2/24   |
-          |  Et2: 10.0.23.1/24       |  Et2: 10.0.13.2/24   |
-          +------------+-------------+---------+------------+
-                       |                       |
-                       +---  10.0.23.0/24  ----+
-"""
-for line in diagram.splitlines():
-    pdf.cell(0, 5, line, new_x="LMARGIN", new_y="NEXT")
 
-# ── Credentials ───────────────────────────────────────────────────────────────
-pdf.ln(5)
-pdf.set_font("Helvetica", "B", 13)
-pdf.set_text_color(30, 64, 175)
-pdf.cell(0, 8, "Access Credentials (Lab Only)", new_x="LMARGIN", new_y="NEXT")
-pdf.set_draw_color(30, 64, 175)
-pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-pdf.ln(3)
+# Build simple text diagram
+dev_names = [d["name"] for d in devices]
+box_w = max((len(n) for n in dev_names), default=6) + 4
 
-pdf.set_font("Helvetica", "", 10)
-pdf.set_text_color(0, 0, 0)
-creds = [
-    ("Username", "admin"),
-    ("Password", "admin123"),
-    ("SSH Port", "22"),
-    ("ChatOps URL", "http://<GCP-IP>:8000/chatops"),
-]
-for label, value in creds:
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(40, 7, label + ":", new_x="RIGHT", new_y="TOP")
-    pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 7, value, new_x="LMARGIN", new_y="NEXT")
+def box(name: str, host: str, ifaces: list) -> list:
+    w = max(box_w, len(name) + 4, len(host) + 4)
+    border = "+" + "-" * (w + 2) + "+"
+    lines = [border, f"| {name.center(w)} |", f"| {host.center(w)} |"]
+    for iface in ifaces:
+        ip = iface.get("ip", "")
+        if ip and ip != "unassigned":
+            tag = f"{iface['interface']}: {ip}"
+            lines.append(f"| {tag:<{w}} |")
+    lines.append(border)
+    return lines
 
-pdf.output("chatops_lab_topology.pdf")
-print("PDF generated: chatops_lab_topology.pdf")
+for dev in devices:
+    name = dev["name"]
+    lines = box(name, dev["host"], device_ifaces.get(name, []))
+    for line in lines:
+        pdf.cell(0, 4, line, new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(1)
+
+if links:
+    pdf.ln(2)
+    pdf.set_font("Courier", "B", 8)
+    pdf.cell(0, 5, "Links:", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Courier", "", 8)
+    for lid, da, ia, ipa, db, ib, ipb, subnet in links:
+        line = f"  {lid}: {da}/{ia} ({ipa}) <--[{subnet}]--> {db}/{ib} ({ipb})"
+        pdf.cell(0, 4, line, new_x="LMARGIN", new_y="NEXT")
+
+pdf.output(args.output)
+print(f"\nPDF generated: {args.output}")
