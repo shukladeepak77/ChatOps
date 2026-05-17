@@ -139,6 +139,10 @@ def get_interfaces(device: dict) -> dict:
             elif dt == "cisco_xr":
                 brief = conn.send_command("show ip interface brief", read_timeout=20)
                 ifaces = _parse_xr_ip_int_brief(brief)
+            elif dt == "arista_eos":
+                brief = conn.send_command("show ip interface brief", read_timeout=20)
+                stats = conn.send_command("show interfaces status", read_timeout=30)
+                ifaces = _parse_arista_ip_int_brief(brief, stats)
             else:
                 brief = conn.send_command("show ip interface brief", read_timeout=20)
                 stats = conn.send_command("show interfaces", read_timeout=30)
@@ -961,6 +965,62 @@ def _parse_nxos_interface_status(text: str, mgmt_ip_text: str = "") -> list:
                 })
                 break
     return ifaces
+
+
+def _parse_arista_ip_int_brief(brief: str, status: str = "") -> list:
+    """Parse Arista EOS 'show ip interface brief' + 'show interfaces status'."""
+    # Collect L3 interfaces from 'show ip interface brief'
+    iface_map = {}
+    for line in brief.splitlines():
+        m = re.match(r"^(\S+)\s+([\d\.]+/\d+|unassigned)\s+(\S+)\s+(\S+)", line)
+        if m:
+            iface_map[m.group(1)] = {
+                "interface":  m.group(1),
+                "ip":         m.group(2),
+                "status":     m.group(3),
+                "protocol":   m.group(4),
+                "in_rate":    None,
+                "out_rate":   None,
+                "errors_in":  None,
+                "errors_out": None,
+            }
+
+    def _expand_arista_name(short: str) -> str:
+        """Expand abbreviated Arista interface names to full names."""
+        prefixes = [
+            ("Et",  "Ethernet"),
+            ("Ma",  "Management"),
+            ("Po",  "Port-Channel"),
+            ("Lo",  "Loopback"),
+            ("Vl",  "Vlan"),
+            ("Tu",  "Tunnel"),
+        ]
+        for abbr, full in prefixes:
+            if short.startswith(abbr) and not short.startswith(full):
+                return full + short[len(abbr):]
+        return short
+
+    # Merge L2 interfaces from 'show interfaces status'
+    for line in status.splitlines():
+        m = re.match(r"^(Et\d+\S*|Ma\d+\S*|Po\d+\S*|Lo\d+\S*|Vl\d+\S*)\s+\S*\s+(\S+)", line)
+        if m:
+            short_name, st = m.group(1), m.group(2)
+            full_name = _expand_arista_name(short_name)
+            # Skip if already present under full name
+            if full_name in iface_map or short_name in iface_map:
+                continue
+            iface_map[full_name] = {
+                "interface":  full_name,
+                "ip":         "unassigned",
+                "status":     st,
+                "protocol":   st,
+                "in_rate":    None,
+                "out_rate":   None,
+                "errors_in":  None,
+                "errors_out": None,
+            }
+
+    return list(iface_map.values())
 
 
 def _parse_ip_int_brief(text: str) -> list:

@@ -814,6 +814,7 @@
             <option value="cisco_ios">Cisco IOS</option>
             <option value="cisco_xr">Cisco IOS-XR</option>
             <option value="cisco_nxos">Cisco NX-OS</option>
+            <option value="arista_eos">Arista EOS</option>
             <option value="vyos">VyOS</option>
             <option value="juniper_junos">Juniper JunOS</option>
             <option value="linux">Linux / Generic SSH</option>
@@ -2502,7 +2503,7 @@ async function cwVerify() {
 
 // ── Network Dashboard ─────────────────────────────────────────────────────────
 
-const _DT_LABEL = { cisco_xe:'IOS-XE', cisco_xr:'IOS-XR', cisco_nxos:'NX-OS', linux:'Linux', cisco_ios:'IOS' };
+const _DT_LABEL = { cisco_xe:'IOS-XE', cisco_xr:'IOS-XR', cisco_nxos:'NX-OS', linux:'Linux', cisco_ios:'IOS', arista_eos:'Arista EOS' };
 
 function openNetDashboard() {
   openModal('modal-net-dashboard');
