@@ -1,4 +1,4 @@
 name,host,username,password,device_type,port,description
 ceos1,172.20.20.3,admin,admin123,arista_eos,22,Arista cEOS Node 1
 ceos2,172.20.20.4,admin,admin123,arista_eos,22,Arista cEOS Node 2
-ceos3,172.20.20.5,admin,admin123,arista_eos,22,Arista cEOS Node 3
+ceos3,172.20.20.2,admin,admin123,arista_eos,22,Arista cEOS Node 3

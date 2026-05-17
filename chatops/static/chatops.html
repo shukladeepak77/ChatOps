@@ -2677,7 +2677,7 @@ async function loadNetdevsModal() {
       body.innerHTML = '<div class="m-empty">No network devices yet. Click ➕ Add Device to register one.</div>';
       return;
     }
-    const typeLabels = {cisco_xe:'IOS-XE',cisco_ios:'IOS',cisco_xr:'IOS-XR',cisco_nxos:'NX-OS',vyos:'VyOS',juniper_junos:'JunOS',linux:'Linux'};
+    const typeLabels = {cisco_xe:'IOS-XE',cisco_ios:'IOS',cisco_xr:'IOS-XR',cisco_nxos:'NX-OS',arista_eos:'Arista EOS',vyos:'VyOS',juniper_junos:'JunOS',linux:'Linux'};
     let html = '<table class="m-table"><thead><tr><th>Name</th><th>Host</th><th>Type</th><th>Description</th><th>Added</th><th></th></tr></thead><tbody>';
     devs.forEach(d => {
       html += `<tr>
