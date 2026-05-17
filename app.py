@@ -1064,6 +1064,42 @@ def network_device_traceroute(name: str, target: str, user=Depends(_get_current_
     return result
 
 
+@app.get("/chatops/network/devices/{name}/cdp")
+def network_device_cdp(name: str, user=Depends(_get_current_user)):
+    from chatops.network import get_cdp_neighbors
+    dev = netdev_get(name)
+    if not dev:
+        raise HTTPException(status_code=404, detail="Device not found")
+    result = get_cdp_neighbors(dev)
+    if result["status"] == "error":
+        raise HTTPException(status_code=502, detail=result["error"])
+    return result
+
+
+@app.get("/chatops/network/devices/{name}/errors")
+def network_device_errors(name: str, user=Depends(_get_current_user)):
+    from chatops.network import get_interface_errors
+    dev = netdev_get(name)
+    if not dev:
+        raise HTTPException(status_code=404, detail="Device not found")
+    result = get_interface_errors(dev)
+    if result["status"] == "error":
+        raise HTTPException(status_code=502, detail=result["error"])
+    return result
+
+
+@app.get("/chatops/network/devices/{name}/mac-table")
+def network_device_mac_table(name: str, user=Depends(_get_current_user)):
+    from chatops.network import get_mac_table
+    dev = netdev_get(name)
+    if not dev:
+        raise HTTPException(status_code=404, detail="Device not found")
+    result = get_mac_table(dev)
+    if result["status"] == "error":
+        raise HTTPException(status_code=502, detail=result["error"])
+    return result
+
+
 @app.get("/chatops/network/dashboard")
 def network_dashboard(user=Depends(_get_current_user)):
     """Fetch device info + CPU for all registered devices in parallel."""

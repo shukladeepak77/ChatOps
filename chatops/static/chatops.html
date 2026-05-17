@@ -998,6 +998,9 @@
         <button class="m-btn m-btn-secondary" onclick="runNetMonitor('bgp')">🔗 BGP Neighbors</button>
         <button class="m-btn m-btn-secondary" onclick="runNetMonitor('ospf')">🔶 OSPF Neighbors</button>
         <button class="m-btn m-btn-secondary" onclick="runNetMonitor('arp')">📋 ARP Table</button>
+        <button class="m-btn m-btn-secondary" onclick="runNetMonitor('cdp')">🔗 CDP/LLDP Neighbors</button>
+        <button class="m-btn m-btn-secondary" onclick="runNetMonitor('errors')">⚠️ Interface Errors</button>
+        <button class="m-btn m-btn-secondary" onclick="runNetMonitor('mac-table')">🔎 MAC Table</button>
         <button class="m-btn m-btn-secondary" onclick="togglePingTarget()">📡 Ping Device</button>
         <button class="m-btn m-btn-secondary" onclick="toggleTracerouteTarget()">🔀 Traceroute</button>
         <button class="m-btn m-btn-secondary" onclick="toggleLogLines()">📜 Show Logs</button>
@@ -3002,6 +3005,84 @@ function _nmBoxConfigDiff(name, data) {
   return html;
 }
 
+function _nmBoxCdp(name, data) {
+  const nbrs = data.neighbors || [];
+  let html = _nmTitle('🔗', `CDP/LLDP Neighbors — ${name}`, `${nbrs.length} neighbor${nbrs.length !== 1 ? 's' : ''}`);
+  if (!nbrs.length) return html + _nmEmpty('No CDP/LLDP neighbors discovered.');
+  html += `<table class="m-table"><thead><tr>
+    <th>Local Interface</th><th>Neighbor</th><th>IP</th><th>Remote Port</th><th>Platform</th>
+  </tr></thead><tbody>`;
+  nbrs.forEach(n => {
+    html += `<tr>
+      <td style="font-family:monospace;font-size:.76rem">${n.local_interface}</td>
+      <td style="font-family:monospace;font-size:.76rem"><strong>${n.device_id}</strong></td>
+      <td style="font-family:monospace;font-size:.76rem">${n.ip}</td>
+      <td style="font-family:monospace;font-size:.76rem">${n.remote_port}</td>
+      <td style="font-size:.74rem;color:#94a3b8">${n.platform}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+function _nmBoxErrors(name, data) {
+  const ifaces = data.interfaces || [];
+  const errored = ifaces.filter(i => i.has_errors);
+  const sub = errored.length
+    ? `<span style="color:#f87171">${errored.length} with errors</span> · ${ifaces.length - errored.length} clean`
+    : `<span style="color:#6ee7b7">All ${ifaces.length} interfaces clean</span>`;
+  let html = _nmTitle('⚠️', `Interface Errors — ${name}`, sub);
+  if (!ifaces.length) return html + _nmEmpty('No interface data returned.');
+  const hl = v => v > 0 ? `<span style="color:#f87171;font-weight:700">${v}</span>` : `<span style="color:#475569">0</span>`;
+  html += `<table class="m-table"><thead><tr>
+    <th>Interface</th><th>Input Err</th><th>CRC</th><th>Output Err</th><th>Drops</th><th>Resets</th>
+  </tr></thead><tbody>`;
+  ifaces.forEach(i => {
+    const drops = (i.input_drops || 0) + (i.output_drops || 0);
+    const rowStyle = i.has_errors ? 'background:rgba(239,68,68,.07)' : '';
+    html += `<tr style="${rowStyle}">
+      <td style="font-family:monospace;font-size:.76rem"><strong>${i.interface}</strong></td>
+      <td>${hl(i.input_errors)}</td><td>${hl(i.crc)}</td>
+      <td>${hl(i.output_errors)}</td><td>${hl(drops)}</td><td>${hl(i.resets)}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+function _nmBoxMacTable(name, data) {
+  const entries = data.entries || [];
+  let html = _nmTitle('🔎', `MAC Address Table — ${name}`, `${entries.length} entries`);
+  if (!entries.length) {
+    const msg = (data.raw || '').startsWith('N/A') ? data.raw : 'No MAC entries found.';
+    return html + _nmEmpty(msg);
+  }
+  html += `<div style="margin-bottom:8px">
+    <input id="mac-filter" type="text" placeholder="Filter by MAC, VLAN, or port…" oninput="_filterMacTable()"
+      style="width:100%;padding:5px 9px;font-size:.78rem;background:#0f172a;border:1px solid rgba(255,255,255,.12);border-radius:5px;color:#e2e8f0">
+  </div>`;
+  html += `<table class="m-table" id="nm-mac-tbl"><thead><tr>
+    <th>VLAN</th><th>MAC Address</th><th>Type</th><th>Port</th>
+  </tr></thead><tbody>`;
+  entries.forEach(e => {
+    html += `<tr data-q="${e.vlan} ${e.mac} ${e.port}">
+      <td style="font-family:monospace;font-size:.76rem">${e.vlan}</td>
+      <td style="font-family:monospace;font-size:.76rem">${e.mac}</td>
+      <td style="font-size:.74rem;color:#94a3b8">${e.type}</td>
+      <td style="font-family:monospace;font-size:.76rem">${e.port}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+function _filterMacTable() {
+  const q = (document.getElementById('mac-filter')?.value || '').toLowerCase();
+  document.querySelectorAll('#nm-mac-tbl tbody tr').forEach(r => {
+    r.style.display = (r.dataset.q || '').toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
 async function runNetMonitor(action) {
   const name = document.getElementById('nm-device').value;
   const el = document.getElementById('nm-result');
@@ -3111,6 +3192,25 @@ async function runNetMonitor(action) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Config diff failed');
       html = _nmBoxConfigDiff(name, data);
+
+    } else if (action === 'cdp') {
+      const res = await authFetch(`${base}/cdp`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Request failed');
+      html = _nmBoxCdp(name, data);
+
+    } else if (action === 'errors') {
+      el.innerHTML = '<span style="opacity:.6"><span class="m-spinner"></span> Fetching interface counters…</span>';
+      const res = await authFetch(`${base}/errors`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Request failed');
+      html = _nmBoxErrors(name, data);
+
+    } else if (action === 'mac-table') {
+      const res = await authFetch(`${base}/mac-table`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Request failed');
+      html = _nmBoxMacTable(name, data);
     }
 
     el.innerHTML = html;

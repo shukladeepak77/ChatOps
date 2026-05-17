@@ -505,6 +505,70 @@ def get_arp_table(device: dict) -> dict:
         return {"status": "error", "error": str(e)}
 
 
+# ── CDP / LLDP Neighbor Discovery ─────────────────────────────────────────────
+
+def get_cdp_neighbors(device: dict) -> dict:
+    """Return CDP neighbor list; falls back to LLDP if CDP is disabled."""
+    try:
+        dt = device.get("device_type", "cisco_xe")
+        if dt == "linux":
+            return {"status": "ok", "neighbors": [], "raw": "N/A — Linux host"}
+        with _netmiko_conn(device) as conn:
+            output = conn.send_command("show cdp neighbors detail", read_timeout=20)
+            if "CDP is not enabled" in output or "% Invalid" in output:
+                output = conn.send_command("show lldp neighbors detail", read_timeout=20)
+        neighbors = _parse_cdp_neighbors(output)
+        clean_raw = "\n".join(
+            l for l in output.splitlines()
+            if "Invalid" not in l and not l.strip().startswith("%")
+            and not re.match(r"^\s*\^\s*$", l)
+        )
+        return {"status": "ok", "neighbors": neighbors, "raw": clean_raw[:3000]}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+# ── Interface Error Counters ───────────────────────────────────────────────────
+
+def get_interface_errors(device: dict) -> dict:
+    """Return per-interface error counters (input errors, CRC, output errors, drops, resets)."""
+    try:
+        dt = device.get("device_type", "cisco_xe")
+        with _netmiko_conn(device) as conn:
+            if dt == "linux":
+                output = conn.send_command("ip -s link show", read_timeout=20)
+            elif dt == "cisco_nxos":
+                output = conn.send_command("show interface", read_timeout=30)
+            else:
+                output = conn.send_command("show interfaces", read_timeout=30)
+        interfaces = _parse_interface_errors(output, dt)
+        return {"status": "ok", "interfaces": interfaces, "raw": output[:5000]}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+# ── MAC Address Table ──────────────────────────────────────────────────────────
+
+def get_mac_table(device: dict) -> dict:
+    """Return MAC address table (IOS-XE and NX-OS only; routers return N/A)."""
+    try:
+        dt = device.get("device_type", "cisco_xe")
+        if dt == "cisco_xr":
+            return {"status": "ok", "entries": [], "raw": "N/A — IOS-XR is a router, no L2 MAC table"}
+        if dt == "linux":
+            return {"status": "ok", "entries": [], "raw": "N/A — Linux host"}
+        with _netmiko_conn(device) as conn:
+            output = conn.send_command("show mac address-table", read_timeout=20)
+        entries = _parse_mac_table(output, dt)
+        clean_raw = "\n".join(
+            l for l in output.splitlines()
+            if not l.strip().startswith("%") and not re.match(r"^\s*\^\s*$", l)
+        )
+        return {"status": "ok", "entries": entries, "raw": clean_raw[:3000]}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
 # ── NETCONF operations ────────────────────────────────────────────────────────
 
 def netconf_get_interfaces(device: dict) -> dict:
@@ -530,6 +594,130 @@ def netconf_get_interfaces(device: dict) -> dict:
 
 
 # ── Parsers ───────────────────────────────────────────────────────────────────
+
+def _re_int(pattern: str, text: str) -> int:
+    """Return first integer capture group matched by pattern, or 0."""
+    m = re.search(pattern, text)
+    if not m:
+        return 0
+    for g in m.groups():
+        if g is not None:
+            try:
+                return int(g)
+            except (ValueError, TypeError):
+                pass
+    return 0
+
+
+def _parse_cdp_neighbors(text: str) -> list:
+    """Parse 'show cdp neighbors detail' output for IOS-XE, IOS-XR, and NX-OS."""
+    neighbors = []
+    blocks = re.split(r'\n-{5,}', text)
+    for block in blocks:
+        m_dev = re.search(r'Device ID[:\s]+(\S+)', block)
+        if not m_dev:
+            continue
+        m_ip   = re.search(r'(?:IP address|IPv4 Address)[:\s]+([\d.]+)', block, re.I)
+        m_plat = re.search(r'Platform:\s*(.+?),', block)
+        m_if   = re.search(r'Interface:\s*(\S+),\s*Port ID.*?:\s*(\S+)', block)
+        m_cap  = re.search(r'Capabilities:\s*(.+)', block)
+        neighbors.append({
+            "device_id":       m_dev.group(1).strip(),
+            "ip":              m_ip.group(1) if m_ip else "—",
+            "platform":        m_plat.group(1).strip() if m_plat else "—",
+            "local_interface": m_if.group(1) if m_if else "—",
+            "remote_port":     m_if.group(2) if m_if else "—",
+            "capabilities":    m_cap.group(1).strip() if m_cap else "—",
+        })
+    return neighbors
+
+
+def _parse_interface_errors(text: str, dt: str) -> list:
+    """Parse error counters from show interfaces / show interface / ip -s link."""
+    results = []
+
+    if dt == "linux":
+        iface = rx_err = rx_drop = tx_err = tx_drop = 0
+        cur = None
+        in_rx = in_tx = False
+        for line in text.splitlines():
+            m = re.match(r'^\d+:\s+(\S+?):', line)
+            if m:
+                if cur:
+                    results.append({"interface": cur, "input_errors": rx_err, "crc": 0,
+                                    "output_errors": tx_err, "input_drops": rx_drop,
+                                    "output_drops": tx_drop, "resets": 0,
+                                    "has_errors": any(x > 0 for x in [rx_err, rx_drop, tx_err, tx_drop])})
+                cur, rx_err, rx_drop, tx_err, tx_drop = m.group(1), 0, 0, 0, 0
+                in_rx = in_tx = False
+            elif 'RX:' in line:
+                in_rx, in_tx = True, False
+            elif 'TX:' in line:
+                in_tx, in_rx = True, False
+            elif in_rx:
+                p = line.split()
+                if len(p) >= 4 and p[2].isdigit():
+                    rx_err, rx_drop = int(p[2]), int(p[3])
+                in_rx = False
+            elif in_tx:
+                p = line.split()
+                if len(p) >= 4 and p[2].isdigit():
+                    tx_err, tx_drop = int(p[2]), int(p[3])
+                in_tx = False
+        if cur:
+            results.append({"interface": cur, "input_errors": rx_err, "crc": 0,
+                            "output_errors": tx_err, "input_drops": rx_drop,
+                            "output_drops": tx_drop, "resets": 0,
+                            "has_errors": any(x > 0 for x in [rx_err, rx_drop, tx_err, tx_drop])})
+        return results
+
+    if dt == "cisco_nxos":
+        blocks = re.split(r'\n(?=\S+\s+is\s+(?:up|down))', text)
+        for block in blocks:
+            m = re.match(r'^(\S+)\s+is\s+(up|down)', block, re.I)
+            if not m:
+                continue
+            ie = _re_int(r'(\d+)\s+input error', block)
+            crc = _re_int(r'(\d+)\s+CRC', block)
+            oe = _re_int(r'(\d+)\s+output errors', block)
+            idrop = _re_int(r'(\d+)\s+input discard', block)
+            odrop = _re_int(r'(\d+)\s+output discard', block)
+            results.append({"interface": m.group(1), "input_errors": ie, "crc": crc,
+                            "output_errors": oe, "input_drops": idrop, "output_drops": odrop,
+                            "resets": 0, "has_errors": any(x > 0 for x in [ie, crc, oe, idrop, odrop])})
+        return results
+
+    # IOS-XE / IOS-XR: blocks start at non-indented lines
+    blocks = re.split(r'\n(?=\S)', text)
+    for block in blocks:
+        m = re.match(r'^(\S+)\s+is\s+(up|down|admin)', block, re.I)
+        if not m:
+            continue
+        ie    = _re_int(r'(\d+)\s+input errors', block)
+        crc   = _re_int(r'(\d+)\s+CRC', block)
+        oe    = _re_int(r'(\d+)\s+output errors', block)
+        rst   = _re_int(r'(\d+)\s+interface resets', block)
+        odrop = _re_int(r'[Tt]otal output drops[:\s]+(\d+)|(\d+)\s+output drops', block)
+        idrop = _re_int(r'[Tt]otal input drops[:\s]+(\d+)|(\d+)\s+input drops', block)
+        results.append({"interface": m.group(1), "input_errors": ie, "crc": crc,
+                        "output_errors": oe, "input_drops": idrop, "output_drops": odrop,
+                        "resets": rst, "has_errors": any(x > 0 for x in [ie, crc, oe, rst, odrop])})
+    return results
+
+
+def _parse_mac_table(text: str, dt: str) -> list:
+    """Parse MAC address table from IOS-XE or NX-OS output."""
+    entries = []
+    for line in text.splitlines():
+        if dt == "cisco_nxos":
+            m = re.match(r'[*+CGO~]?\s*(\d+)\s+([\da-fA-F.:]+)\s+(\S+)\s+\d+\s+[TF]\s+[TF]\s+(\S+)', line)
+        else:
+            m = re.match(r'^\s*(\d+)\s+([\da-fA-F.]+)\s+(\S+)\s+(\S+)', line)
+        if m:
+            entries.append({"vlan": m.group(1), "mac": m.group(2),
+                            "type": m.group(3).lower(), "port": m.group(4)})
+    return entries
+
 
 def _parse_field(text: str, *patterns) -> str:
     for pat in patterns:
