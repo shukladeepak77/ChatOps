@@ -216,11 +216,10 @@ Generates and pushes correct per-OS config for all three Cisco routers:
 
 | Limitation | Detail |
 |---|---|
-| NX-OS OSPF adjacency | mgmt0 is in the management VRF — OSPF multicast hellos are blocked. BGP works fine. |
+| OSPF adjacency — all devices | OSPF uses multicast (224.0.0.5). IOS-XE OSPF runs in the global routing table; IOS-XR management is in `Mgmt-intf` VRF; NX-OS mgmt0 is in the management VRF. The virtual sandbox fabric does not deliver OSPF multicast across VRF boundaries, so no adjacency forms between any pair. **Use BGP instead** — it uses TCP unicast and works fine across all three. |
 | IOS-XR ping direction | XR management is in `Mgmt-intf` VRF. ChatOps uses `ping vrf Mgmt-intf` automatically. |
 | IOS-XR SSH sessions | XRv enforces a low concurrent session limit. Ping matrix serializes sessions per device. |
 | Config diff — Linux | `show running-config` not applicable. Config Diff is Cisco-only. |
-| OSPF on XR | Runs in `Mgmt-intf` VRF context — routes learned via OSPF stay in that VRF. |
 
 ---
 

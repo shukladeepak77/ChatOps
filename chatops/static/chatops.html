@@ -2386,8 +2386,8 @@ function cwPreview(proto) {
 
   const cards = _cwDevices.map(dev => {
     const cmds = proto === 'ospf' ? _ospfCmds(dev, pid, area) : _bgpCmds(dev, asn, _cwDevices);
-    const warn = (proto === 'ospf' && dev.device_type === 'cisco_nxos')
-      ? `<div style="font-size:.67rem;color:#fbbf24;margin-bottom:5px">⚠ mgmt0 restricted VRF — adjacency not guaranteed</div>` : '';
+    const warn = (proto === 'ospf')
+      ? `<div style="font-size:.67rem;color:#fbbf24;margin-bottom:5px">⚠ OSPF multicast blocked in virtual sandbox — adjacency will not form (use BGP)</div>` : '';
     return `<div id="cw-card-${dev.name}" style="background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:10px 12px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <span style="font-weight:700;font-size:.8rem;color:#e2e8f0">${dev.name}</span>
