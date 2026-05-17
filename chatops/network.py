@@ -569,6 +569,66 @@ def get_mac_table(device: dict) -> dict:
         return {"status": "error", "error": str(e)}
 
 
+# ── VLAN Audit ────────────────────────────────────────────────────────────────
+
+def get_vlan_audit(device: dict) -> dict:
+    """Return VLAN table and trunk port summary (IOS-XE and NX-OS only)."""
+    try:
+        dt = device.get("device_type", "cisco_xe")
+        if dt in ("cisco_xr", "linux"):
+            label = "IOS-XR (no L2 VLAN table)" if dt == "cisco_xr" else "Linux host"
+            return {"status": "ok", "vlans": [], "trunks": [], "raw": f"N/A — {label}"}
+        with _netmiko_conn(device) as conn:
+            vlan_out  = conn.send_command("show vlan brief", read_timeout=20)
+            trunk_cmd = "show interface trunk" if dt == "cisco_nxos" else "show interfaces trunk"
+            trunk_out = conn.send_command(trunk_cmd, read_timeout=20)
+        vlans  = _parse_vlan_brief(vlan_out)
+        trunks = _parse_trunk_interfaces(trunk_out)
+        return {"status": "ok", "vlans": vlans, "trunks": trunks,
+                "raw_vlans": vlan_out[:2000], "raw_trunks": trunk_out[:2000]}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+# ── Spanning Tree Status ───────────────────────────────────────────────────────
+
+def get_stp_status(device: dict) -> dict:
+    """Return per-VLAN spanning tree status (IOS-XE and NX-OS only)."""
+    try:
+        dt = device.get("device_type", "cisco_xe")
+        if dt in ("cisco_xr", "linux"):
+            label = "IOS-XR (no STP)" if dt == "cisco_xr" else "Linux host"
+            return {"status": "ok", "vlans": [], "raw": f"N/A — {label}"}
+        with _netmiko_conn(device) as conn:
+            output = conn.send_command("show spanning-tree", read_timeout=30)
+        vlans = _parse_stp_status(output)
+        return {"status": "ok", "vlans": vlans, "raw": output[:5000]}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+# ── Port Channel / EtherChannel Status ────────────────────────────────────────
+
+def get_portchannel_status(device: dict) -> dict:
+    """Return port-channel / EtherChannel group summary."""
+    try:
+        dt = device.get("device_type", "cisco_xe")
+        if dt in ("cisco_xr", "linux"):
+            label = "IOS-XR" if dt == "cisco_xr" else "Linux host"
+            return {"status": "ok", "groups": [], "raw": f"N/A — {label}"}
+        with _netmiko_conn(device) as conn:
+            cmd = "show port-channel summary" if dt == "cisco_nxos" else "show etherchannel summary"
+            output = conn.send_command(cmd, read_timeout=20)
+        groups = _parse_portchannel_summary(output)
+        clean_raw = "\n".join(
+            l for l in output.splitlines()
+            if not l.strip().startswith("%") and not re.match(r"^\s*\^\s*$", l)
+        )
+        return {"status": "ok", "groups": groups, "raw": clean_raw[:3000]}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
 # ── NETCONF operations ────────────────────────────────────────────────────────
 
 def netconf_get_interfaces(device: dict) -> dict:
@@ -717,6 +777,93 @@ def _parse_mac_table(text: str, dt: str) -> list:
             entries.append({"vlan": m.group(1), "mac": m.group(2),
                             "type": m.group(3).lower(), "port": m.group(4)})
     return entries
+
+
+def _parse_vlan_brief(text: str) -> list:
+    """Parse 'show vlan brief' output (IOS-XE and NX-OS share the same format)."""
+    vlans = []
+    for line in text.splitlines():
+        m = re.match(r'^\s*(\d+)\s+(\S+)\s+(active|act/lshut|suspend|unsupported)\s*(.*)?', line, re.I)
+        if m:
+            ports = [p.strip() for p in m.group(4).split(',') if p.strip()] if m.group(4) else []
+            vlans.append({"vlan": m.group(1), "name": m.group(2),
+                          "status": m.group(3).lower(), "ports": ports})
+    return vlans
+
+
+def _parse_trunk_interfaces(text: str) -> list:
+    """Parse 'show interfaces trunk' / 'show interface trunk' output."""
+    trunks = []
+    seen = set()
+    for line in text.splitlines():
+        # IOS-XE: "Gi1   auto   802.1q   trunking   1"
+        m = re.match(r'^(\S+)\s+\S+\s+(802\.1[qQ]|isl|ISL|negotiate)\s+(\S+)\s+(\d+)', line)
+        if m and m.group(1) not in seen:
+            trunks.append({"port": m.group(1), "encapsulation": "802.1q",
+                           "status": m.group(3), "native_vlan": m.group(4)})
+            seen.add(m.group(1))
+            continue
+        # NX-OS: "Eth1/1   1   trunking   --"
+        m2 = re.match(r'^(Eth\S+|Po\S+)\s+(\d+)\s+(trunking|not-trunking)\s+', line, re.I)
+        if m2 and m2.group(1) not in seen:
+            trunks.append({"port": m2.group(1), "encapsulation": "802.1q",
+                           "status": m2.group(3), "native_vlan": m2.group(2)})
+            seen.add(m2.group(1))
+    return trunks
+
+
+def _parse_stp_status(text: str) -> list:
+    """Parse 'show spanning-tree' output into per-VLAN blocks (IOS-XE and NX-OS)."""
+    result = []
+    blocks = re.split(r'\n(?=VLAN\d+)', text)
+    for block in blocks:
+        m_vlan = re.match(r'VLAN(\d+)', block)
+        if not m_vlan:
+            continue
+        vlan_id = str(int(m_vlan.group(1)))
+        is_root   = 'This bridge is the root' in block
+        m_rp = re.search(r'Root ID\s+Priority\s+(\d+)', block)
+        m_ra = re.search(r'Root ID.*?Address\s+([\da-fA-F.]+)', block, re.DOTALL)
+        m_bp = re.search(r'Bridge ID\s+Priority\s+(\d+)', block)
+        m_tc = re.search(r'(\d+)\s+topology changes?', block, re.I)
+        interfaces = []
+        for line in block.splitlines():
+            mi = re.match(r'^(\S+)\s+(Desg|Root|Altn|Back|Mast)\s+(FWD|BLK|LRN|LSN|DIS)\s+(\d+)', line, re.I)
+            if mi:
+                interfaces.append({"interface": mi.group(1), "role": mi.group(2).upper(),
+                                   "state": mi.group(3).upper(), "cost": mi.group(4)})
+        result.append({"vlan": vlan_id, "is_root": is_root,
+                       "root_priority": m_rp.group(1) if m_rp else "—",
+                       "root_address": m_ra.group(1) if m_ra else "—",
+                       "bridge_priority": m_bp.group(1) if m_bp else "—",
+                       "topology_changes": int(m_tc.group(1)) if m_tc else 0,
+                       "interfaces": interfaces})
+    return result
+
+
+def _parse_portchannel_summary(text: str) -> list:
+    """Parse 'show etherchannel summary' / 'show port-channel summary' output."""
+    groups = []
+    for line in text.splitlines():
+        # IOS-XE:  "1      Po1(SU)    LACP      Gi1(P)  Gi2(P)"
+        # NX-OS:   "1     Po1(SU)     Eth      LACP      Eth1/1(P)  Eth1/2(P)"
+        m = re.match(r'^\s*(\d+)\s+(Po\S+)\s+(?:\S+\s+)?(LACP|PAGP|PAgP|None|Static)\s+(.*)', line, re.I)
+        if not m:
+            m = re.match(r'^\s*(\d+)\s+(Po\S+)\s+(LACP|PAGP|PAgP|None|Static)\s+(.*)', line, re.I)
+        if m:
+            po_raw = m.group(2)
+            po_name = re.sub(r'\(.*?\)', '', po_raw)
+            po_flags = (re.search(r'\((\S+)\)', po_raw) or type('', (), {'group': lambda s, n: '—'})()).group(1)
+            members = []
+            for tok in m.group(4).split():
+                port = re.sub(r'\(.*?\)', '', tok)
+                flags = (re.search(r'\((\S+)\)', tok) or type('', (), {'group': lambda s, n: '—'})()).group(1)
+                if port:
+                    members.append({"port": port, "flags": flags})
+            groups.append({"group": m.group(1), "port_channel": po_name,
+                           "status": po_flags, "protocol": m.group(3).upper(),
+                           "members": members})
+    return groups
 
 
 def _parse_field(text: str, *patterns) -> str:

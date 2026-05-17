@@ -1100,6 +1100,42 @@ def network_device_mac_table(name: str, user=Depends(_get_current_user)):
     return result
 
 
+@app.get("/chatops/network/devices/{name}/vlans")
+def network_device_vlans(name: str, user=Depends(_get_current_user)):
+    from chatops.network import get_vlan_audit
+    dev = netdev_get(name)
+    if not dev:
+        raise HTTPException(status_code=404, detail="Device not found")
+    result = get_vlan_audit(dev)
+    if result["status"] == "error":
+        raise HTTPException(status_code=502, detail=result["error"])
+    return result
+
+
+@app.get("/chatops/network/devices/{name}/stp")
+def network_device_stp(name: str, user=Depends(_get_current_user)):
+    from chatops.network import get_stp_status
+    dev = netdev_get(name)
+    if not dev:
+        raise HTTPException(status_code=404, detail="Device not found")
+    result = get_stp_status(dev)
+    if result["status"] == "error":
+        raise HTTPException(status_code=502, detail=result["error"])
+    return result
+
+
+@app.get("/chatops/network/devices/{name}/portchannel")
+def network_device_portchannel(name: str, user=Depends(_get_current_user)):
+    from chatops.network import get_portchannel_status
+    dev = netdev_get(name)
+    if not dev:
+        raise HTTPException(status_code=404, detail="Device not found")
+    result = get_portchannel_status(dev)
+    if result["status"] == "error":
+        raise HTTPException(status_code=502, detail=result["error"])
+    return result
+
+
 @app.get("/chatops/network/dashboard")
 def network_dashboard(user=Depends(_get_current_user)):
     """Fetch device info + CPU for all registered devices in parallel."""

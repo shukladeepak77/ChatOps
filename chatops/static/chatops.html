@@ -1001,6 +1001,9 @@
         <button class="m-btn m-btn-secondary" onclick="runNetMonitor('cdp')">🔗 CDP/LLDP Neighbors</button>
         <button class="m-btn m-btn-secondary" onclick="runNetMonitor('errors')">⚠️ Interface Errors</button>
         <button class="m-btn m-btn-secondary" onclick="runNetMonitor('mac-table')">🔎 MAC Table</button>
+        <button class="m-btn m-btn-secondary" onclick="runNetMonitor('vlans')">🏷 VLAN Audit</button>
+        <button class="m-btn m-btn-secondary" onclick="runNetMonitor('stp')">🌲 Spanning Tree</button>
+        <button class="m-btn m-btn-secondary" onclick="runNetMonitor('portchannel')">⛓ Port Channel</button>
         <button class="m-btn m-btn-secondary" onclick="togglePingTarget()">📡 Ping Device</button>
         <button class="m-btn m-btn-secondary" onclick="toggleTracerouteTarget()">🔀 Traceroute</button>
         <button class="m-btn m-btn-secondary" onclick="toggleLogLines()">📜 Show Logs</button>
@@ -3083,6 +3086,111 @@ function _filterMacTable() {
   });
 }
 
+function _nmBoxVlans(name, data) {
+  const vlans = data.vlans || [];
+  const trunks = data.trunks || [];
+  if (data.raw && data.raw.startsWith('N/A')) return _nmTitle('🏷', `VLAN Audit — ${name}`) + _nmEmpty(data.raw);
+  let html = _nmTitle('🏷', `VLAN Audit — ${name}`, `${vlans.length} VLANs · ${trunks.length} trunk port${trunks.length !== 1 ? 's' : ''}`);
+  // VLAN table
+  html += `<div style="font-size:.74rem;font-weight:600;color:#64748b;margin:6px 0 4px">VLANs</div>`;
+  if (!vlans.length) {
+    html += _nmEmpty('No VLANs found.');
+  } else {
+    html += `<table class="m-table"><thead><tr><th>VLAN</th><th>Name</th><th>Status</th><th>Ports</th></tr></thead><tbody>`;
+    vlans.forEach(v => {
+      const stColor = v.status === 'active' ? '#6ee7b7' : '#f87171';
+      const portStr = v.ports.length ? v.ports.slice(0, 8).join(', ') + (v.ports.length > 8 ? ` +${v.ports.length-8} more` : '') : '—';
+      html += `<tr>
+        <td style="font-family:monospace;font-size:.76rem"><strong>${v.vlan}</strong></td>
+        <td style="font-size:.76rem">${v.name}</td>
+        <td><span style="color:${stColor};font-size:.74rem">${v.status}</span></td>
+        <td style="font-size:.72rem;color:#94a3b8">${portStr}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+  }
+  // Trunk table
+  html += `<div style="font-size:.74rem;font-weight:600;color:#64748b;margin:10px 0 4px">Trunk Ports</div>`;
+  if (!trunks.length) {
+    html += _nmEmpty('No trunk interfaces found.');
+  } else {
+    html += `<table class="m-table"><thead><tr><th>Port</th><th>Encapsulation</th><th>Status</th><th>Native VLAN</th></tr></thead><tbody>`;
+    trunks.forEach(t => {
+      const stColor = t.status === 'trunking' ? '#6ee7b7' : '#fbbf24';
+      html += `<tr>
+        <td style="font-family:monospace;font-size:.76rem"><strong>${t.port}</strong></td>
+        <td style="font-size:.74rem;color:#94a3b8">${t.encapsulation}</td>
+        <td><span style="color:${stColor};font-size:.74rem">${t.status}</span></td>
+        <td style="font-family:monospace;font-size:.76rem">${t.native_vlan}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+  }
+  return html;
+}
+
+function _nmBoxStp(name, data) {
+  const vlans = data.vlans || [];
+  if (data.raw && data.raw.startsWith('N/A')) return _nmTitle('🌲', `Spanning Tree — ${name}`) + _nmEmpty(data.raw);
+  const rootCount = vlans.filter(v => v.is_root).length;
+  let html = _nmTitle('🌲', `Spanning Tree — ${name}`, `${vlans.length} VLAN${vlans.length !== 1 ? 's' : ''} · root bridge for ${rootCount}`);
+  if (!vlans.length) return html + _nmEmpty('No STP data found (STP may not be active).');
+  vlans.forEach(v => {
+    const rootBadge = v.is_root
+      ? `<span style="background:rgba(99,102,241,.2);color:#a5b4fc;padding:1px 6px;border-radius:4px;font-size:.68rem">ROOT</span>`
+      : `<span style="color:#64748b;font-size:.68rem">prio ${v.bridge_priority}</span>`;
+    const tcBadge = v.topology_changes > 0
+      ? `<span style="color:#fbbf24;font-size:.68rem;margin-left:6px">⚠ ${v.topology_changes} TC</span>` : '';
+    html += `<details style="margin-bottom:6px" open>
+      <summary style="cursor:pointer;padding:5px 8px;background:rgba(255,255,255,.04);border-radius:5px;font-size:.78rem;font-weight:600;color:#e2e8f0">
+        VLAN ${v.vlan} ${rootBadge}${tcBadge}
+      </summary>`;
+    if (v.interfaces.length) {
+      html += `<table class="m-table" style="margin-top:4px"><thead><tr><th>Interface</th><th>Role</th><th>State</th><th>Cost</th></tr></thead><tbody>`;
+      v.interfaces.forEach(i => {
+        const stColor = i.state === 'FWD' ? '#6ee7b7' : i.state === 'BLK' ? '#f87171' : '#fbbf24';
+        html += `<tr>
+          <td style="font-family:monospace;font-size:.76rem">${i.interface}</td>
+          <td style="font-size:.74rem;color:#94a3b8">${i.role}</td>
+          <td><span style="color:${stColor};font-weight:700;font-size:.74rem">${i.state}</span></td>
+          <td style="font-size:.74rem;color:#64748b">${i.cost}</td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+    } else {
+      html += `<div style="padding:5px 8px;font-size:.74rem;color:#64748b">No interface detail available.</div>`;
+    }
+    html += '</details>';
+  });
+  return html;
+}
+
+function _nmBoxPortChannel(name, data) {
+  const groups = data.groups || [];
+  if (data.raw && data.raw.startsWith('N/A')) return _nmTitle('⛓', `Port Channel — ${name}`) + _nmEmpty(data.raw);
+  let html = _nmTitle('⛓', `Port Channel — ${name}`, `${groups.length} group${groups.length !== 1 ? 's' : ''}`);
+  if (!groups.length) return html + _nmEmpty('No port-channel groups configured.');
+  html += `<table class="m-table"><thead><tr><th>Group</th><th>Port-Channel</th><th>Protocol</th><th>Status</th><th>Members</th></tr></thead><tbody>`;
+  groups.forEach(g => {
+    const up = g.status.includes('U');
+    const stColor = up ? '#6ee7b7' : '#f87171';
+    const membersHtml = g.members.map(m => {
+      const mUp = m.flags.includes('P') || m.flags.includes('p');
+      const mColor = mUp ? '#6ee7b7' : '#f87171';
+      return `<span style="font-family:monospace;font-size:.72rem;color:${mColor}">${m.port}(${m.flags})</span>`;
+    }).join(' ');
+    html += `<tr>
+      <td style="font-family:monospace;font-size:.76rem">${g.group}</td>
+      <td style="font-family:monospace;font-size:.76rem"><strong>${g.port_channel}</strong></td>
+      <td style="font-size:.74rem;color:#94a3b8">${g.protocol}</td>
+      <td><span style="color:${stColor};font-weight:700;font-size:.74rem">${g.status}</span></td>
+      <td>${membersHtml || '—'}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
 async function runNetMonitor(action) {
   const name = document.getElementById('nm-device').value;
   const el = document.getElementById('nm-result');
@@ -3211,6 +3319,25 @@ async function runNetMonitor(action) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Request failed');
       html = _nmBoxMacTable(name, data);
+
+    } else if (action === 'vlans') {
+      const res = await authFetch(`${base}/vlans`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Request failed');
+      html = _nmBoxVlans(name, data);
+
+    } else if (action === 'stp') {
+      el.innerHTML = '<span style="opacity:.6"><span class="m-spinner"></span> Fetching spanning tree…</span>';
+      const res = await authFetch(`${base}/stp`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Request failed');
+      html = _nmBoxStp(name, data);
+
+    } else if (action === 'portchannel') {
+      const res = await authFetch(`${base}/portchannel`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Request failed');
+      html = _nmBoxPortChannel(name, data);
     }
 
     el.innerHTML = html;
