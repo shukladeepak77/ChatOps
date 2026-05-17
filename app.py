@@ -1005,8 +1005,9 @@ def network_dashboard(user=Depends(_get_current_user)):
     def fetch_one(dev):
         name = dev["name"]
         try:
-            info = get_device_info(dev)
-            cpu  = get_cpu_memory(dev)
+            full_dev = netdev_get(name) or dev
+            info = get_device_info(full_dev)
+            cpu  = get_cpu_memory(full_dev)
             ok   = info["status"] == "ok"
             return {
                 "name":        name,
@@ -1055,7 +1056,8 @@ def network_ping_matrix(user=Depends(_get_current_user)):
 
     def run_one(src_name, tgt_name):
         try:
-            result = ping_device(dev_map[src_name], target=dev_map[tgt_name]["host"], count=3)
+            src_dev = netdev_get(src_name) or dev_map[src_name]
+            result = ping_device(src_dev, target=dev_map[tgt_name]["host"], count=3)
             rate = int(result.get("success_rate", "0")) if result["status"] == "ok" else 0
             return src_name, tgt_name, rate
         except Exception:
