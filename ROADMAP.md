@@ -191,3 +191,63 @@
 ---
 
 *Document created: 2026-05-04 | Owner: Deepak Shukla*
+
+
+
+● Good question. Here's a prioritized roadmap based on what network ops teams actually need in production:
+
+  ---
+  Tier 1 — Core Operations (High Impact, Build First)
+
+  Real-time Alerting
+  - BGP session down / interface flap alerts (push to chat automatically)
+  - CPU/memory threshold breaches (e.g. CPU > 80% → alert)
+  - Device unreachable detection (ICMP polling)
+
+  Troubleshooting Commands
+  - traceroute from device (path analysis)
+  - show logging — last N syslog lines from device
+  - show interface <name> — deep dive on a single interface (errors, resets, CRC)
+  - show cdp/lldp neighbors — discover adjacent devices
+
+  Config Diff & Compliance
+  - Compare running-config vs last backup (show what changed)
+  - Config compliance check against a template/baseline
+  - Pre/post change diff (capture before + after a push)
+
+  ---
+  Tier 2 — Change Management
+
+  Safe Config Push Workflow
+  - Approval step before any config push (requires second user)
+  - Auto-rollback if device goes unreachable after push
+  - Scheduled maintenance windows (block pushes outside window)
+  - Full audit trail (who pushed what, when)
+
+  Bulk Operations
+  - Push same command set to multiple devices at once
+  - Template-based config (e.g. deploy standard NTP/SNMP config to all)
+
+  ---
+  Tier 3 — Visibility & Analytics
+
+  Network Health Dashboard
+  - Single-pane view: all devices, all interface states, BGP sessions
+  - Historical graphs: CPU, memory, interface utilization over time
+  - Device availability timeline (uptime tracking)
+
+  Inventory & Auto-Discovery
+  - CDP/LLDP neighbor walk — automatically discover connected devices
+  - Hardware/software inventory export (hostname, model, IOS version, serial)
+  - VLAN and subnet inventory
+
+  ---
+  Tier 4 — Advanced
+
+  - SNMP polling — for devices where SSH CLI isn't available
+  - Syslog receiver — ingest device syslogs into ChatOps for correlation
+  - NETCONF/YANG — structured data queries (already partially built)
+  - IP Address Management (IPAM) — track which IPs are allocated
+  - Topology map — visual graph of device interconnections
+
+  ---
