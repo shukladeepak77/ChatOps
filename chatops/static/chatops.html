@@ -2404,7 +2404,8 @@ function _nmBoxLogs(name, data) {
 
 function _nmBoxTraceroute(name, target, data) {
   const hops = data.hops || [];
-  let html = _nmTitle('🔀', `Traceroute — ${name}`, `→ ${target}`);
+  const sub = data.resolved && data.resolved !== target ? `→ ${target} (${data.resolved})` : `→ ${target}`;
+  let html = _nmTitle('🔀', `Traceroute — ${name}`, sub);
   if (hops.length) {
     html += '<table class="m-table"><thead><tr><th>#</th><th>IP / Hop</th><th>Avg RTT</th><th>Detail</th></tr></thead><tbody>';
     hops.forEach(h => {

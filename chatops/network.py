@@ -268,32 +268,40 @@ def get_logs(device: dict, lines: int = 50) -> dict:
 
 def run_traceroute(device: dict, target: str, max_ttl: int = 15) -> dict:
     """Run a traceroute from the device to a target."""
+    import socket
     try:
         dt = device.get("device_type", "cisco_xe")
+        # Resolve hostname to IP server-side — Cisco sandbox routers have no DNS configured
+        resolved = target
+        if not re.match(r"^[\d\.]+$", target):
+            try:
+                resolved = socket.gethostbyname(target)
+            except socket.gaierror:
+                resolved = target  # keep original, let device handle it
         with _netmiko_conn(device) as conn:
             if dt == "linux":
                 output = conn.send_command(
-                    f"traceroute -m {max_ttl} -w 2 {target}",
+                    f"traceroute -m {max_ttl} -w 2 {resolved}",
                     read_timeout=60, expect_string=r"\$"
                 )
             elif dt == "cisco_xr":
                 output = conn.send_command(
-                    f"traceroute {target}",
+                    f"traceroute {resolved}",
                     read_timeout=90, expect_string=r"#"
                 )
             elif dt == "cisco_nxos":
                 output = conn.send_command(
-                    f"traceroute {target}",
+                    f"traceroute {resolved}",
                     read_timeout=60, expect_string=r"#"
                 )
             else:
-                # IOS-XE/IOS: plain traceroute — no extra options to avoid syntax errors
                 output = conn.send_command(
-                    f"traceroute {target}",
+                    f"traceroute {resolved}",
                     read_timeout=90, expect_string=r"#"
                 )
+        resolved_note = f" (resolved from {target})" if resolved != target else ""
         hops = _parse_traceroute(output, dt)
-        return {"status": "ok", "target": target, "hops": hops, "raw": output[:3000]}
+        return {"status": "ok", "target": target, "resolved": resolved + resolved_note, "hops": hops, "raw": output[:3000]}
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
