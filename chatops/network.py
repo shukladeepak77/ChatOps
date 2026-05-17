@@ -342,11 +342,19 @@ def push_config(device: dict, commands: list) -> dict:
     """Apply a list of config commands in config mode."""
     try:
         dt = device.get("device_type", "cisco_xe")
-        # IOS-XR commit can be slow on virtual hardware; give it more time
-        timeout = 90 if dt == "cisco_xr" else 30
         with _netmiko_conn(device) as conn:
-            output = conn.send_config_set(commands, read_timeout=timeout)
-            conn.save_config()
+            if dt == "cisco_xr":
+                # IOS-XR uses a candidate config model. netmiko's send_config_set
+                # exits configure mode with 'end' BEFORE save_config() can commit,
+                # so uncommitted changes get discarded. Fix: append 'commit' to the
+                # command list so it fires while still inside configure mode.
+                output = conn.send_config_set(
+                    list(commands) + ["commit"],
+                    read_timeout=90,
+                )
+            else:
+                output = conn.send_config_set(commands, read_timeout=30)
+                conn.save_config()
         return {"status": "ok", "output": output[:1000]}
     except Exception as e:
         return {"status": "error", "error": str(e)}

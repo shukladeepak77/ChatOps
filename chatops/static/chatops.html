@@ -2429,7 +2429,7 @@ async function cwApply() {
       if (!res.ok) throw new Error(data.detail || 'Push failed');
       if (st) st.innerHTML = '<span style="color:#6ee7b7">✓ Applied</span>';
     } catch(e) {
-      if (st) st.innerHTML = `<span style="color:#f87171">✗ ${e.message.substring(0,60)}</span>`;
+      if (st) st.innerHTML = `<span style="color:#f87171" title="${e.message}">✗ ${e.message.substring(0,120)}</span>`;
       allOk = false;
     }
   }
