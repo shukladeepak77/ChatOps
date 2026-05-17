@@ -862,6 +862,52 @@ def add_network_device(req: NetworkDeviceCreate, user=Depends(_require_role("ope
     return {"id": did, "name": req.name, "host": req.host, "device_type": req.device_type}
 
 
+@app.post("/chatops/network/devices/import")
+async def import_network_devices(file: UploadFile, user=Depends(_require_role("operator"))):
+    """Bulk-import network devices from a CSV or JSON file."""
+    import csv, io, json as _json
+    from chatops.network import encode_password
+    content = (await file.read()).decode("utf-8")
+    results = {"added": [], "skipped": [], "errors": []}
+    rows = []
+    fname = (file.filename or "").lower()
+    try:
+        if fname.endswith(".json"):
+            data = _json.loads(content)
+            rows = data if isinstance(data, list) else data.get("devices", [])
+        else:
+            reader = csv.DictReader(io.StringIO(content))
+            rows = list(reader)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse file: {e}")
+    for row in rows:
+        row = {k.strip().lower(): str(v).strip() for k, v in row.items()}
+        name = row.get("name") or row.get("device_name")
+        host = row.get("host") or row.get("ip") or row.get("ip_address")
+        username = row.get("username") or row.get("user")
+        password = row.get("password") or row.get("pass")
+        if not all([name, host, username, password]):
+            results["errors"].append({"row": row, "reason": "Missing required field (name/host/username/password)"})
+            continue
+        if netdev_get(name):
+            results["skipped"].append(name)
+            continue
+        try:
+            did = netdev_add(
+                name, host, username, encode_password(password),
+                device_type=row.get("device_type", "cisco_xe"),
+                port=int(row.get("port", 22)),
+                netconf_port=int(row.get("netconf_port", 830)),
+                description=row.get("description", ""),
+                created_by=user["sub"],
+            )
+            add_audit(user["sub"], f"network device import {name} {host}")
+            results["added"].append(name)
+        except Exception as e:
+            results["errors"].append({"row": name, "reason": str(e)})
+    return results
+
+
 @app.delete("/chatops/network/devices/{name}")
 def remove_network_device(name: str, user=Depends(_require_role("admin"))):
     if not netdev_delete(name):

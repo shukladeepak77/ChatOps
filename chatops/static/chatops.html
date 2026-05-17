@@ -842,6 +842,8 @@
     </div>
     <div class="modal-footer">
       <button class="m-btn m-btn-secondary" onclick="closeModal('modal-list-netdevs')">Close</button>
+      <button class="m-btn m-btn-secondary" onclick="document.getElementById('nd-import-file').click()" title="Import devices from CSV or JSON file">📂 Import CSV/JSON</button>
+      <input type="file" id="nd-import-file" accept=".csv,.json" style="display:none" onchange="importNetdevFile(this)">
       <button class="m-btn m-btn-primary" onclick="openModal('modal-add-netdev');closeModal('modal-list-netdevs')">➕ Add Device</button>
     </div>
   </div>
@@ -3423,6 +3425,26 @@ async function submitNetPush() {
     syncToChat(`📤 Config push to "${name}" — ${commands.length} commands applied.`);
   } catch(e) { showModalResult('np-result','Error: '+e.message,false); }
   finally { btn.disabled=false; btn.innerHTML='📤 Push Config'; }
+}
+
+async function importNetdevFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+  showModalResult('nd-list-result', `Importing ${file.name}...`, true);
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const res = await authFetch('/chatops/network/devices/import', { method: 'POST', body: form });
+    const d = await res.json();
+    if (!res.ok) { showModalResult('nd-list-result', `Import failed: ${d.detail}`, false); return; }
+    const msg = `Import done: ${d.added.length} added, ${d.skipped.length} skipped, ${d.errors.length} errors.` +
+      (d.added.length   ? `\nAdded: ${d.added.join(', ')}` : '') +
+      (d.skipped.length ? `\nSkipped (already exist): ${d.skipped.join(', ')}` : '') +
+      (d.errors.length  ? `\nErrors: ${d.errors.map(e => `${e.row}: ${e.reason}`).join('; ')}` : '');
+    showModalResult('nd-list-result', msg, d.errors.length === 0);
+    if (d.added.length) loadNetdevsModal();
+  } catch(e) { showModalResult('nd-list-result', 'Error: ' + e.message, false); }
 }
 
 async function quickNetCheck(name) {

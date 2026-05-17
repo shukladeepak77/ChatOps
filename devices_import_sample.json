@@ -1,0 +1,5 @@
+[
+  {"name": "ceos1", "host": "172.20.20.3", "username": "admin", "password": "admin", "device_type": "arista_eos", "port": 22, "description": "Arista cEOS Node 1"},
+  {"name": "ceos2", "host": "172.20.20.4", "username": "admin", "password": "admin", "device_type": "arista_eos", "port": 22, "description": "Arista cEOS Node 2"},
+  {"name": "ceos3", "host": "172.20.20.5", "username": "admin", "password": "admin", "device_type": "arista_eos", "port": 22, "description": "Arista cEOS Node 3"}
+]
