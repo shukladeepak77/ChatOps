@@ -135,6 +135,18 @@ def route_message(message: str, caller_role: str = "operator", _nlu_depth: int =
         target_node = on_match.group(1)
         s = s[:on_match.start()].strip()
 
+    # ── ping <ip> on <netdev> — intercept before remote dispatch ──────────────
+    if target_node and re.match(r'^ping\s+[\d\.]+$', s):
+        from .db import netdev_get as _nd_get
+        from .network import ping_device as _nd_ping
+        _nd = _nd_get(target_node)
+        if _nd:
+            _target = s.split()[1]
+            _result = _nd_ping(_nd, _target)
+            if _result["status"] == "error":
+                return {"response": f"Ping failed: {_result['error']}"}
+            return {"response": f"Ping from {target_node} to {_target}: {_result['success_rate']}% success rate"}
+
     # ── Default node — applies when no explicit "on <node>" was given ─────────
     # Set default_node in config to avoid running sysadmin commands locally on
     # the ChatOps server (which may not be Linux or the machine you want to probe).
@@ -1088,6 +1100,10 @@ def route_message(message: str, caller_role: str = "operator", _nlu_depth: int =
         }
 
     ping_device_m = re.match(r'^ping\s+device\s+(\S+)(?:\s+(\S+))?$', s)
+    # Also support: "ping <target> on <device>" or "ping <target> from <device>"
+    ping_on_m = re.match(r'^ping\s+([\d\.]+)\s+(?:on|from)\s+(\S+)$', s)
+    if ping_on_m and not ping_device_m:
+        ping_device_m = type('m', (), {'group': lambda self, i: [None, ping_on_m.group(2), ping_on_m.group(1)][i]})()
     if ping_device_m:
         from .db import netdev_get as _nd_get
         from .network import ping_device as _nd_ping
