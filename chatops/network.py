@@ -312,11 +312,20 @@ def run_traceroute(device: dict, target: str, max_ttl: int = 15) -> dict:
 def ping_device(device: dict, target: str = "8.8.8.8", count: int = 5) -> dict:
     """Run a ping from the device to a target."""
     try:
+        dt = device.get("device_type", "cisco_xe")
         with _netmiko_conn(device) as conn:
-            output = conn.send_command(
-                f"ping {target} repeat {count}", read_timeout=30, expect_string=r"#"
-            )
-        success = _parse_field(output, r"Success rate is (\d+) percent")
+            if dt == "linux":
+                output = conn.send_command(
+                    f"ping -c {count} -W 2 {target}",
+                    read_timeout=count * 4 + 5, expect_string=r"\$"
+                )
+                m = re.search(r"(\d+)% packet loss", output)
+                success = str(100 - int(m.group(1))) if m else "0"
+            else:
+                output = conn.send_command(
+                    f"ping {target} repeat {count}", read_timeout=30, expect_string=r"#"
+                )
+                success = _parse_field(output, r"Success rate is (\d+) percent")
         return {"status": "ok", "target": target, "success_rate": success, "raw": output[:400]}
     except Exception as e:
         return {"status": "error", "error": str(e)}

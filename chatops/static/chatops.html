@@ -961,6 +961,41 @@
   </div>
 </div>
 
+<!-- Network Dashboard -->
+<div class="modal-backdrop" id="modal-net-dashboard">
+  <div class="modal-box" style="max-width:900px;width:95vw">
+    <div class="modal-header"><span class="modal-icon">📊</span><span class="modal-title">Network Dashboard</span><button class="modal-close" onclick="closeModal('modal-net-dashboard')">✕</button></div>
+    <div class="modal-body" style="max-height:76vh;overflow-y:auto">
+
+      <!-- Device Health -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span style="font-size:.82rem;font-weight:600;color:var(--text2)">Device Health</span>
+        <button class="m-btn m-btn-secondary" style="padding:4px 12px;font-size:.76rem" onclick="loadNetDashboard()">🔄 Refresh</button>
+      </div>
+      <div id="ndb-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(195px,1fr));gap:10px;margin-bottom:20px">
+        <div class="m-empty"><span class="m-spinner"></span> Connecting…</div>
+      </div>
+
+      <!-- Ping Matrix -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-top:14px;border-top:1px solid rgba(255,255,255,.06)">
+        <div>
+          <span style="font-size:.82rem;font-weight:600;color:var(--text2)">Ping Matrix</span>
+          <span style="font-size:.72rem;color:#64748b;margin-left:8px">device-to-device reachability</span>
+        </div>
+        <button class="m-btn m-btn-secondary" style="padding:4px 12px;font-size:.76rem" onclick="runPingMatrix()">📡 Run Ping Test</button>
+      </div>
+      <div id="ndb-matrix">
+        <div class="m-empty" style="color:#64748b;font-size:.8rem">Click "Run Ping Test" — pings every device from every other device (~30 sec)</div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="m-btn m-btn-secondary" onclick="closeModal('modal-net-dashboard')">Close</button>
+      <button class="m-btn m-btn-primary" onclick="loadNetDashboard();runPingMatrix()">🔄 Refresh All</button>
+    </div>
+  </div>
+</div>
+
 <!-- Runbook Builder -->
 <div class="modal-backdrop" id="modal-runbook-builder">
   <div class="modal-box modal-wide">
@@ -1098,6 +1133,7 @@
       <div class="drop-item" onclick="openModal('modal-add-netdev');closeAllMenus()"><span class="di">➕</span> Add Device…</div>
       <div class="drop-sep"></div>
       <div class="drop-label">Monitor</div>
+      <div class="drop-item" onclick="openNetDashboard();closeAllMenus()"><span class="di">📊</span> Network Dashboard</div>
       <div class="drop-item" onclick="loadNetdevSelects();openModal('modal-net-interfaces');closeAllMenus()"><span class="di">📡</span> Interface Status…</div>
       <div class="drop-item" onclick="loadNetdevSelects('nm-device');openModal('modal-net-monitor');closeAllMenus()"><span class="di">🔭</span> Monitor Device…</div>
       <div class="drop-item" onclick="loadNetdevsModal();openModal('modal-list-netdevs');closeAllMenus()"><span class="di">📋</span> Show All Devices</div>
@@ -2142,6 +2178,116 @@ async function devnetCheck(name) {
 }
 
 // ── Network Device Modals ─────────────────────────────────────────────────────
+
+// ── Network Dashboard ─────────────────────────────────────────────────────────
+
+const _DT_LABEL = { cisco_xe:'IOS-XE', cisco_xr:'IOS-XR', cisco_nxos:'NX-OS', linux:'Linux', cisco_ios:'IOS' };
+
+function openNetDashboard() {
+  openModal('modal-net-dashboard');
+  loadNetDashboard();
+}
+
+async function loadNetDashboard() {
+  const cards = document.getElementById('ndb-cards');
+  cards.innerHTML = '<div class="m-empty"><span class="m-spinner"></span> Connecting to all devices…</div>';
+  try {
+    const res = await authFetch('/chatops/network/dashboard');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed');
+    _renderDeviceCards(data.devices || []);
+  } catch(e) {
+    cards.innerHTML = `<div class="m-empty" style="color:var(--red)">Error: ${e.message}</div>`;
+  }
+}
+
+function _renderDeviceCards(devices) {
+  const cards = document.getElementById('ndb-cards');
+  if (!devices.length) { cards.innerHTML = '<div class="m-empty">No devices registered.</div>'; return; }
+  cards.innerHTML = devices.map(d => {
+    const ok = d.reachable !== false;
+    const dot = ok ? '#6ee7b7' : '#f87171';
+    const cpuN = parseFloat(d.cpu_5sec);
+    const cpuColor = isNaN(cpuN) ? '#64748b' : cpuN > 80 ? '#f87171' : cpuN > 50 ? '#fbbf24' : '#6ee7b7';
+    const cpuBar = !isNaN(cpuN) ? `
+      <div style="margin-top:9px">
+        <div style="display:flex;justify-content:space-between;font-size:.68rem;color:#64748b;margin-bottom:3px">
+          <span>CPU</span><span style="color:${cpuColor};font-weight:700">${cpuN}%</span>
+        </div>
+        <div style="background:rgba(255,255,255,.07);border-radius:3px;height:4px;overflow:hidden">
+          <div style="background:${cpuColor};height:4px;width:${Math.min(cpuN,100)}%;transition:width .4s;border-radius:3px"></div>
+        </div>
+      </div>` : '';
+    const uptimeShort = (d.uptime || '').split(',')[0] || '—';
+    return `<div style="background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:12px 14px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-weight:700;font-size:.85rem;color:#e2e8f0">${d.name}</div>
+          <div style="font-size:.7rem;color:#64748b;margin-top:1px">${_DT_LABEL[d.device_type]||d.device_type} · ${d.host}</div>
+        </div>
+        <div style="width:8px;height:8px;border-radius:50%;background:${dot};margin-top:4px;flex-shrink:0;box-shadow:0 0 7px ${dot}" title="${ok?'Reachable':'Unreachable'}"></div>
+      </div>
+      ${ok ? `
+        <div style="margin-top:8px;font-size:.77rem;color:#cbd5e1;font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${d.hostname}</div>
+        <div style="font-size:.7rem;color:#64748b;margin-top:2px">v${d.version} · ${uptimeShort}</div>
+        ${cpuBar}
+        <div style="display:flex;gap:6px;margin-top:7px;font-size:.69rem">
+          <span style="color:#a5b4fc">▲${d.mem_used}</span>
+          <span style="color:#6ee7b7">▼${d.mem_free}</span>
+        </div>`
+      : `<div style="font-size:.73rem;color:#f87171;margin-top:8px;line-height:1.4">${(d.error||'Connection failed').substring(0,80)}</div>`}
+    </div>`;
+  }).join('');
+}
+
+async function runPingMatrix() {
+  const matrixEl = document.getElementById('ndb-matrix');
+  matrixEl.innerHTML = '<div class="m-empty"><span class="m-spinner"></span> Pinging all device pairs… (~30 sec)</div>';
+  try {
+    const res = await authFetch('/chatops/network/ping-matrix', {method:'POST'});
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed');
+    _renderPingMatrix(data);
+  } catch(e) {
+    matrixEl.innerHTML = `<div class="m-empty" style="color:var(--red)">Error: ${e.message}</div>`;
+  }
+}
+
+function _renderPingMatrix(data) {
+  const matrixEl = document.getElementById('ndb-matrix');
+  const devs = data.devices || [];
+  if (!devs.length) { matrixEl.innerHTML = '<div class="m-empty">No devices.</div>'; return; }
+  const matrix = data.matrix || {};
+  let html = '<div style="overflow-x:auto"><table class="m-table" style="min-width:360px">';
+  html += '<thead><tr><th style="color:#64748b;font-size:.68rem">FROM \\ TO</th>';
+  devs.forEach(d => html += `<th style="text-align:center;font-size:.74rem">${d}</th>`);
+  html += '</tr></thead><tbody>';
+  devs.forEach(src => {
+    html += `<tr><td style="font-family:monospace;font-size:.78rem;font-weight:600;color:#e2e8f0">${src}</td>`;
+    devs.forEach(tgt => {
+      if (src === tgt) {
+        html += `<td style="text-align:center;color:#334155;font-size:1rem">◼</td>`;
+      } else {
+        const cell = matrix[src]?.[tgt];
+        const rate = cell?.success_rate ?? -1;
+        const color = rate < 0 ? '#64748b' : rate === 100 ? '#6ee7b7' : rate >= 60 ? '#fbbf24' : '#f87171';
+        const bg    = rate < 0 ? 'transparent' : rate === 100 ? 'rgba(16,185,129,.1)' : rate >= 60 ? 'rgba(234,179,8,.1)' : 'rgba(239,68,68,.12)';
+        const label = rate < 0 ? '?' : `${rate}%`;
+        html += `<td style="text-align:center;background:${bg}"><span style="color:${color};font-weight:700;font-size:.8rem">${label}</span></td>`;
+      }
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  html += `<div style="font-size:.7rem;color:#64748b;margin-top:8px">
+    <span style="color:#6ee7b7">■</span> 100% reachable &nbsp;
+    <span style="color:#fbbf24">■</span> partial loss &nbsp;
+    <span style="color:#f87171">■</span> unreachable
+  </div>`;
+  matrixEl.innerHTML = html;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 async function loadNetdevsModal() {
   const body = document.getElementById('nd-list-body');

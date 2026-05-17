@@ -980,3 +980,86 @@ def network_device_traceroute(name: str, target: str, user=Depends(_get_current_
     if result["status"] == "error":
         raise HTTPException(status_code=502, detail=result["error"])
     return result
+
+
+@app.get("/chatops/network/dashboard")
+def network_dashboard(user=Depends(_get_current_user)):
+    """Fetch device info + CPU for all registered devices in parallel."""
+    from chatops.network import get_device_info, get_cpu_memory
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    devs = netdev_list()
+
+    def fetch_one(dev):
+        name = dev["name"]
+        try:
+            info = get_device_info(dev)
+            cpu  = get_cpu_memory(dev)
+            ok   = info["status"] == "ok"
+            return {
+                "name":        name,
+                "host":        dev["host"],
+                "device_type": dev.get("device_type", "cisco_xe"),
+                "reachable":   ok,
+                "hostname":    info.get("hostname", "—") if ok else "—",
+                "version":     info.get("version",  "—") if ok else "—",
+                "uptime":      info.get("uptime",   "—") if ok else "—",
+                "model":       info.get("model",    "—") if ok else "—",
+                "cpu_5sec":    cpu.get("cpu_5sec",       "—") if cpu.get("status") == "ok" else "—",
+                "mem_used":    cpu.get("mem_used_bytes", "—") if cpu.get("status") == "ok" else "—",
+                "mem_free":    cpu.get("mem_free_bytes", "—") if cpu.get("status") == "ok" else "—",
+                "error":       info.get("error") if not ok else None,
+            }
+        except Exception as e:
+            return {
+                "name": name, "host": dev["host"],
+                "device_type": dev.get("device_type", "cisco_xe"),
+                "reachable": False, "error": str(e),
+                "hostname": "—", "version": "—", "uptime": "—",
+                "model": "—", "cpu_5sec": "—", "mem_used": "—", "mem_free": "—",
+            }
+
+    results = []
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        futures = {ex.submit(fetch_one, dev): dev["name"] for dev in devs}
+        for f in as_completed(futures, timeout=90):
+            try:
+                results.append(f.result())
+            except Exception as e:
+                results.append({"name": futures[f], "reachable": False, "error": str(e)})
+
+    return {"devices": results}
+
+
+@app.post("/chatops/network/ping-matrix")
+def network_ping_matrix(user=Depends(_get_current_user)):
+    """Ping every device from every other device — returns reachability matrix."""
+    from chatops.network import ping_device
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    devs = netdev_list()
+    names = [d["name"] for d in devs]
+    dev_map = {d["name"]: d for d in devs}
+
+    def run_one(src_name, tgt_name):
+        try:
+            result = ping_device(dev_map[src_name], target=dev_map[tgt_name]["host"], count=3)
+            rate = int(result.get("success_rate", "0")) if result["status"] == "ok" else 0
+            return src_name, tgt_name, rate
+        except Exception:
+            return src_name, tgt_name, -1
+
+    pairs = [(s, t) for s in names for t in names if s != t]
+    matrix = {n: {} for n in names}
+
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        futures = {ex.submit(run_one, s, t): (s, t) for s, t in pairs}
+        for f in as_completed(futures, timeout=120):
+            try:
+                src, tgt, rate = f.result()
+                matrix[src][tgt] = {"success_rate": rate, "reachable": rate > 0}
+            except Exception:
+                s, t = futures[f]
+                matrix[s][t] = {"success_rate": -1, "reachable": False}
+
+    return {"devices": names, "matrix": matrix}
