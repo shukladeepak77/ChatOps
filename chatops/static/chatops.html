@@ -933,6 +933,7 @@
         <button class="m-btn m-btn-secondary" onclick="runNetMonitor('routes')">🗺 Routes</button>
         <button class="m-btn m-btn-secondary" onclick="runNetMonitor('cpu')">⚙️ CPU/Memory</button>
         <button class="m-btn m-btn-secondary" onclick="runNetMonitor('bgp')">🔗 BGP Neighbors</button>
+        <button class="m-btn m-btn-secondary" onclick="runNetMonitor('ospf')">🔶 OSPF Neighbors</button>
         <button class="m-btn m-btn-secondary" onclick="runNetMonitor('arp')">📋 ARP Table</button>
         <button class="m-btn m-btn-secondary" onclick="togglePingTarget()">📡 Ping Device</button>
         <button class="m-btn m-btn-secondary" onclick="toggleTracerouteTarget()">🔀 Traceroute</button>
@@ -2489,6 +2490,32 @@ function _nmBoxBgp(name, data) {
   return html;
 }
 
+function _nmBoxOspf(name, data) {
+  let html = _nmTitle('🔶', `OSPF Neighbors — ${name}`);
+  const neighbors = data.neighbors || [];
+  if (neighbors.length) {
+    html += '<table class="m-table"><thead><tr><th>Neighbor ID</th><th>Pri</th><th>State</th><th>Role</th><th>Dead Time</th><th>Address</th><th>Interface</th></tr></thead><tbody>';
+    neighbors.forEach(n => {
+      const cls = n.state === 'FULL' ? 'm-badge-green' : n.state === '2WAY' ? 'm-badge-yellow' : 'm-badge-red';
+      html += `<tr>
+        <td style="font-family:monospace">${n.neighbor_id}</td>
+        <td style="text-align:center">${n.priority}</td>
+        <td><span class="m-badge ${cls}">${n.state}</span></td>
+        <td style="font-size:.76rem;color:#94a3b8">${n.role}</td>
+        <td style="font-family:monospace;font-size:.76rem">${n.dead_time}</td>
+        <td style="font-family:monospace;font-size:.76rem">${n.address}</td>
+        <td style="font-size:.76rem">${n.interface}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+  } else {
+    const isLinux = (data.raw || '').includes('Linux host');
+    html += _nmEmpty(isLinux ? 'N/A — Linux host, OSPF not applicable.' : 'No OSPF neighbors (OSPF not configured on this device).');
+    if (!isLinux && data.raw && data.raw.trim()) html += _nmPre(data.raw);
+  }
+  return html;
+}
+
 function _nmBoxArp(name, data) {
   const entries = data.entries || [];
   let html = _nmTitle('📋', `ARP Table — ${name}`, `${entries.length} entr${entries.length===1?'y':'ies'}`);
@@ -2639,6 +2666,12 @@ async function runNetMonitor(action) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Request failed');
       html = _nmBoxBgp(name, data);
+
+    } else if (action === 'ospf') {
+      const res = await authFetch(`${base}/ospf`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Request failed');
+      html = _nmBoxOspf(name, data);
 
     } else if (action === 'arp') {
       const res = await authFetch(`${base}/arp`);

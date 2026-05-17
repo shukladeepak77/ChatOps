@@ -956,6 +956,18 @@ def network_device_ping(name: str, target: str = "8.8.8.8", user=Depends(_get_cu
     return result
 
 
+@app.get("/chatops/network/devices/{name}/ospf")
+def network_device_ospf(name: str, user=Depends(_get_current_user)):
+    from chatops.network import get_ospf_neighbors
+    dev = netdev_get(name)
+    if not dev:
+        raise HTTPException(status_code=404, detail="Device not found")
+    result = get_ospf_neighbors(dev)
+    if result["status"] == "error":
+        raise HTTPException(status_code=502, detail=result["error"])
+    return result
+
+
 @app.get("/chatops/network/devices/{name}/logs")
 def network_device_logs(name: str, lines: int = 50, user=Depends(_get_current_user)):
     from chatops.network import get_logs

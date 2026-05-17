@@ -201,6 +201,29 @@ def get_cpu_memory(device: dict) -> dict:
         return {"status": "error", "error": str(e)}
 
 
+def get_ospf_neighbors(device: dict) -> dict:
+    """Return OSPF neighbor summary."""
+    try:
+        dt = device.get("device_type", "cisco_xe")
+        if dt == "linux":
+            return {"status": "ok", "neighbors": [], "raw": "N/A — Linux host"}
+        with _netmiko_conn(device) as conn:
+            if dt == "cisco_nxos":
+                output = conn.send_command("show ip ospf neighbors", read_timeout=20)
+            elif dt == "cisco_xr":
+                output = conn.send_command("show ospf neighbor", read_timeout=20)
+            else:
+                output = conn.send_command("show ip ospf neighbor", read_timeout=20)
+        neighbors = _parse_ospf_neighbors(output)
+        clean_raw = "\n".join(
+            l for l in output.splitlines()
+            if "Invalid" not in l and not l.strip().startswith("%") and not re.match(r"^\s*\^\s*$", l)
+        )
+        return {"status": "ok", "neighbors": neighbors, "raw": clean_raw[:2000]}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
 def get_bgp_neighbors(device: dict) -> dict:
     """Return BGP neighbor summary."""
     try:
@@ -567,6 +590,35 @@ def _parse_bgp_summary(text: str) -> list:
 def _xml_text(element, tag: str, ns: dict) -> str:
     el = element.find(tag, ns)
     return el.text.strip() if el is not None and el.text else ""
+
+
+def _parse_ospf_neighbors(text: str) -> list:
+    """Parse OSPF neighbor table from IOS-XE, IOS-XR, and NX-OS output.
+
+    Common format across all platforms:
+      Neighbor ID  Pri  State         Dead Time  Address       Interface
+      10.10.20.35    1  FULL/DR       00:00:38   10.10.20.35   Gi1
+    """
+    neighbors = []
+    for line in text.splitlines():
+        # Match lines starting with an IP (neighbor ID)
+        m = re.match(
+            r"^\s*([\d\.]+)\s+(\d+)\s+(\S+)\s+([\d:]+|-+)\s+([\d\.]+)\s+(\S+)",
+            line
+        )
+        if m:
+            state_full = m.group(3)          # e.g. FULL/DR, 2WAY/DROTHER
+            state_parts = state_full.split("/")
+            neighbors.append({
+                "neighbor_id": m.group(1),
+                "priority":    m.group(2),
+                "state":       state_parts[0],   # FULL, 2WAY, INIT, etc.
+                "role":        state_parts[1] if len(state_parts) > 1 else "—",
+                "dead_time":   m.group(4),
+                "address":     m.group(5),
+                "interface":   m.group(6),
+            })
+    return neighbors
 
 
 def _parse_log_entries(text: str, dt: str) -> list:

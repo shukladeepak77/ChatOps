@@ -108,6 +108,29 @@ try {
 }
 
 if ($os -eq "xr") { Start-Sleep -Seconds 3 }
+Section "OSPF NEIGHBORS (show ip ospf neighbor)"
+if ($os -eq "db") {
+    Write-Host "  N/A -- Linux host, OSPF not applicable." -ForegroundColor DarkGray
+} else {
+try {
+    $r = Invoke-RestMethod -Method GET -Uri "$base/ospf" -Headers $headers
+    if ($r.status -eq "ok") {
+        if ($r.neighbors.Count -gt 0) {
+            Write-Host ("  {0,-18} {1,-5} {2,-12} {3,-8} {4,-18} {5,-8} {6}" -f "Neighbor ID","Pri","State","Role","Address","Dead","Interface")
+            Write-Host ("  " + "-" * 82)
+            foreach ($n in $r.neighbors) {
+                $nColor = if ($n.state -eq "FULL") { "Green" } elseif ($n.state -eq "2WAY") { "Yellow" } else { "Red" }
+                Write-Host ("  {0,-18} {1,-5} {2,-12} {3,-8} {4,-18} {5,-8} {6}" -f $n.neighbor_id, $n.priority, $n.state, $n.role, $n.address, $n.dead_time, $n.interface) -ForegroundColor $nColor
+            }
+        } else {
+            Write-Host "  No OSPF neighbors (OSPF not configured on this device)." -ForegroundColor DarkGray
+            if ($r.raw) { Write-Host "  $($r.raw)" -ForegroundColor DarkGray }
+        }
+    } else { Show-Error $r.error }
+} catch { Show-Error $_.Exception.Message }
+}
+
+if ($os -eq "xr") { Start-Sleep -Seconds 3 }
 $cpuTitle = if ($os -eq "db") { "CPU & MEMORY (top / free -m)" } else { "CPU & MEMORY (show processes)" }
 $memUnit  = if ($os -eq "db") { "" } else { " bytes" }
 Section $cpuTitle
