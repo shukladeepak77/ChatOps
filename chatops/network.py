@@ -46,6 +46,7 @@ def _netmiko_conn(device: dict):
         port=int(device.get("port", 22)),
         username=device["username"],
         password=pw,
+        secret=pw,
         timeout=15,
         session_timeout=20,
         conn_timeout=10,
@@ -107,6 +108,16 @@ def get_device_info(device: dict) -> dict:
             model    = _parse_field(output, r"cisco\s+(Nexus[\w\s]+Series)",
                                             r"Hardware\s*\n\s+cisco\s+(\S+)")
             serial   = _parse_field(output, r"Processor Board ID\s+(\S+)")
+        elif dt == "arista_eos":
+            with _netmiko_conn(device) as conn:
+                hn_out = conn.send_command("show hostname", read_timeout=10).strip()
+            hostname = _parse_field(hn_out, r"Hostname:\s+(\S+)") or hn_out.split()[0]
+            version  = _parse_field(output, r"Internal build version:\s+([\d\.]+\w+)",
+                                            r"EOS version:\s+([\d\.\w]+)")
+            version  = version.split("-")[0] if version != "unknown" else version
+            uptime   = _parse_field(output, r"Uptime:\s+(.+)", r"uptime is\s+(.+)")
+            model    = "cEOS-lab"
+            serial   = _parse_field(output, r"Serial number:\s+(\S+)", r"System serial number:\s+(\S+)")
         else:
             hostname = _parse_field(output, r"^(\S+)\s+uptime", r"hostname\s+(\S+)")
             version  = _parse_field(output, r"Version\s+([\d\w\.\(\)]+)")
@@ -222,6 +233,24 @@ def get_cpu_memory(device: dict) -> dict:
                 else:
                     mem_used = _parse_field(mem_out, r"Used:\s+(\d+)")
                     mem_free = _parse_field(mem_out, r"Free:\s+(\d+)")
+
+            elif dt == "arista_eos":
+                ver_out  = conn.send_command("show version", read_timeout=15)
+                cpu_out  = conn.send_command("bash timeout 3 top -bn1 2>/dev/null | head -4", read_timeout=15)
+                cpu_pct  = _parse_field(cpu_out, r"Cpu\S*\s*:\s*(\d+\.?\d*)\s*us",
+                                                  r"(\d+\.?\d*)%\s*us,")
+                raw_total = _parse_field(ver_out, r"Total memory:\s+(\d+)\s*kB")
+                raw_free  = _parse_field(ver_out, r"Free memory:\s+(\d+)\s*kB")
+                mem_free  = _to_mb(raw_free,  "K") if raw_free  != "unknown" else "unknown"
+                if raw_total != "unknown" and raw_free != "unknown":
+                    try:
+                        mem_used = _to_mb(str(int(raw_total) - int(raw_free)), "K")
+                    except Exception:
+                        mem_used = "unknown"
+                else:
+                    mem_used = "unknown"
+                cpu_out = cpu_out
+                mem_out = ver_out[:200]
 
             else:
                 # IOS-XE / IOS
@@ -443,6 +472,11 @@ def ping_device(device: dict, target: str = "8.8.8.8", count: int = 5) -> dict:
     try:
         dt = device.get("device_type", "cisco_xe")
         with _netmiko_conn(device) as conn:
+            if dt == "arista_eos":
+                try:
+                    conn.enable()
+                except Exception:
+                    pass
             if dt == "linux":
                 output = conn.send_command(
                     f"ping -c {count} -W 2 {target}",
@@ -466,13 +500,19 @@ def ping_device(device: dict, target: str = "8.8.8.8", count: int = 5) -> dict:
                     )
                     success = _parse_field(output, r"Success rate is (\d+) percent")
             elif dt == "cisco_nxos":
-                # NX-OS uses 'count' not 'repeat'; management subnet reachable via management VRF
                 output = conn.send_command(
                     f"ping {target} count {count} vrf management",
                     read_timeout=count * 4 + 10, expect_string=r"#"
                 )
                 m = re.search(r"(\d+(?:\.\d+)?)% packet loss", output)
                 success = str(int(100 - float(m.group(1)))) if m else _parse_field(output, r"Success rate is (\d+) percent")
+            elif dt == "arista_eos":
+                output = conn.send_command(
+                    f"ping {target} repeat {count} timeout 2",
+                    read_timeout=count * 3 + 15,
+                )
+                m = re.search(r"(\d+(?:\.\d+)?)% packet loss", output)
+                success = str(int(100 - float(m.group(1)))) if m else "0"
             else:
                 output = conn.send_command(
                     f"ping {target} repeat {count}", read_timeout=30, expect_string=r"#"

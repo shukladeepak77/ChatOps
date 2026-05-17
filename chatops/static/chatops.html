@@ -2597,13 +2597,13 @@ function _renderDeviceCards(devices) {
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div>
           <div style="font-weight:700;font-size:.85rem;color:#e2e8f0">${d.name}</div>
-          <div style="font-size:.7rem;color:#64748b;margin-top:1px">${_DT_LABEL[d.device_type]||d.device_type} · ${d.host}</div>
+          <div style="font-size:.7rem;color:#94a3b8;margin-top:1px">${_DT_LABEL[d.device_type]||d.device_type} · ${d.host}</div>
         </div>
         <div style="width:8px;height:8px;border-radius:50%;background:${dot};margin-top:4px;flex-shrink:0;box-shadow:0 0 7px ${dot}" title="${ok?'Reachable':'Unreachable'}"></div>
       </div>
       ${ok ? `
-        <div style="margin-top:8px;font-size:.77rem;color:#cbd5e1;font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${d.hostname}</div>
-        <div style="font-size:.7rem;color:#64748b;margin-top:2px">v${d.version} · ${uptimeShort}</div>
+        <div style="margin-top:8px;font-size:.77rem;color:#e2e8f0;font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${d.hostname}</div>
+        <div style="font-size:.7rem;color:#94a3b8;margin-top:2px">v${d.version} · ${uptimeShort}</div>
         ${cpuBar}
         <div style="display:flex;gap:6px;margin-top:7px;font-size:.69rem">
           <span style="color:#a5b4fc">▲${d.mem_used}</span>
