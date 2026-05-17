@@ -242,6 +242,61 @@ def push_config(device: dict, commands: list) -> dict:
         return {"status": "error", "error": str(e)}
 
 
+def get_logs(device: dict, lines: int = 50) -> dict:
+    """Return the last N syslog lines from the device."""
+    try:
+        dt = device.get("device_type", "cisco_xe")
+        with _netmiko_conn(device) as conn:
+            if dt == "linux":
+                output = conn.send_command(f"journalctl -n {lines} --no-pager 2>/dev/null || tail -n {lines} /var/log/syslog 2>/dev/null || dmesg | tail -n {lines}", read_timeout=20)
+            elif dt == "cisco_nxos":
+                output = conn.send_command(f"show logging last {lines}", read_timeout=20)
+            elif dt == "cisco_xr":
+                output = conn.send_command(f"show logging last {lines}", read_timeout=20)
+            else:
+                output = conn.send_command(f"show logging | tail count {lines}", read_timeout=20)
+                if "Invalid" in output:
+                    output = conn.send_command("show logging", read_timeout=20)
+                    # Keep only last N non-empty lines
+                    kept = [l for l in output.splitlines() if l.strip()][-lines:]
+                    output = "\n".join(kept)
+        entries = _parse_log_entries(output, dt)
+        return {"status": "ok", "entries": entries, "raw": output[:6000], "lines_requested": lines}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+def run_traceroute(device: dict, target: str, max_ttl: int = 15) -> dict:
+    """Run a traceroute from the device to a target."""
+    try:
+        dt = device.get("device_type", "cisco_xe")
+        with _netmiko_conn(device) as conn:
+            if dt == "linux":
+                output = conn.send_command(
+                    f"traceroute -m {max_ttl} -w 2 {target}",
+                    read_timeout=60, expect_string=r"\$"
+                )
+            elif dt == "cisco_xr":
+                output = conn.send_command(
+                    f"traceroute {target} timeout 2 probe 1",
+                    read_timeout=60, expect_string=r"#"
+                )
+            elif dt == "cisco_nxos":
+                output = conn.send_command(
+                    f"traceroute {target}",
+                    read_timeout=60, expect_string=r"#"
+                )
+            else:
+                output = conn.send_command(
+                    f"traceroute {target} timeout 2 probe 2 ttl 1 {max_ttl}",
+                    read_timeout=60, expect_string=r"#"
+                )
+        hops = _parse_traceroute(output, dt)
+        return {"status": "ok", "target": target, "hops": hops, "raw": output[:3000]}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
 def ping_device(device: dict, target: str = "8.8.8.8", count: int = 5) -> dict:
     """Run a ping from the device to a target."""
     try:
@@ -491,3 +546,86 @@ def _parse_bgp_summary(text: str) -> list:
 def _xml_text(element, tag: str, ns: dict) -> str:
     el = element.find(tag, ns)
     return el.text.strip() if el is not None and el.text else ""
+
+
+def _parse_log_entries(text: str, dt: str) -> list:
+    """Parse syslog lines into structured entries with severity, timestamp, message."""
+    severity_map = {
+        "EMERG": 0, "ALERT": 1, "CRIT": 2, "CRITICAL": 2,
+        "ERR": 3, "ERROR": 3, "WARN": 4, "WARNING": 4,
+        "NOTICE": 5, "INFO": 6, "DEBUG": 7,
+    }
+    entries = []
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        # Cisco syslog: *Mar  1 00:00:01.123: %LINEPROTO-5-UPDOWN: ...
+        m = re.match(r"^[*.]?(\w+\s+\d+\s+[\d:\.]+):\s+%(\w+)-(\d)-(\w+):\s*(.+)", line)
+        if m:
+            sev_num = int(m.group(3))
+            sev_label = ["EMERG","ALERT","CRIT","ERR","WARN","NOTICE","INFO","DEBUG"][min(sev_num, 7)]
+            entries.append({
+                "timestamp": m.group(1).strip(),
+                "facility":  m.group(2),
+                "severity":  sev_num,
+                "severity_label": sev_label,
+                "mnemonic":  m.group(4),
+                "message":   m.group(5).strip(),
+            })
+            continue
+        # IOS-XR / NX-OS timestamp format: 2024-01-15 10:23:45 or RP/0/...
+        m2 = re.match(r"^([\d\-]+ [\d:]+\.\d+)\s+(\S+)\s+%(\w+)-(\d)-(\w+):\s*(.+)", line)
+        if m2:
+            sev_num = int(m2.group(4))
+            sev_label = ["EMERG","ALERT","CRIT","ERR","WARN","NOTICE","INFO","DEBUG"][min(sev_num, 7)]
+            entries.append({
+                "timestamp": m2.group(1),
+                "facility":  m2.group(3),
+                "severity":  sev_num,
+                "severity_label": sev_label,
+                "mnemonic":  m2.group(5),
+                "message":   m2.group(6).strip(),
+            })
+            continue
+        # Linux syslog / journalctl: Jan 15 10:23:45 host process[pid]: message
+        m3 = re.match(r"^(\w{3}\s+\d+\s+[\d:]+)\s+(\S+)\s+(\S+?)(?:\[\d+\])?:\s*(.+)", line)
+        if m3:
+            msg = m3.group(4)
+            sev = 6  # INFO default
+            for kw, num in [("error", 3), ("err:", 3), ("warn", 4), ("crit", 2), ("fail", 3)]:
+                if kw in msg.lower():
+                    sev = num
+                    break
+            entries.append({
+                "timestamp": m3.group(1),
+                "facility":  m3.group(3),
+                "severity":  sev,
+                "severity_label": ["EMERG","ALERT","CRIT","ERR","WARN","NOTICE","INFO","DEBUG"][sev],
+                "mnemonic":  "",
+                "message":   msg.strip(),
+            })
+    return entries
+
+
+def _parse_traceroute(text: str, dt: str) -> list:
+    """Parse traceroute output into hop list."""
+    hops = []
+    for line in text.splitlines():
+        # Cisco: " 1  10.10.20.254  4 msec  4 msec  4 msec"
+        m = re.match(r"^\s*(\d+)\s+([\d\.]+|\*)\s+([\d\.\*]+\s*msec.*)", line)
+        if m:
+            rtt_raw = m.group(3)
+            rtts = re.findall(r"(\d+)\s*msec", rtt_raw)
+            avg = round(sum(int(r) for r in rtts) / len(rtts)) if rtts else None
+            hops.append({"hop": int(m.group(1)), "ip": m.group(2), "rtt_ms": avg, "rtt_raw": rtt_raw.strip()})
+            continue
+        # Linux traceroute: " 1  gateway (192.168.1.1)  1.234 ms  1.111 ms  1.089 ms"
+        m2 = re.match(r"^\s*(\d+)\s+\S+\s+\(([\d\.]+)\)\s+([\d\.\s msa*]+)", line)
+        if not m2:
+            m2 = re.match(r"^\s*(\d+)\s+([\d\.]+|\*)\s+(.*)", line)
+        if m2:
+            rtt_raw = m2.group(3)
+            rtts = re.findall(r"([\d\.]+)\s*ms", rtt_raw)
+            avg = round(sum(float(r) for r in rtts) / len(rtts)) if rtts else None
+            hops.append({"hop": int(m2.group(1)), "ip": m2.group(2), "rtt_ms": avg, "rtt_raw": rtt_raw.strip()})
+    return hops

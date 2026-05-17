@@ -954,3 +954,29 @@ def network_device_ping(name: str, target: str = "8.8.8.8", user=Depends(_get_cu
     if result["status"] == "error":
         raise HTTPException(status_code=502, detail=result["error"])
     return result
+
+
+@app.get("/chatops/network/devices/{name}/logs")
+def network_device_logs(name: str, lines: int = 50, user=Depends(_get_current_user)):
+    from chatops.network import get_logs
+    dev = netdev_get(name)
+    if not dev:
+        raise HTTPException(status_code=404, detail="Device not found")
+    result = get_logs(dev, lines=lines)
+    if result["status"] == "error":
+        raise HTTPException(status_code=502, detail=result["error"])
+    return result
+
+
+@app.get("/chatops/network/devices/{name}/traceroute")
+def network_device_traceroute(name: str, target: str, user=Depends(_get_current_user)):
+    from chatops.network import run_traceroute
+    if not target:
+        raise HTTPException(status_code=400, detail="target query parameter required")
+    dev = netdev_get(name)
+    if not dev:
+        raise HTTPException(status_code=404, detail="Device not found")
+    result = run_traceroute(dev, target=target)
+    if result["status"] == "error":
+        raise HTTPException(status_code=502, detail=result["error"])
+    return result

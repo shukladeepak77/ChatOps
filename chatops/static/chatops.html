@@ -935,7 +935,23 @@
         <button class="m-btn m-btn-secondary" onclick="runNetMonitor('bgp')">🔗 BGP Neighbors</button>
         <button class="m-btn m-btn-secondary" onclick="runNetMonitor('arp')">📋 ARP Table</button>
         <button class="m-btn m-btn-secondary" onclick="togglePingTarget()">📡 Ping Device</button>
+        <button class="m-btn m-btn-secondary" onclick="toggleTracerouteTarget()">🔀 Traceroute</button>
+        <button class="m-btn m-btn-secondary" onclick="toggleLogLines()">📜 Show Logs</button>
         <button class="m-btn m-btn-secondary" onclick="runNetMonitor('backup-view')">💾 View Backup</button>
+      </div>
+      <div class="m-field" id="nm-traceroute-field" style="display:none">
+        <label>Traceroute Target <span style="font-size:.72rem;opacity:.6">(IP or hostname)</span></label>
+        <div style="display:flex;gap:8px">
+          <input id="nm-traceroute-target" type="text" placeholder="8.8.8.8" style="flex:1">
+          <button class="m-btn m-btn-primary" style="padding:6px 14px;font-size:.8rem" onclick="runNetMonitor('traceroute')">Run</button>
+        </div>
+      </div>
+      <div class="m-field" id="nm-logs-field" style="display:none">
+        <label>Lines to fetch <span style="font-size:.72rem;opacity:.6">(default 50)</span></label>
+        <div style="display:flex;gap:8px">
+          <input id="nm-log-lines" type="number" value="50" min="10" max="500" style="width:90px">
+          <button class="m-btn m-btn-primary" style="padding:6px 14px;font-size:.8rem" onclick="runNetMonitor('logs')">Fetch</button>
+        </div>
       </div>
       <div class="m-result" id="nm-result" style="white-space:normal"></div>
     </div>
@@ -2212,10 +2228,30 @@ async function loadNetdevSelects(extraId) {
 
 function togglePingTarget() {
   const field = document.getElementById('nm-ping-target-field');
+  document.getElementById('nm-traceroute-field').style.display = 'none';
+  document.getElementById('nm-logs-field').style.display = 'none';
   const visible = field.style.display !== 'none';
   field.style.display = visible ? 'none' : 'block';
   if (!visible) document.getElementById('nm-ping-target').focus();
   else runNetMonitor('ping');
+}
+
+function toggleTracerouteTarget() {
+  const f = document.getElementById('nm-traceroute-field');
+  const pingF = document.getElementById('nm-ping-target-field');
+  const logsF = document.getElementById('nm-logs-field');
+  pingF.style.display = 'none';
+  logsF.style.display = 'none';
+  f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+
+function toggleLogLines() {
+  const f = document.getElementById('nm-logs-field');
+  const pingF = document.getElementById('nm-ping-target-field');
+  const trF = document.getElementById('nm-traceroute-field');
+  pingF.style.display = 'none';
+  trF.style.display = 'none';
+  f.style.display = f.style.display === 'none' ? 'block' : 'none';
 }
 
 // ── Network Monitor result formatters ────────────────────────────────────────
@@ -2342,6 +2378,52 @@ function _nmBoxPing(name, target, data) {
   return html;
 }
 
+function _nmBoxLogs(name, data) {
+  const entries = data.entries || [];
+  const sevColor = s => s <= 3 ? '#f87171' : s === 4 ? '#fbbf24' : s === 5 ? '#a5b4fc' : '#94a3b8';
+  const sevBg    = s => s <= 3 ? 'rgba(239,68,68,.18)' : s === 4 ? 'rgba(234,179,8,.15)' : 'rgba(99,102,241,.12)';
+  const sevLabel = ['EMERG','ALERT','CRIT','ERR','WARN','NOTICE','INFO','DBG'];
+  let html = _nmTitle('📜', `System Logs — ${name}`, `last ${data.lines_requested} lines · ${entries.length} parsed`);
+  if (entries.length) {
+    html += '<div style="display:flex;flex-direction:column;gap:3px;max-height:340px;overflow-y:auto">';
+    entries.forEach(e => {
+      const lbl = e.severity_label || sevLabel[Math.min(e.severity,7)] || 'INFO';
+      html += `<div style="display:grid;grid-template-columns:140px 60px 1fr;gap:8px;align-items:start;
+        padding:5px 8px;border-radius:5px;background:${sevBg(e.severity)};font-size:.75rem;line-height:1.4">
+        <span style="color:#64748b;font-family:monospace;font-size:.7rem">${e.timestamp}</span>
+        <span style="color:${sevColor(e.severity)};font-weight:700;font-size:.68rem;text-transform:uppercase">${lbl}</span>
+        <span style="color:#cbd5e1">${e.mnemonic ? `<span style="color:#a5b4fc;font-family:monospace">[${e.facility}-${e.mnemonic}]</span> ` : ''}${e.message}</span>
+      </div>`;
+    });
+    html += '</div>';
+  } else {
+    html += `<div style="margin-bottom:8px">${_nmEmpty('No structured log entries parsed — showing raw output:')}</div>` + _nmPre(data.raw);
+  }
+  return html;
+}
+
+function _nmBoxTraceroute(name, target, data) {
+  const hops = data.hops || [];
+  let html = _nmTitle('🔀', `Traceroute — ${name}`, `→ ${target}`);
+  if (hops.length) {
+    html += '<table class="m-table"><thead><tr><th>#</th><th>IP / Hop</th><th>Avg RTT</th><th>Detail</th></tr></thead><tbody>';
+    hops.forEach(h => {
+      const rttColor = !h.rtt_ms ? '#64748b' : h.rtt_ms > 100 ? '#f87171' : h.rtt_ms > 30 ? '#fbbf24' : '#6ee7b7';
+      const rttDisplay = h.rtt_ms != null ? `${h.rtt_ms} ms` : '* * *';
+      html += `<tr>
+        <td style="color:#64748b;font-weight:700">${h.hop}</td>
+        <td style="font-family:monospace">${h.ip === '*' ? '<span style="color:#64748b">* * *</span>' : h.ip}</td>
+        <td style="font-family:monospace;color:${rttColor};font-weight:600">${rttDisplay}</td>
+        <td style="font-size:.74rem;color:#64748b">${h.rtt_raw}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+  } else {
+    html += _nmPre(data.raw);
+  }
+  return html;
+}
+
 function _nmBoxBackup(name, data) {
   let html = _nmTitle('💾', `Config Backup — ${name}`, data.lines ? `${data.lines} lines` : '');
   if (data.config_text && data.config_text.trim()) {
@@ -2424,6 +2506,24 @@ async function runNetMonitor(action) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Request failed');
       html = _nmBoxPing(name, target, data);
+
+    } else if (action === 'logs') {
+      const lines = parseInt(document.getElementById('nm-log-lines').value) || 50;
+      document.getElementById('nm-logs-field').style.display = 'none';
+      const res = await authFetch(`${base}/logs?lines=${lines}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Request failed');
+      html = _nmBoxLogs(name, data);
+
+    } else if (action === 'traceroute') {
+      const target = document.getElementById('nm-traceroute-target').value.trim();
+      if (!target) { el.className = 'm-result err'; el.innerHTML = 'Enter a traceroute target first.'; return; }
+      document.getElementById('nm-traceroute-field').style.display = 'none';
+      el.innerHTML = `<span style="opacity:.6"><span class="m-spinner"></span> Tracing route to ${target}… (may take 30–60 sec)</span>`;
+      const res = await authFetch(`${base}/traceroute?target=${encodeURIComponent(target)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Request failed');
+      html = _nmBoxTraceroute(name, target, data);
 
     } else if (action === 'backup-view') {
       const res = await authFetch(`${base}/backups/latest`);
