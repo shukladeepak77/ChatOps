@@ -278,8 +278,8 @@ def run_traceroute(device: dict, target: str, max_ttl: int = 15) -> dict:
                 )
             elif dt == "cisco_xr":
                 output = conn.send_command(
-                    f"traceroute {target} timeout 2 probe 1",
-                    read_timeout=60, expect_string=r"#"
+                    f"traceroute {target}",
+                    read_timeout=90, expect_string=r"#"
                 )
             elif dt == "cisco_nxos":
                 output = conn.send_command(
@@ -287,9 +287,10 @@ def run_traceroute(device: dict, target: str, max_ttl: int = 15) -> dict:
                     read_timeout=60, expect_string=r"#"
                 )
             else:
+                # IOS-XE/IOS: plain traceroute — no extra options to avoid syntax errors
                 output = conn.send_command(
-                    f"traceroute {target} timeout 2 probe 2 ttl 1 {max_ttl}",
-                    read_timeout=60, expect_string=r"#"
+                    f"traceroute {target}",
+                    read_timeout=90, expect_string=r"#"
                 )
         hops = _parse_traceroute(output, dt)
         return {"status": "ok", "target": target, "hops": hops, "raw": output[:3000]}
