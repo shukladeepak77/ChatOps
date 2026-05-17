@@ -2461,7 +2461,11 @@ async function cwVerify() {
       const data = await res.json();
       const nbrs = data.neighbors || [];
       if (!nbrs.length) {
-        rows += `<tr><td style="color:#e2e8f0;font-family:monospace">${dev.name}</td><td colspan="3" style="color:#64748b">No ${proto.toUpperCase()} neighbors (not configured or no adjacency yet)</td></tr>`;
+        const rawEscaped = (data.raw || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const rawHtml = rawEscaped
+          ? `<details style="margin-top:2px"><summary style="cursor:pointer;color:#475569;font-size:.7rem">raw output</summary><pre style="font-size:.68rem;color:#94a3b8;white-space:pre-wrap;margin:4px 0 0">${rawEscaped}</pre></details>`
+          : '';
+        rows += `<tr><td style="color:#e2e8f0;font-family:monospace">${dev.name}</td><td colspan="3" style="color:#64748b">No ${proto.toUpperCase()} neighbors<br>${rawHtml}</td></tr>`;
       } else {
         nbrs.forEach(n => {
           const stateKey = proto === 'ospf' ? n.state : n.state;
