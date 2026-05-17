@@ -2300,11 +2300,13 @@ async function openConfigWizard() {
 function _ospfCmds(dev, pid, area) {
   const ip = dev.host;
   if (dev.device_type === 'cisco_xr') {
+    // IOS-XR: 'vrf' is a sub-command under 'router ospf', NOT on the same line
     return [
-      `router ospf ${pid} vrf Mgmt-intf`,
-      ` router-id ${ip}`,
-      ` area ${area}`,
-      `  interface MgmtEth0/0/CPU0/0`,
+      `router ospf ${pid}`,
+      ` vrf Mgmt-intf`,
+      `  router-id ${ip}`,
+      `  area ${area}`,
+      `   interface MgmtEth0/0/CPU0/0`,
     ];
   } else if (dev.device_type === 'cisco_nxos') {
     return [
@@ -2328,13 +2330,11 @@ function _bgpCmds(dev, asn, allDevs) {
   const ip  = dev.host;
   const nbrs = allDevs.filter(d => d.name !== dev.name);
   if (dev.device_type === 'cisco_xr') {
+    // IOS-XR iBGP in Mgmt-intf VRF — no global address-family needed
     let cmds = [
       `router bgp ${asn}`,
-      ` bgp router-id ${ip}`,
-      ` address-family ipv4 unicast`,
       ` vrf Mgmt-intf`,
       `  bgp router-id ${ip}`,
-      `  address-family ipv4 unicast`,
     ];
     nbrs.forEach(n => {
       cmds.push(`  neighbor ${n.host}`);
