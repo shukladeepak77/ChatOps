@@ -50,7 +50,10 @@ def _netmiko_conn(device: dict):
         timeout=15,
         session_timeout=20,
         conn_timeout=10,
+        auth_timeout=20,
         fast_cli=False,
+        use_keys=False,
+        allow_agent=False,
     )
 
 

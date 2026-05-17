@@ -827,6 +827,7 @@
     </div>
     <div class="modal-footer">
       <button class="m-btn m-btn-secondary" onclick="closeModal('modal-add-netdev')">Cancel</button>
+      <button class="m-btn m-btn-secondary" onclick="document.getElementById('nd-import-file').click()" title="Bulk import from CSV or JSON file">📂 Import CSV/JSON</button>
       <button class="m-btn m-btn-primary" onclick="submitAddNetdev()">🌐 Add Device</button>
     </div>
   </div>
@@ -1217,6 +1218,7 @@
       <div class="drop-label">Devices</div>
       <div class="drop-item" onclick="loadNetdevsModal();openModal('modal-list-netdevs');closeAllMenus()"><span class="di">🖧</span> List Devices</div>
       <div class="drop-item" onclick="openModal('modal-add-netdev');closeAllMenus()"><span class="di">➕</span> Add Device…</div>
+      <div class="drop-item" onclick="document.getElementById('nd-import-file').click();closeAllMenus()"><span class="di">📂</span> Import CSV/JSON…</div>
       <div class="drop-sep"></div>
       <div class="drop-label">Monitor</div>
       <div class="drop-item" onclick="openNetDashboard();closeAllMenus()"><span class="di">📊</span> Network Dashboard</div>
@@ -3427,24 +3429,32 @@ async function submitNetPush() {
   finally { btn.disabled=false; btn.innerHTML='📤 Push Config'; }
 }
 
+function _importResultDiv() {
+  // Return the result div of whichever modal is currently open
+  if (document.getElementById('modal-add-netdev').classList.contains('active'))
+    return 'nd-result';
+  return 'nd-list-result';
+}
+
 async function importNetdevFile(input) {
   const file = input.files[0];
   if (!file) return;
   input.value = '';
-  showModalResult('nd-list-result', `Importing ${file.name}...`, true);
+  const resultDiv = _importResultDiv();
+  showModalResult(resultDiv, `Importing ${file.name}...`, true);
   const form = new FormData();
   form.append('file', file);
   try {
     const res = await authFetch('/chatops/network/devices/import', { method: 'POST', body: form });
     const d = await res.json();
-    if (!res.ok) { showModalResult('nd-list-result', `Import failed: ${d.detail}`, false); return; }
+    if (!res.ok) { showModalResult(resultDiv, `Import failed: ${d.detail}`, false); return; }
     const msg = `Import done: ${d.added.length} added, ${d.skipped.length} skipped, ${d.errors.length} errors.` +
-      (d.added.length   ? `\nAdded: ${d.added.join(', ')}` : '') +
-      (d.skipped.length ? `\nSkipped (already exist): ${d.skipped.join(', ')}` : '') +
-      (d.errors.length  ? `\nErrors: ${d.errors.map(e => `${e.row}: ${e.reason}`).join('; ')}` : '');
-    showModalResult('nd-list-result', msg, d.errors.length === 0);
+      (d.added.length   ? ` Added: ${d.added.join(', ')}.` : '') +
+      (d.skipped.length ? ` Skipped (already exist): ${d.skipped.join(', ')}.` : '') +
+      (d.errors.length  ? ` Errors: ${d.errors.map(e => `${e.row}: ${e.reason}`).join('; ')}` : '');
+    showModalResult(resultDiv, msg, d.errors.length === 0);
     if (d.added.length) loadNetdevsModal();
-  } catch(e) { showModalResult('nd-list-result', 'Error: ' + e.message, false); }
+  } catch(e) { showModalResult(resultDiv, 'Error: ' + e.message, false); }
 }
 
 async function quickNetCheck(name) {

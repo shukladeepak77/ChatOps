@@ -847,11 +847,27 @@ def list_network_devices(user=Depends(_get_current_user)):
     return netdev_list()
 
 
+def _verify_device_conn(name, host, username, password, device_type, port):
+    """Try SSH login; return None on success or an error string on failure."""
+    from chatops.network import encode_password, get_device_info
+    dev = {"name": name, "host": host, "username": username,
+           "password_enc": encode_password(password),
+           "device_type": device_type, "port": port}
+    result = get_device_info(dev)
+    if result.get("status") == "error":
+        return result.get("error", "Connection failed")
+    return None
+
+
 @app.post("/chatops/network/devices")
 def add_network_device(req: NetworkDeviceCreate, user=Depends(_require_role("operator"))):
     from chatops.network import encode_password
     if netdev_get(req.name):
         raise HTTPException(status_code=409, detail="Device name already exists")
+    err = _verify_device_conn(req.name, req.host, req.username, req.password,
+                               req.device_type, req.port)
+    if err:
+        raise HTTPException(status_code=400, detail=f"SSH login failed: {err}")
     did = netdev_add(
         req.name, req.host, req.username, encode_password(req.password),
         device_type=req.device_type, port=req.port,
@@ -892,11 +908,17 @@ async def import_network_devices(file: UploadFile, user=Depends(_require_role("o
         if netdev_get(name):
             results["skipped"].append(name)
             continue
+        device_type = row.get("device_type", "cisco_xe")
+        port = int(row.get("port", 22))
+        conn_err = _verify_device_conn(name, host, username, password, device_type, port)
+        if conn_err:
+            results["errors"].append({"row": name, "reason": f"SSH login failed: {conn_err}"})
+            continue
         try:
             did = netdev_add(
                 name, host, username, encode_password(password),
-                device_type=row.get("device_type", "cisco_xe"),
-                port=int(row.get("port", 22)),
+                device_type=device_type,
+                port=port,
                 netconf_port=int(row.get("netconf_port", 830)),
                 description=row.get("description", ""),
                 created_by=user["sub"],
