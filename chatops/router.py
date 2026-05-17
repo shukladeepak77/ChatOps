@@ -1015,6 +1015,31 @@ def route_message(message: str, caller_role: str = "operator", _nlu_depth: int =
             f"  Mem free:  {result['mem_free_bytes']} bytes"
         )}
 
+    show_ospf_m = re.match(r'^show\s+ospf(?:\s+neighbors?)?\s+(\S+)$', s)
+    if show_ospf_m:
+        from .db import netdev_get as _nd_get
+        from .network import get_ospf_neighbors as _nd_ospf
+        name = show_ospf_m.group(1)
+        dev = _nd_get(name)
+        if not dev:
+            return {"response": f"Network device '{name}' not found."}
+        result = _nd_ospf(dev)
+        if result["status"] == "error":
+            return {"response": f"Could not get OSPF info for '{name}': {result['error']}"}
+        neighbors = result.get("neighbors", [])
+        if not neighbors:
+            return {"response": result.get("raw", "No OSPF neighbors found or OSPF not configured.")}
+        lines = [f"OSPF Neighbors on {name} ({len(neighbors)} peers):"]
+        for n in neighbors:
+            state_icon = "✅" if "FULL" in n.get("state", "") else "🔴"
+            lines.append(
+                f"  {state_icon} {n.get('neighbor_id','?'):<16} "
+                f"State: {n.get('state','?'):<12} "
+                f"Interface: {n.get('interface','?'):<14} "
+                f"Address: {n.get('address','?')}"
+            )
+        return {"response": "\n".join(lines), "ospf_neighbors": neighbors}
+
     show_bgp_m = re.match(r'^show\s+bgp(?:\s+neighbors?)?\s+(\S+)$', s)
     if show_bgp_m:
         from .db import netdev_get as _nd_get

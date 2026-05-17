@@ -260,7 +260,10 @@ def get_ospf_neighbors(device: dict) -> dict:
                 output = conn.send_command("show ospf vrf Mgmt-intf neighbor", read_timeout=20)
             else:
                 output = conn.send_command("show ip ospf neighbor", read_timeout=20)
-        neighbors = _parse_ospf_neighbors(output)
+        if dt == "arista_eos":
+            neighbors = _parse_arista_ospf_neighbors(output)
+        else:
+            neighbors = _parse_ospf_neighbors(output)
         clean_raw = "\n".join(
             l for l in output.splitlines()
             if "Invalid" not in l and not l.strip().startswith("%") and not re.match(r"^\s*\^\s*$", l)
@@ -1107,6 +1110,34 @@ def _parse_bgp_summary(text: str) -> list:
 def _xml_text(element, tag: str, ns: dict) -> str:
     el = element.find(tag, ns)
     return el.text.strip() if el is not None and el.text else ""
+
+
+def _parse_arista_ospf_neighbors(text: str) -> list:
+    """Parse Arista EOS 'show ip ospf neighbor' output.
+
+    Format: Neighbor_ID  Instance  VRF  Pri  State  Dead_Time  Address  Interface
+    """
+    neighbors = []
+    for line in text.splitlines():
+        m = re.match(
+            r"^\s*([\d\.]+)\s+(\d+)\s+(\S+)\s+(\d+)\s+(\S+)\s+([\d:]+)\s+([\d\.]+)\s+(\S+)",
+            line
+        )
+        if m:
+            state_full = m.group(5)
+            state_parts = state_full.split("/")
+            neighbors.append({
+                "neighbor_id": m.group(1),
+                "instance":    m.group(2),
+                "vrf":         m.group(3),
+                "priority":    m.group(4),
+                "state":       state_full,
+                "role":        state_parts[1] if len(state_parts) > 1 else "",
+                "dead_time":   m.group(6),
+                "address":     m.group(7),
+                "interface":   m.group(8),
+            })
+    return neighbors
 
 
 def _parse_ospf_neighbors(text: str) -> list:
