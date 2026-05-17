@@ -168,6 +168,18 @@ def get_routes(device: dict, vrf: str = None) -> dict:
 
 def get_cpu_memory(device: dict) -> dict:
     """Return CPU and memory utilization."""
+    def _to_mb(val: str, unit: str = "bytes") -> str:
+        """Normalise a raw numeric string to a human-readable MB/GB value."""
+        try:
+            n = int(val)
+            if unit == "K":
+                n *= 1024
+            if n >= 1_073_741_824:
+                return f"{n / 1_073_741_824:.1f}G"
+            return f"{n // 1_048_576}M"
+        except Exception:
+            return val
+
     try:
         dt = device.get("device_type", "cisco_xe")
         with _netmiko_conn(device) as conn:
@@ -176,27 +188,56 @@ def get_cpu_memory(device: dict) -> dict:
                 mem_out = conn.send_command("free -m | grep Mem", read_timeout=10)
                 cpu_pct  = _parse_field(cpu_out, r"(\d+\.?\d*)\s*us", r"(\d+\.?\d*)%?\s*user")
                 mem_m    = re.search(r"Mem:\s+\d+\s+(\d+)\s+(\d+)", mem_out)
-                mem_used = mem_m.group(1) + "M" if mem_m else "unknown"
-                mem_free = mem_m.group(2) + "M" if mem_m else "unknown"
+                mem_used = (mem_m.group(1) + "M") if mem_m else "unknown"
+                mem_free = (mem_m.group(2) + "M") if mem_m else "unknown"
+
             elif dt == "cisco_nxos":
                 cpu_out = conn.send_command("show processes cpu | grep 'CPU utilization'", read_timeout=15)
                 mem_out = conn.send_command("show system resources | grep 'Memory'", read_timeout=15)
                 cpu_pct  = _parse_field(cpu_out, r"CPU utilization.*?(\d+\.?\d*)%")
-                mem_used = _parse_field(mem_out, r"(\d+)K used")
-                mem_free = _parse_field(mem_out, r"(\d+)K free")
+                raw_used = _parse_field(mem_out, r"(\d+)K used")
+                raw_free = _parse_field(mem_out, r"(\d+)K free")
+                mem_used = _to_mb(raw_used, "K")
+                mem_free = _to_mb(raw_free, "K")
+
+            elif dt == "cisco_xr":
+                cpu_out = conn.send_command("show processes cpu | include CPU utilization", read_timeout=15)
+                mem_out = conn.send_command("show memory summary", read_timeout=15)
+                # "CPU utilization for one minute: 1%; five minutes: 1%"
+                cpu_pct = _parse_field(cpu_out, r"one minute:\s+(\d+\.?\d*)%",
+                                                 r"CPU utilization.*?(\d+\.?\d*)%")
+                # "Physical Memory: 4096M total (3584M available)"
+                total_m = _parse_field(mem_out, r"Physical Memory:\s+(\d+)M")
+                avail_m = _parse_field(mem_out, r"\((\d+)M available\)")
+                if total_m != "unknown" and avail_m != "unknown":
+                    mem_free = f"{avail_m}M"
+                    try:
+                        mem_used = f"{int(total_m) - int(avail_m)}M"
+                    except Exception:
+                        mem_used = "unknown"
+                else:
+                    mem_used = _parse_field(mem_out, r"Used:\s+(\d+)")
+                    mem_free = _parse_field(mem_out, r"Free:\s+(\d+)")
+
             else:
+                # IOS-XE / IOS
                 cpu_out = conn.send_command("show processes cpu | include CPU utilization", read_timeout=15)
                 mem_out = conn.send_command("show processes memory | include Processor", read_timeout=15)
                 cpu_pct  = _parse_field(cpu_out, r"CPU utilization.*?(\d+)%/")
-                mem_used = _parse_field(mem_out, r"Processor\s+(\d+)\s+\d+")
-                mem_free = _parse_field(mem_out, r"Processor\s+\d+\s+(\d+)")
+                # IOS-XE 17.x:  "Processor Pool Total: 1090716972 Used: 220888356 Free: 869828616"
+                # Older IOS-XE: "Processor  135903000  116940304"
+                raw_used = _parse_field(mem_out, r"Used:\s+(\d+)", r"Processor\s+(\d+)\s+\d+")
+                raw_free = _parse_field(mem_out, r"Free:\s+(\d+)", r"Processor\s+\d+\s+(\d+)")
+                mem_used = _to_mb(raw_used)
+                mem_free = _to_mb(raw_free)
+
         return {
             "status": "ok",
-            "cpu_5sec": cpu_pct,
+            "cpu_5sec":      cpu_pct,
             "mem_used_bytes": mem_used,
             "mem_free_bytes": mem_free,
-            "cpu_raw":  cpu_out[:500],
-            "mem_raw":  mem_out[:500],
+            "cpu_raw": cpu_out[:500],
+            "mem_raw": mem_out[:500],
         }
     except Exception as e:
         return {"status": "error", "error": str(e)}
