@@ -311,6 +311,8 @@ def get_bgp_neighbors(device: dict) -> dict:
         with _netmiko_conn(device) as conn:
             if dt == "cisco_xr":
                 output = conn.send_command("show bgp vrf Mgmt-intf summary", read_timeout=20)
+            elif dt == "arista_eos":
+                output = conn.send_command("show ip bgp summary", read_timeout=20)
             else:
                 output = conn.send_command("show bgp summary", read_timeout=20)
                 if "Invalid" in output or "not active" in output.lower():
@@ -1131,17 +1133,20 @@ def _parse_bgp_summary(text: str) -> list:
     neighbors = []
     in_table = False
     for line in text.splitlines():
-        if re.match(r"Neighbor\s+V\s+AS", line):
+        if re.search(r"Neighbor\s+V\s+AS", line):
             in_table = True
             continue
         if in_table and re.match(r"[\d\.]+", line.strip()):
             parts = line.split()
             if len(parts) >= 9:
+                state_raw = parts[8]
+                # Normalize Arista "Estab" to "Established"
+                state = "Established" if state_raw.lower().startswith("estab") else state_raw
                 neighbors.append({
                     "neighbor": parts[0],
                     "as":       parts[2],
-                    "state":    parts[8] if not parts[8].isdigit() else "Established",
-                    "prefixes": parts[8] if parts[8].isdigit() else "0",
+                    "state":    state if not state_raw.isdigit() else "Established",
+                    "prefixes": parts[9] if len(parts) > 9 and parts[9].isdigit() else (parts[8] if state_raw.isdigit() else "0"),
                     "updown":   parts[7],
                 })
     return neighbors
